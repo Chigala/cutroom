@@ -1449,7 +1449,7 @@ export const TOOLS: readonly AgentTool[] = [
   tool({
     name: "find_sound",
     description:
-      'Search Freesound\'s library of real recorded sound effects (half a million, only ones licensed for any use) when the built-in sounds don\'t fit: a cash register for a price, a camera shutter for a photo, a crowd gasp, a phone buzz, a specific whoosh or riser. Describe the sound plainly ("camera shutter", "bass drop impact", "paper crumple"). Returns candidates with length and licence; then add_sound one and listen to it before placing.',
+      'Search Freesound\'s library of real recorded sound effects (half a million, only ones licensed for any use) when neither the library (search_library: the user\'s own sounds and the starter pack of common effects) nor the built-in sounds fit: a crowd gasp, a phone buzz, a door slam, a particular kind of whoosh or riser. Describe the sound plainly ("camera shutter", "bass drop impact", "paper crumple"). Returns candidates with length and licence; then add_sound one and listen to it before placing.',
     input: z.object({
       query: z.string().min(2).max(100),
       max_seconds: z.number().min(0.5).max(30).default(6).describe("Longest sound to consider"),

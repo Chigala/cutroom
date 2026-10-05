@@ -19,11 +19,6 @@ function probe(provider: KeyProvider, key: string): { url: string; headers?: Rec
       return {
         url: `https://api.klipy.com/api/v1/${k}/gifs/search?q=cat&per_page=8&customer_id=cutroom-key-check`,
       };
-    case "freesound":
-      return {
-        url: "https://freesound.org/apiv2/search/text/?query=click&page_size=1",
-        headers: { Authorization: `Token ${key}` },
-      };
     case "groq":
       return { url: "https://api.groq.com/openai/v1/models", headers: { Authorization: `Bearer ${key}` } };
   }
@@ -37,7 +32,7 @@ export async function checkKey(provider: KeyProvider, key: string): Promise<KeyC
     const res = await fetch(url, { ...(headers && { headers }), signal: AbortSignal.timeout(10_000) });
     if (res.ok) return "ok";
     if (res.status === 429) return "limited";
-    // Wrong keys: 400 (Pixabay), 401 (Pexels, Freesound, Groq), 403, 404 (KLIPY).
+    // Wrong keys: 400 (Pixabay), 401 (Pexels, Groq), 403, 404 (KLIPY).
     if ([400, 401, 403, 404].includes(res.status)) return "invalid";
     return "offline";
   } catch {

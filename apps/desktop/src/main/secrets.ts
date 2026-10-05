@@ -1,5 +1,5 @@
 /**
- * API keys (KLIPY, Pexels, Pixabay, Freesound), kept apart from settings.json: encrypted with the system
+ * API keys (KLIPY, Pexels, Pixabay, Groq), kept apart from settings.json: encrypted with the system
  * keychain (Electron's safeStorage) in <app data>/keys.json, readable by this user only. The editor's
  * window never gets them back, only whether each one is set.
  */
@@ -8,7 +8,7 @@ import path from "node:path";
 import { app, safeStorage } from "electron";
 import { addSecret } from "./log.ts";
 
-export const SECRET_FIELDS = ["klipyKey", "pexelsKey", "pixabayKey", "freesoundKey", "groqKey"] as const;
+export const SECRET_FIELDS = ["klipyKey", "pexelsKey", "pixabayKey", "groqKey"] as const;
 export type SecretField = (typeof SECRET_FIELDS)[number];
 export type Secrets = Partial<Record<SecretField, string>>;
 

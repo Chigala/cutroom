@@ -506,6 +506,8 @@ interface Extra {
   readonly why: string;
   readonly demo: string;
   readonly providers: readonly Provider[];
+  /** Built in: nothing to set up (what's there instead of a key). */
+  readonly included?: string;
 }
 
 interface Provider {
@@ -593,28 +595,9 @@ const EXTRAS: readonly Extra[] = [
     title: "Sound effects",
     why: "The whoosh on a transition, the boom on a reveal, the ding on a number: sound design that makes it feel finished.",
     demo: "sounds",
-    providers: [
-      {
-        id: "freesound",
-        name: "Freesound",
-        site: "https://freesound.org/apiv2/apply/",
-        siteLabel: "freesound.org/apiv2/apply",
-        note: "Free and instant once your account is confirmed.",
-        steps: [
-          <>Join freesound.org and confirm your email.</>,
-          <>
-            Open the API page and fill in <b>Create new API credentials</b>: name “Cutroom”, description
-            “Sound effects for my own videos”.
-          </>,
-          <>
-            Accept the terms and click <b>Request new access credentials</b>.
-          </>,
-          <>
-            Copy the <b>Client secret/Api key</b> (not the Client id) and paste it below.
-          </>,
-        ],
-      },
-    ],
+    providers: [],
+    included:
+      "Built in, nothing to set up: a starter pack of a hundred sound effects is in your library, and the agent searches hundreds of thousands more online when it needs something else.",
   },
 ];
 
@@ -625,9 +608,9 @@ function Extras({ keys }: { keys: AgentStatus["keys"] }) {
     <>
       <Copy eyebrow="Optional power-ups" title="Give the agent more to work with.">
         <Lead>
-          Three free services let the agent find footage, memes and sound effects on its own. Each takes a
-          free key from its website. Skip any of them: your own library always works, and keys can be added
-          later in Settings → Media sources.
+          Stock footage and memes each take a free key from the service's website; sound effects are built in.
+          Skip any of them: your own library always works, and keys can be added later in Settings → Media
+          sources.
         </Lead>
         <div className="mt-1 flex flex-col gap-2">
           {EXTRAS.map((e) => {
@@ -647,7 +630,11 @@ function Extras({ keys }: { keys: AgentStatus["keys"] }) {
                 >
                   <span className="text-fg-2">{e.icon}</span>
                   <span className="flex-1 text-[14px] font-medium text-fg">{e.title}</span>
-                  {added ? (
+                  {e.included ? (
+                    <span className="flex items-center gap-1 text-xs text-ok">
+                      <Check size={12} /> Included
+                    </span>
+                  ) : added ? (
                     <span className="flex items-center gap-1 text-xs text-ok">
                       <Check size={12} /> Added
                     </span>
@@ -662,6 +649,11 @@ function Extras({ keys }: { keys: AgentStatus["keys"] }) {
                 {open === e.id && (
                   <div className="flex flex-col gap-4 px-4 pb-4 animate-fade-in">
                     <span className="text-[13px] leading-snug text-muted">{e.why}</span>
+                    {e.included && (
+                      <span className="border-t border-line pt-4 text-[13px] leading-snug text-fg-2">
+                        {e.included}
+                      </span>
+                    )}
                     {e.providers.map((p) =>
                       p.folded ? (
                         <Folded key={p.id} provider={p} source={keys?.[p.id] ?? null} />
@@ -736,7 +728,6 @@ const KEY_FIELD: Record<KeyProvider, keyof Settings> = {
   pixabay: "pixabayKey",
   pexels: "pexelsKey",
   klipy: "klipyKey",
-  freesound: "freesoundKey",
   groq: "groqKey",
 };
 

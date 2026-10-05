@@ -879,7 +879,6 @@ export class ProjectService {
         klipy: k.klipyKey ? "saved" : null,
         pexels: k.pexelsKey ? "saved" : null,
         pixabay: k.pixabayKey ? "saved" : null,
-        freesound: k.freesoundKey ? "saved" : null,
         groq: k.groqKey ? "saved" : null,
       },
     };
@@ -1010,11 +1009,7 @@ export class ProjectService {
       },
       senseMotion: (doc) => this.senseMotion(doc),
       measureJoins: (doc) => this.measureJoins(doc),
-      findSounds: async (query, maxSeconds) => {
-        const settings = await getSettings();
-        const freesoundKey = settings.freesoundKey;
-        return findSounds(query, { maxSeconds, ...(freesoundKey && { freesoundKey }) });
-      },
+      findSounds: (query, maxSeconds) => findSounds(query, { maxSeconds }),
       addSound: async (c, label, doc) => {
         const store = this.requireStore();
         const file = await downloadSound(c, path.join(store.dir, "media", "sounds"));

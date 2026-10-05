@@ -95,13 +95,6 @@ const KEYS = [
     what: "Stock footage and photos",
     get: "pixabay.com/api/docs",
   },
-  {
-    key: "freesoundKey",
-    env: "freesound",
-    name: "Freesound",
-    what: "Sound effects (optional: they work without it, through Openverse)",
-    get: "freesound.org/apiv2/apply",
-  },
 ] as const;
 
 /** A value the lists don't have (set by hand, or by the agent) still shows, as itself. */

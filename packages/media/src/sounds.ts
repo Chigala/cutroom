@@ -1,7 +1,6 @@
 /**
- * Sound effects from Freesound's half a million recordings, the ones licensed for any use (CC0, or
- * CC BY with a credit): searched through Freesound's API with a key, or through Openverse (which
- * indexes Freesound and needs none). The agent picks by title, length and licence, the file comes into
+ * Sound effects from Freesound's recordings, the ones licensed for any use (CC0, or CC BY with a
+ * credit), searched through Openverse (which indexes Freesound and needs no key). The agent picks by title, length and licence, the file comes into
  * the project as an audio clip, and where it hits hardest is measured so the hit can land on the moment.
  */
 import { createWriteStream } from "node:fs";
@@ -33,21 +32,6 @@ export interface SoundCandidate {
   readonly tags: readonly string[];
 }
 
-const Freesound = z.object({
-  results: z.array(
-    z.object({
-      id: z.number(),
-      name: z.string(),
-      duration: z.number(),
-      license: z.string(),
-      username: z.string(),
-      url: z.string(),
-      tags: z.array(z.string()).default([]),
-      previews: z.record(z.string(), z.string()),
-    }),
-  ),
-});
-
 const Openverse = z.object({
   results: z.array(
     z.object({
@@ -68,7 +52,7 @@ const Openverse = z.object({
   ),
 });
 
-/** Freesound's licence URL or Openverse's code, as a short name; null for licences that don't allow any use. */
+/** Openverse's licence code (or a licence URL), as a short name; null for licences that don't allow any use. */
 function licenseOf(code: string, version?: string | null): { license: string; credit: boolean } | null {
   const c = code.toLowerCase();
   if (c === "cc0" || c.includes("publicdomain/zero") || c === "pdm") return { license: "CC0", credit: false };
@@ -84,43 +68,8 @@ const fsId = (page: string) => /sounds\/(\d+)/.exec(page)?.[1];
 /** Sounds for `query` up to `maxSeconds` long, best matches first. */
 export async function findSounds(
   query: string,
-  {
-    freesoundKey,
-    maxSeconds = 8,
-    signal,
-  }: { freesoundKey?: string; maxSeconds?: number; signal?: AbortSignal } = {},
+  { maxSeconds = 8, signal }: { maxSeconds?: number; signal?: AbortSignal } = {},
 ): Promise<SoundCandidate[]> {
-  if (freesoundKey) {
-    const url = new URL("https://freesound.org/apiv2/search/text/");
-    url.searchParams.set("query", query);
-    url.searchParams.set("fields", "id,name,duration,license,username,url,tags,previews");
-    url.searchParams.set(
-      "filter",
-      `duration:[0 TO ${maxSeconds}] license:("Creative Commons 0" OR "Attribution")`,
-    );
-    url.searchParams.set("page_size", "15");
-    url.searchParams.set("token", freesoundKey);
-    const res = await fetch(url, { signal: withTimeout(signal, 15_000) });
-    if (!res.ok) throw new Error(`Freesound answered ${res.status}`);
-    return Freesound.parse(await res.json()).results.flatMap((r) => {
-      const lic = licenseOf(r.license);
-      const audio = r.previews["preview-hq-mp3"] ?? r.previews["preview-lq-mp3"];
-      return lic && audio
-        ? [
-            {
-              id: `fs-${r.id}`,
-              title: r.name,
-              duration: Math.round(r.duration * 100) / 100,
-              ...lic,
-              author: r.username,
-              url: audio,
-              page: r.url,
-              tags: r.tags.slice(0, 8),
-            },
-          ]
-        : [];
-    });
-  }
   const url = new URL("https://api.openverse.org/v1/audio/");
   url.searchParams.set("q", query);
   url.searchParams.set("license", "cc0,by,pdm");

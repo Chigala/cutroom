@@ -213,12 +213,12 @@ export const Settings = z.object({
   /** Free API keys for stock footage (pexels.com/api, pixabay.com/api/docs). */
   pexelsKey: z.string().max(200).default(""),
   pixabayKey: z.string().max(200).default(""),
-  /** Optional: Freesound's own search (freesound.org/apiv2/apply); without it, sounds come through Openverse. */
-  freesoundKey: z.string().max(500).default(""),
   /** KLIPY (klipy.com): reaction GIFs, stickers, clips and memes for the agent. */
   klipyKey: z.string().max(500).default(""),
   /** An anonymous id KLIPY asks for with each search (the same for this install), made on first use. */
   klipyUser: z.string().max(64).default(""),
+  /** The starter pack (sounds and music) last added to the library: a newer one adds what's new. */
+  starterPack: z.number().int().nonnegative().default(0),
   /** The brand kit new projects start with (its id), or none. */
   kit: z.string().max(64).default(""),
   /** STYLE.md new projects start with (chosen at onboarding, or in Settings → Editing). Empty: the default. */
@@ -240,7 +240,7 @@ export interface AgentStatus {
    * Where each media key comes from (never its value): saved in the app (kept in the keychain), the
    * environment or a .env file, or nowhere.
    */
-  readonly keys?: Readonly<Record<"klipy" | "pexels" | "pixabay" | "freesound" | "groq", "saved" | null>>;
+  readonly keys?: Readonly<Record<"klipy" | "pexels" | "pixabay" | "groq", "saved" | null>>;
 }
 
 /** A warning or error the app logged this session (API keys taken out). */
@@ -318,7 +318,7 @@ export interface DownloadState {
 }
 
 /** Services whose free API keys the app can use. */
-export type KeyProvider = "pixabay" | "pexels" | "klipy" | "freesound" | "groq";
+export type KeyProvider = "pixabay" | "pexels" | "klipy" | "groq";
 /** What a key check found: works, wrong key, over its limit, or the service couldn't be reached. */
 export type KeyCheck = "ok" | "invalid" | "limited" | "offline";
 

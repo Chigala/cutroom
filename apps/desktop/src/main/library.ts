@@ -25,6 +25,7 @@ import {
 import { app } from "electron";
 import { claudeStatus } from "./claude.ts";
 import { getSettings, paths } from "./settings.ts";
+import { addStarterPack } from "./starter-pack.ts";
 
 type Scope = "library" | "project";
 
@@ -157,16 +158,30 @@ export class Library {
       const about = path.join(dir, ABOUT);
       if (!(await stat(about).catch(() => null))) await writeFile(about, ABOUT_TEXT);
     }
+    let catalog = await this.read(dir);
+    // The shared library gets the starter pack's sounds and music, once (starter-pack.ts).
+    let seeded = false;
+    if (scope === "library") {
+      const withPack = await addStarterPack(dir, catalog).catch((err: Error) => {
+        console.warn(`[library] couldn't add the starter pack: ${err.message}`);
+        return null;
+      });
+      if (withPack) {
+        catalog = withPack;
+        seeded = true;
+      }
+    }
     const root: Root = {
       scope,
       dir,
-      catalog: await this.read(dir),
+      catalog,
       watcher: null,
       scanning: null,
       again: false,
       timer: null,
     };
     this.roots.set(scope, root);
+    if (seeded) await this.write(root);
     this.watch(root);
     void this.scan(root);
   }

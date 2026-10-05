@@ -31,6 +31,9 @@ mac:
   extraResources:
     - from: resources/tools/darwin-${arch}
       to: tools
+    # The starter pack of public-domain sounds and music (src/main/starter-pack.ts).
+    - from: resources/starter-library
+      to: starter-library
     # Remotion's compositor and Claude Code (the Agent SDK's binary), found via VEDIT_REMOTION_BIN and
     # VEDIT_CLAUDE_BIN (src/main/index.ts).
     - from: .tmp/runtime/node_modules/@remotion/compositor-darwin-${arch}
@@ -46,6 +49,9 @@ win:
   extraResources:
     - from: resources/tools/win32-${arch}
       to: tools
+    # The starter pack of public-domain sounds and music (src/main/starter-pack.ts).
+    - from: resources/starter-library
+      to: starter-library
     - from: .tmp/runtime/node_modules/@remotion/compositor-win32-${arch}-msvc
       to: native/remotion-compositor
     - from: .tmp/runtime/node_modules/@anthropic-ai/claude-agent-sdk-win32-${arch}
@@ -64,6 +70,9 @@ linux:
   extraResources:
     - from: resources/tools/linux-${arch}
       to: tools
+    # The starter pack of public-domain sounds and music (src/main/starter-pack.ts).
+    - from: resources/starter-library
+      to: starter-library
     - from: .tmp/runtime/node_modules/@remotion/compositor-linux-${arch}-gnu
       to: native/remotion-compositor
     - from: .tmp/runtime/node_modules/@anthropic-ai/claude-agent-sdk-linux-${arch}

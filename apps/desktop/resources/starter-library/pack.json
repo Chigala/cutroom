@@ -1,0 +1,814 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "file": "Sounds/Starter pack/Whoosh 1.mp3",
+      "kind": "sound",
+      "name": "Whoosh 1",
+      "description": "A whoosh for transitions and fast moves. \"Swosh swoosh whoosh air sound, free, high quality\" by qubodup.",
+      "tags": ["whoosh", "swoosh", "swish", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Whoosh 2.mp3",
+      "kind": "sound",
+      "name": "Whoosh 2",
+      "description": "A whoosh for transitions and fast moves. \"Swipe Whoosh\" by qubodup.",
+      "tags": ["whoosh", "swoosh", "swish", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Whoosh 3.mp3",
+      "kind": "sound",
+      "name": "Whoosh 3",
+      "description": "A whoosh for transitions and fast moves. \"Cartoony whooshes\" by BranRainey.",
+      "tags": ["whoosh", "swoosh", "swish", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Whoosh 4.mp3",
+      "kind": "sound",
+      "name": "Whoosh 4",
+      "description": "A whoosh for transitions and fast moves. \"13th Whoosh Swing Sound\" by qubodup.",
+      "tags": ["whoosh", "swoosh", "swish", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Whoosh 5.mp3",
+      "kind": "sound",
+      "name": "Whoosh 5",
+      "description": "A whoosh for transitions and fast moves. \"Little Whoosh 3\" by ch_ase.",
+      "tags": ["whoosh", "swoosh", "swish", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Swipe 1.mp3",
+      "kind": "sound",
+      "name": "Swipe 1",
+      "description": "A quick swipe for transitions and things sliding in. \"swoop1\" by Streety.",
+      "tags": ["swipe", "swish", "swoop", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Swipe 2.mp3",
+      "kind": "sound",
+      "name": "Swipe 2",
+      "description": "A quick swipe for transitions and things sliding in. \"swoop2g\" by Streety.",
+      "tags": ["swipe", "swish", "swoop", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Swipe 3.mp3",
+      "kind": "sound",
+      "name": "Swipe 3",
+      "description": "A quick swipe for transitions and things sliding in. \"Knife Swish 2\" by jawbutch.",
+      "tags": ["swipe", "swish", "swoop", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Swipe 4.mp3",
+      "kind": "sound",
+      "name": "Swipe 4",
+      "description": "A quick swipe for transitions and things sliding in. \"swish Bamboo pole w insect net 12\" by ra_gun.",
+      "tags": ["swipe", "swish", "swoop", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Swipe 5.mp3",
+      "kind": "sound",
+      "name": "Swipe 5",
+      "description": "A quick swipe for transitions and things sliding in. \"Funny Swish\" by deleted_user_6479820.",
+      "tags": ["swipe", "swish", "swoop", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Pop 1.mp3",
+      "kind": "sound",
+      "name": "Pop 1",
+      "description": "A pop for something appearing: a title, a sticker, a graphic. \"Pop 2\" by greenvwbeetle.",
+      "tags": ["pop", "bubble", "appear", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Pop 2.mp3",
+      "kind": "sound",
+      "name": "Pop 2",
+      "description": "A pop for something appearing: a title, a sticker, a graphic. \"Pop 5\" by greenvwbeetle.",
+      "tags": ["pop", "bubble", "appear", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Pop 3.mp3",
+      "kind": "sound",
+      "name": "Pop 3",
+      "description": "A pop for something appearing: a title, a sticker, a graphic. \"cartoon pop or drip\" by AlaskaRobotics.",
+      "tags": ["pop", "bubble", "appear", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Pop 4.mp3",
+      "kind": "sound",
+      "name": "Pop 4",
+      "description": "A pop for something appearing: a title, a sticker, a graphic. \"Balloon Pop / Christmas cracker / Confetti Cannon\" by Breviceps.",
+      "tags": ["pop", "bubble", "appear", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Pop 5.mp3",
+      "kind": "sound",
+      "name": "Pop 5",
+      "description": "A pop for something appearing: a title, a sticker, a graphic. \"Pop Sound\" by ConarB13.",
+      "tags": ["pop", "bubble", "appear", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Click 1.mp3",
+      "kind": "sound",
+      "name": "Click 1",
+      "description": "A click for on-screen UI, a cursor or a tap. \"Button click\" by brnck.",
+      "tags": ["click", "button", "tap", "ui"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Click 2.mp3",
+      "kind": "sound",
+      "name": "Click 2",
+      "description": "A click for on-screen UI, a cursor or a tap. \"Button V03\" by volkbutphan.",
+      "tags": ["click", "button", "tap", "ui"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Click 3.mp3",
+      "kind": "sound",
+      "name": "Click 3",
+      "description": "A click for on-screen UI, a cursor or a tap. \"Button 03\" by JarredGibb.",
+      "tags": ["click", "button", "tap", "ui"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Click 4.mp3",
+      "kind": "sound",
+      "name": "Click 4",
+      "description": "A click for on-screen UI, a cursor or a tap. \"button\" by Leszek_Szary.",
+      "tags": ["click", "button", "tap", "ui"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Click 5.mp3",
+      "kind": "sound",
+      "name": "Click 5",
+      "description": "A click for on-screen UI, a cursor or a tap. \"Button 04\" by JarredGibb.",
+      "tags": ["click", "button", "tap", "ui"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Clap.mp3",
+      "kind": "sound",
+      "name": "Clap",
+      "description": "A single clap. \"Disco Clap\" by NenadSimic.",
+      "tags": ["clap", "hit", "percussion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cowbell 1.mp3",
+      "kind": "sound",
+      "name": "Cowbell 1",
+      "description": "A cowbell hit. \"Cow Bells 03\" by MATRIXXX_.",
+      "tags": ["cowbell", "bell", "percussion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cowbell 2.mp3",
+      "kind": "sound",
+      "name": "Cowbell 2",
+      "description": "A cowbell hit. \"Cow_Bells_01\" by MATRIXXX_.",
+      "tags": ["cowbell", "bell", "percussion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Ding.mp3",
+      "kind": "sound",
+      "name": "Ding",
+      "description": "A ding for a notification or a point that lands. \"Ding Station Annoucement Notification\" by JotrainG.",
+      "tags": ["ding", "bell", "notification", "chime"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cowbell 3.mp3",
+      "kind": "sound",
+      "name": "Cowbell 3",
+      "description": "A cowbell hit. \"Cow_Bells_02\" by MATRIXXX_.",
+      "tags": ["cowbell", "bell", "percussion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Impact 1.mp3",
+      "kind": "sound",
+      "name": "Impact 1",
+      "description": "An impact for a punch-in, a reveal or a hard cut. \"Impact\" by chriskalos.",
+      "tags": ["impact", "hit", "boom", "punch"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Impact 2.mp3",
+      "kind": "sound",
+      "name": "Impact 2",
+      "description": "An impact for a punch-in, a reveal or a hard cut. \"BOOM IMPACT 2\" by XHALE303.",
+      "tags": ["impact", "hit", "boom", "punch"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Impact 3.mp3",
+      "kind": "sound",
+      "name": "Impact 3",
+      "description": "An impact for a punch-in, a reveal or a hard cut. \"Bass Impact - Ki_01\" by Kievinay.",
+      "tags": ["impact", "hit", "boom", "punch"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Impact 4.mp3",
+      "kind": "sound",
+      "name": "Impact 4",
+      "description": "An impact for a punch-in, a reveal or a hard cut. \"Metal Hit\" by NachtmahrTV.",
+      "tags": ["impact", "hit", "boom", "punch"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Impact 5.mp3",
+      "kind": "sound",
+      "name": "Impact 5",
+      "description": "An impact for a punch-in, a reveal or a hard cut. \"book-hit\" by Kneeling.",
+      "tags": ["impact", "hit", "boom", "punch"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Bass drop 1.mp3",
+      "kind": "sound",
+      "name": "Bass drop 1",
+      "description": "A low sub boom under a big moment or a drop. \"SUB A# 2 secs\" by uzerx.",
+      "tags": ["bass drop", "sub", "boom", "drop", "low"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Bass drop 2.mp3",
+      "kind": "sound",
+      "name": "Bass drop 2",
+      "description": "A low sub boom under a big moment or a drop. \"sub bass 4 secondsssss\" by uzerx.",
+      "tags": ["bass drop", "sub", "boom", "drop", "low"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Bass drop 3.mp3",
+      "kind": "sound",
+      "name": "Bass drop 3",
+      "description": "A low sub boom under a big moment or a drop. \"SUB OCEANO C\" by uzerx.",
+      "tags": ["bass drop", "sub", "boom", "drop", "low"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Bass drop 4.mp3",
+      "kind": "sound",
+      "name": "Bass drop 4",
+      "description": "A low sub boom under a big moment or a drop. \"SUB OCEANO D\" by uzerx.",
+      "tags": ["bass drop", "sub", "boom", "drop", "low"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Bass drop 5.mp3",
+      "kind": "sound",
+      "name": "Bass drop 5",
+      "description": "A low sub boom under a big moment or a drop. \"SUB OCEANO A sharp\" by uzerx.",
+      "tags": ["bass drop", "sub", "boom", "drop", "low"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Riser 1.mp3",
+      "kind": "sound",
+      "name": "Riser 1",
+      "description": "A riser that builds tension into a reveal or a cut. \"Riser\" by Rizzard.",
+      "tags": ["riser", "build up", "tension", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Riser 2.mp3",
+      "kind": "sound",
+      "name": "Riser 2",
+      "description": "A riser that builds tension into a reveal or a cut. \"reversed riser\" by NOTOTO84.",
+      "tags": ["riser", "build up", "tension", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Riser 3.mp3",
+      "kind": "sound",
+      "name": "Riser 3",
+      "description": "A riser that builds tension into a reveal or a cut. \"Energy Riser\" by magnuswaker.",
+      "tags": ["riser", "build up", "tension", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Riser 4.mp3",
+      "kind": "sound",
+      "name": "Riser 4",
+      "description": "A riser that builds tension into a reveal or a cut. \"Metallic Horror Riser FX\" by eldiariosonoro_.",
+      "tags": ["riser", "build up", "tension", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Riser 5.mp3",
+      "kind": "sound",
+      "name": "Riser 5",
+      "description": "A riser that builds tension into a reveal or a cut. \"Vocal Chop Riser\" by rubenrox.",
+      "tags": ["riser", "build up", "tension", "transition"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Record scratch 1.mp3",
+      "kind": "sound",
+      "name": "Record scratch 1",
+      "description": "A record scratch for a freeze frame or 'wait, what'. \"Record Scratch #4\" by musicvision31.",
+      "tags": ["record scratch", "scratch", "freeze frame", "stop"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Record scratch 2.mp3",
+      "kind": "sound",
+      "name": "Record scratch 2",
+      "description": "A record scratch for a freeze frame or 'wait, what'. \"Record Scratch #2\" by musicvision31.",
+      "tags": ["record scratch", "scratch", "freeze frame", "stop"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Record scratch 3.mp3",
+      "kind": "sound",
+      "name": "Record scratch 3",
+      "description": "A record scratch for a freeze frame or 'wait, what'. \"Record Scratch #3\" by musicvision31.",
+      "tags": ["record scratch", "scratch", "freeze frame", "stop"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Record scratch 4.mp3",
+      "kind": "sound",
+      "name": "Record scratch 4",
+      "description": "A record scratch for a freeze frame or 'wait, what'. \"Record Scratch #5\" by musicvision31.",
+      "tags": ["record scratch", "scratch", "freeze frame", "stop"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Record scratch 5.mp3",
+      "kind": "sound",
+      "name": "Record scratch 5",
+      "description": "A record scratch for a freeze frame or 'wait, what'. \"record_scratch\" by ludvique.",
+      "tags": ["record scratch", "scratch", "freeze frame", "stop"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Camera shutter 1.mp3",
+      "kind": "sound",
+      "name": "Camera shutter 1",
+      "description": "A camera shutter for a photo, a freeze or a screenshot. \"Camera Shutter\" by roachpowder.",
+      "tags": ["camera", "shutter", "photo", "snapshot"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Camera shutter 2.mp3",
+      "kind": "sound",
+      "name": "Camera shutter 2",
+      "description": "A camera shutter for a photo, a freeze or a screenshot. \"1/100 second camera shutter\" by FenrirFangs.",
+      "tags": ["camera", "shutter", "photo", "snapshot"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Camera shutter 3.mp3",
+      "kind": "sound",
+      "name": "Camera shutter 3",
+      "description": "A camera shutter for a photo, a freeze or a screenshot. \"C220 camera shutter release\" by adeluc4.",
+      "tags": ["camera", "shutter", "photo", "snapshot"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Camera shutter 4.mp3",
+      "kind": "sound",
+      "name": "Camera shutter 4",
+      "description": "A camera shutter for a photo, a freeze or a screenshot. \"Camera shutter analogue film SLR 1/4 01\" by cabled_mess.",
+      "tags": ["camera", "shutter", "photo", "snapshot"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Camera shutter 5.mp3",
+      "kind": "sound",
+      "name": "Camera shutter 5",
+      "description": "A camera shutter for a photo, a freeze or a screenshot. \"Camera shutter analogue film SLR 1/4 02\" by cabled_mess.",
+      "tags": ["camera", "shutter", "photo", "snapshot"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cash register 1.mp3",
+      "kind": "sound",
+      "name": "Cash register 1",
+      "description": "A cash register for money, prices and sales. \"Cash register\" by MaoDin204.",
+      "tags": ["cash register", "cha ching", "money", "sale"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cash register 2.mp3",
+      "kind": "sound",
+      "name": "Cash register 2",
+      "description": "A cash register for money, prices and sales. \"cash register chching\" by disman.",
+      "tags": ["cash register", "cha ching", "money", "sale"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cash register 3.mp3",
+      "kind": "sound",
+      "name": "Cash register 3",
+      "description": "A cash register for money, prices and sales. \"Cash Register\" by Plonkapple.",
+      "tags": ["cash register", "cha ching", "money", "sale"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cash register 4.mp3",
+      "kind": "sound",
+      "name": "Cash register 4",
+      "description": "A cash register for money, prices and sales. \"Mechanical1\" by BMacZero.",
+      "tags": ["cash register", "cha ching", "money", "sale"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Cash register 5.mp3",
+      "kind": "sound",
+      "name": "Cash register 5",
+      "description": "A cash register for money, prices and sales. \"cash drawer and receipt\" by kalisemorrison.",
+      "tags": ["cash register", "cha ching", "money", "sale"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Glitch 1.mp3",
+      "kind": "sound",
+      "name": "Glitch 1",
+      "description": "A glitch for a digital error, a jump or a stylised cut. \"Glitch 01\" by JacksonMiller0.",
+      "tags": ["glitch", "digital", "error", "distortion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Glitch 2.mp3",
+      "kind": "sound",
+      "name": "Glitch 2",
+      "description": "A glitch for a digital error, a jump or a stylised cut. \"VHS Glitch\" by Sassaby.",
+      "tags": ["glitch", "digital", "error", "distortion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Glitch 3.mp3",
+      "kind": "sound",
+      "name": "Glitch 3",
+      "description": "A glitch for a digital error, a jump or a stylised cut. \"Glitch Corruption\" by dotY21.",
+      "tags": ["glitch", "digital", "error", "distortion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Glitch 4.mp3",
+      "kind": "sound",
+      "name": "Glitch 4",
+      "description": "A glitch for a digital error, a jump or a stylised cut. \"glitched sound 1\" by Elnosos.",
+      "tags": ["glitch", "digital", "error", "distortion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Glitch 5.mp3",
+      "kind": "sound",
+      "name": "Glitch 5",
+      "description": "A glitch for a digital error, a jump or a stylised cut. \"Glitch Noise 1 - (Electrical, Transmission, Perturbation...)\" by Flying_Deer_Fx.",
+      "tags": ["glitch", "digital", "error", "distortion"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Typing 1.mp3",
+      "kind": "sound",
+      "name": "Typing 1",
+      "description": "Keyboard typing, under text appearing or someone at a computer. \"Keyboard Typing Tapping\" by Psykophobia.",
+      "tags": ["typing", "keyboard", "computer"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Typing 2.mp3",
+      "kind": "sound",
+      "name": "Typing 2",
+      "description": "Keyboard typing, under text appearing or someone at a computer. \"Keyboard Typing 001\" by ristooooo1.",
+      "tags": ["typing", "keyboard", "computer"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Laugh 1.mp3",
+      "kind": "sound",
+      "name": "Laugh 1",
+      "description": "An audience laugh after a joke. \"misc audience laughter noises\" by ChrisReierson.",
+      "tags": ["laugh", "laughter", "audience", "sitcom"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Laugh 2.mp3",
+      "kind": "sound",
+      "name": "Laugh 2",
+      "description": "An audience laugh after a joke. \"Crowd laugh\" by deleted_user_2104797.",
+      "tags": ["laugh", "laughter", "audience", "sitcom"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Laugh 3.mp3",
+      "kind": "sound",
+      "name": "Laugh 3",
+      "description": "An audience laugh after a joke. \"small audience laughter\" by cognito perceptu.",
+      "tags": ["laugh", "laughter", "audience", "sitcom"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Laugh 4.mp3",
+      "kind": "sound",
+      "name": "Laugh 4",
+      "description": "An audience laugh after a joke. \"bell crowd laughter\" by cognito perceptu.",
+      "tags": ["laugh", "laughter", "audience", "sitcom"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Laugh 5.mp3",
+      "kind": "sound",
+      "name": "Laugh 5",
+      "description": "An audience laugh after a joke. \"ShortStockLaughter2\" by ehohnke.",
+      "tags": ["laugh", "laughter", "audience", "sitcom"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Applause 1.mp3",
+      "kind": "sound",
+      "name": "Applause 1",
+      "description": "Applause or cheering for a win or a reveal. \"A Nova Encore Claps Clap Applause Cheer - Nova Sound\" by NovaSoundTechnology.",
+      "tags": ["applause", "clapping", "cheering", "crowd"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Applause 2.mp3",
+      "kind": "sound",
+      "name": "Applause 2",
+      "description": "Applause or cheering for a win or a reveal. \"Cheer 2\" by jayfrosting.",
+      "tags": ["applause", "clapping", "cheering", "crowd"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Applause 3.mp3",
+      "kind": "sound",
+      "name": "Applause 3",
+      "description": "Applause or cheering for a win or a reveal. \"Applause 2\" by Sandermotions.",
+      "tags": ["applause", "clapping", "cheering", "crowd"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Applause 4.mp3",
+      "kind": "sound",
+      "name": "Applause 4",
+      "description": "Applause or cheering for a win or a reveal. \"smallcrowd\" by sagetyrtle.",
+      "tags": ["applause", "clapping", "cheering", "crowd"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Applause 5.mp3",
+      "kind": "sound",
+      "name": "Applause 5",
+      "description": "Applause or cheering for a win or a reveal. \"Applause 1\" by Sandermotions.",
+      "tags": ["applause", "clapping", "cheering", "crowd"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Crickets 1.mp3",
+      "kind": "sound",
+      "name": "Crickets 1",
+      "description": "Crickets for an awkward silence. \"Cricket - Grillo\" by Lunevix.",
+      "tags": ["crickets", "silence", "awkward"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Crickets 2.mp3",
+      "kind": "sound",
+      "name": "Crickets 2",
+      "description": "Crickets for an awkward silence. \"Crickets chirping loop\" by Patrick_Corra.",
+      "tags": ["crickets", "silence", "awkward"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Crickets 3.mp3",
+      "kind": "sound",
+      "name": "Crickets 3",
+      "description": "Crickets for an awkward silence. \"synth-cricket\" by guitarguy1985.",
+      "tags": ["crickets", "silence", "awkward"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Sad trombone 1.mp3",
+      "kind": "sound",
+      "name": "Sad trombone 1",
+      "description": "A sad trombone or fail sound after something goes wrong. \"horn_fail_wahwah_1\" by TaranP.",
+      "tags": ["sad trombone", "fail", "wah wah"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Sad trombone 2.mp3",
+      "kind": "sound",
+      "name": "Sad trombone 2",
+      "description": "A sad trombone or fail sound after something goes wrong. \"wah wah sad trombone\" by kirbydx.",
+      "tags": ["sad trombone", "fail", "wah wah"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Sad trombone 3.mp3",
+      "kind": "sound",
+      "name": "Sad trombone 3",
+      "description": "A sad trombone or fail sound after something goes wrong. \"Fail\" by LittleRainySeasons.",
+      "tags": ["sad trombone", "fail", "wah wah"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Sad trombone 4.mp3",
+      "kind": "sound",
+      "name": "Sad trombone 4",
+      "description": "A sad trombone or fail sound after something goes wrong. \"FX failed spell\" by v0idation.",
+      "tags": ["sad trombone", "fail", "wah wah"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Sad trombone 5.mp3",
+      "kind": "sound",
+      "name": "Sad trombone 5",
+      "description": "A sad trombone or fail sound after something goes wrong. \"fail down\" by jugraf.",
+      "tags": ["sad trombone", "fail", "wah wah"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Sad trombone 6.mp3",
+      "kind": "sound",
+      "name": "Sad trombone 6",
+      "description": "A sad trombone or fail sound after something goes wrong. \"Fail sound\" by Sjonas88.",
+      "tags": ["sad trombone", "fail", "wah wah"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Boing 1.mp3",
+      "kind": "sound",
+      "name": "Boing 1",
+      "description": "A cartoon boing for a bounce or a silly moment. \"Boing Spring Mouth harp downward 1\" by pan14.",
+      "tags": ["boing", "spring", "bounce", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Boing 2.mp3",
+      "kind": "sound",
+      "name": "Boing 2",
+      "description": "A cartoon boing for a bounce or a silly moment. \"Boing Spring Mouth harp 04-20-13 4\" by pan14.",
+      "tags": ["boing", "spring", "bounce", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Boing 3.mp3",
+      "kind": "sound",
+      "name": "Boing 3",
+      "description": "A cartoon boing for a bounce or a silly moment. \"Funny Boing\" by se2001.",
+      "tags": ["boing", "spring", "bounce", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Boing 4.mp3",
+      "kind": "sound",
+      "name": "Boing 4",
+      "description": "A cartoon boing for a bounce or a silly moment. \"M tyre boing 3\" by AtevonHes.",
+      "tags": ["boing", "spring", "bounce", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Boing 5.mp3",
+      "kind": "sound",
+      "name": "Boing 5",
+      "description": "A cartoon boing for a bounce or a silly moment. \"boing 2\" by AuDRoger.",
+      "tags": ["boing", "spring", "bounce", "cartoon"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Wrong buzzer 1.mp3",
+      "kind": "sound",
+      "name": "Wrong buzzer 1",
+      "description": "A buzzer for a wrong answer or a 'nope'. \"Wrong Answer\" by -Andreas.",
+      "tags": ["wrong", "buzzer", "error", "fail"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Wrong buzzer 2.mp3",
+      "kind": "sound",
+      "name": "Wrong buzzer 2",
+      "description": "A buzzer for a wrong answer or a 'nope'. \"buzzer2\" by hypocore.",
+      "tags": ["wrong", "buzzer", "error", "fail"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Wrong buzzer 3.mp3",
+      "kind": "sound",
+      "name": "Wrong buzzer 3",
+      "description": "A buzzer for a wrong answer or a 'nope'. \"buzzer\" by hypocore.",
+      "tags": ["wrong", "buzzer", "error", "fail"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Wrong buzzer 4.mp3",
+      "kind": "sound",
+      "name": "Wrong buzzer 4",
+      "description": "A buzzer for a wrong answer or a 'nope'. \"Wrong Answer Buzzer\" by -Andreas.",
+      "tags": ["wrong", "buzzer", "error", "fail"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Wrong buzzer 5.mp3",
+      "kind": "sound",
+      "name": "Wrong buzzer 5",
+      "description": "A buzzer for a wrong answer or a 'nope'. \"droplet_bad\" by willy_ineedthatapp_com.",
+      "tags": ["wrong", "buzzer", "error", "fail"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Correct chime 1.mp3",
+      "kind": "sound",
+      "name": "Correct chime 1",
+      "description": "A chime for a right answer or a success. \"correct\" by ertfelda.",
+      "tags": ["correct", "right answer", "success", "chime"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Correct chime 2.mp3",
+      "kind": "sound",
+      "name": "Correct chime 2",
+      "description": "A chime for a right answer or a success. \"Correct\" by bwg2020.",
+      "tags": ["correct", "right answer", "success", "chime"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Correct chime 3.mp3",
+      "kind": "sound",
+      "name": "Correct chime 3",
+      "description": "A chime for a right answer or a success. \"correct\" by lionelmatthew001.",
+      "tags": ["correct", "right answer", "success", "chime"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Correct chime 4.mp3",
+      "kind": "sound",
+      "name": "Correct chime 4",
+      "description": "A chime for a right answer or a success. \"Correct-2\" by bwg2020.",
+      "tags": ["correct", "right answer", "success", "chime"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Correct chime 5.mp3",
+      "kind": "sound",
+      "name": "Correct chime 5",
+      "description": "A chime for a right answer or a success. \"ding\" by mark205.",
+      "tags": ["correct", "right answer", "success", "chime"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Dramatic sting 1.mp3",
+      "kind": "sound",
+      "name": "Dramatic sting 1",
+      "description": "A dramatic sting for a twist, a reveal or suspense. \"Piano Cord\" by ecfike.",
+      "tags": ["dramatic", "sting", "suspense", "reveal"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Dramatic sting 2.mp3",
+      "kind": "sound",
+      "name": "Dramatic sting 2",
+      "description": "A dramatic sting for a twist, a reveal or suspense. \"spooky 02\" by nomiqbomi.",
+      "tags": ["dramatic", "sting", "suspense", "reveal"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Dramatic sting 3.mp3",
+      "kind": "sound",
+      "name": "Dramatic sting 3",
+      "description": "A dramatic sting for a twist, a reveal or suspense. \"Shock Stab 10\" by nomiqbomi.",
+      "tags": ["dramatic", "sting", "suspense", "reveal"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Dramatic sting 4.mp3",
+      "kind": "sound",
+      "name": "Dramatic sting 4",
+      "description": "A dramatic sting for a twist, a reveal or suspense. \"Shock Stab 09\" by nomiqbomi.",
+      "tags": ["dramatic", "sting", "suspense", "reveal"],
+      "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Dramatic sting 5.mp3",
+      "kind": "sound",
+      "name": "Dramatic sting 5",
+      "description": "A dramatic sting for a twist, a reveal or suspense. \"spooky 03\" by nomiqbomi.",
+      "tags": ["dramatic", "sting", "suspense", "reveal"],
+      "since": 1
+    }
+  ],
+  "credits": "Cutroom's starter pack: sound effects to edit with from the start.\n\nEvery sound here is in the public domain (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/):\nfree to use in anything, commercially too, with no credit required. Their makers, with thanks:\n\nWhoosh 1: \"Swosh swoosh whoosh air sound, free, high quality\" by qubodup, https://freesound.org/people/qubodup/sounds/60026\nWhoosh 2: \"Swipe Whoosh\" by qubodup, https://freesound.org/people/qubodup/sounds/60007\nWhoosh 3: \"Cartoony whooshes\" by BranRainey, https://freesound.org/people/BranRainey/sounds/142348\nWhoosh 4: \"13th Whoosh Swing Sound\" by qubodup, https://freesound.org/people/qubodup/sounds/60000\nWhoosh 5: \"Little Whoosh 3\" by ch_ase, https://freesound.org/people/ch_ase/sounds/423798\nSwipe 1: \"swoop1\" by Streety, https://freesound.org/people/Streety/sounds/30240\nSwipe 2: \"swoop2g\" by Streety, https://freesound.org/people/Streety/sounds/30241\nSwipe 3: \"Knife Swish 2\" by jawbutch, https://freesound.org/people/jawbutch/sounds/344408\nSwipe 4: \"swish Bamboo pole w insect net 12\" by ra_gun, https://freesound.org/people/ra_gun/sounds/75544\nSwipe 5: \"Funny Swish\" by deleted_user_6479820, https://freesound.org/people/deleted_user_6479820/sounds/388005\nPop 1: \"Pop 2\" by greenvwbeetle, https://freesound.org/people/greenvwbeetle/sounds/244654\nPop 2: \"Pop 5\" by greenvwbeetle, https://freesound.org/people/greenvwbeetle/sounds/244657\nPop 3: \"cartoon pop or drip\" by AlaskaRobotics, https://freesound.org/people/AlaskaRobotics/sounds/221091\nPop 4: \"Balloon Pop / Christmas cracker / Confetti Cannon\" by Breviceps, https://freesound.org/people/Breviceps/sounds/458398\nPop 5: \"Pop Sound\" by ConarB13, https://freesound.org/people/ConarB13/sounds/401542\nClick 1: \"Button click\" by brnck, https://freesound.org/people/brnck/sounds/257357\nClick 2: \"Button V03\" by volkbutphan, https://freesound.org/people/volkbutphan/sounds/485486\nClick 3: \"Button 03\" by JarredGibb, https://freesound.org/people/JarredGibb/sounds/219478\nClick 4: \"button\" by Leszek_Szary, https://freesound.org/people/Leszek_Szary/sounds/146718\nClick 5: \"Button 04\" by JarredGibb, https://freesound.org/people/JarredGibb/sounds/219477\nClap: \"Disco Clap\" by NenadSimic, https://freesound.org/people/NenadSimic/sounds/169085\nCowbell 1: \"Cow Bells 03\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481433\nCowbell 2: \"Cow_Bells_01\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481151\nDing: \"Ding Station Annoucement Notification\" by JotrainG, https://freesound.org/people/JotrainG/sounds/651590\nCowbell 3: \"Cow_Bells_02\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481060\nImpact 1: \"Impact\" by chriskalos, https://freesound.org/people/chriskalos/sounds/172779\nImpact 2: \"BOOM IMPACT 2\" by XHALE303, https://freesound.org/people/XHALE303/sounds/535592\nImpact 3: \"Bass Impact - Ki_01\" by Kievinay, https://freesound.org/people/Kievinay/sounds/512389\nImpact 4: \"Metal Hit\" by NachtmahrTV, https://freesound.org/people/NachtmahrTV/sounds/556708\nImpact 5: \"book-hit\" by Kneeling, https://freesound.org/people/Kneeling/sounds/448005\nBass drop 1: \"SUB A# 2 secs\" by uzerx, https://freesound.org/people/uzerx/sounds/63138\nBass drop 2: \"sub bass 4 secondsssss\" by uzerx, https://freesound.org/people/uzerx/sounds/59540\nBass drop 3: \"SUB OCEANO C\" by uzerx, https://freesound.org/people/uzerx/sounds/81147\nBass drop 4: \"SUB OCEANO D\" by uzerx, https://freesound.org/people/uzerx/sounds/81148\nBass drop 5: \"SUB OCEANO A sharp\" by uzerx, https://freesound.org/people/uzerx/sounds/81144\nRiser 1: \"Riser\" by Rizzard, https://freesound.org/people/Rizzard/sounds/561207\nRiser 2: \"reversed riser\" by NOTOTO84, https://freesound.org/people/NOTOTO84/sounds/275512\nRiser 3: \"Energy Riser\" by magnuswaker, https://freesound.org/people/magnuswaker/sounds/522095\nRiser 4: \"Metallic Horror Riser FX\" by eldiariosonoro_, https://freesound.org/people/eldiariosonoro_/sounds/545798\nRiser 5: \"Vocal Chop Riser\" by rubenrox, https://freesound.org/people/rubenrox/sounds/487697\nRecord scratch 1: \"Record Scratch #4\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431777\nRecord scratch 2: \"Record Scratch #2\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431773\nRecord scratch 3: \"Record Scratch #3\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431778\nRecord scratch 4: \"Record Scratch #5\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431780\nRecord scratch 5: \"record_scratch\" by ludvique, https://freesound.org/people/ludvique/sounds/71853\nCamera shutter 1: \"Camera Shutter\" by roachpowder, https://freesound.org/people/roachpowder/sounds/170229\nCamera shutter 2: \"1/100 second camera shutter\" by FenrirFangs, https://freesound.org/people/FenrirFangs/sounds/213180\nCamera shutter 3: \"C220 camera shutter release\" by adeluc4, https://freesound.org/people/adeluc4/sounds/125318\nCamera shutter 4: \"Camera shutter analogue film SLR 1/4 01\" by cabled_mess, https://freesound.org/people/cabled_mess/sounds/338220\nCamera shutter 5: \"Camera shutter analogue film SLR 1/4 02\" by cabled_mess, https://freesound.org/people/cabled_mess/sounds/338219\nCash register 1: \"Cash register\" by MaoDin204, https://freesound.org/people/MaoDin204/sounds/721774\nCash register 2: \"cash register chching\" by disman, https://freesound.org/people/disman/sounds/728224\nCash register 3: \"Cash Register\" by Plonkapple, https://freesound.org/people/Plonkapple/sounds/550451\nCash register 4: \"Mechanical1\" by BMacZero, https://freesound.org/people/BMacZero/sounds/94120\nCash register 5: \"cash drawer and receipt\" by kalisemorrison, https://freesound.org/people/kalisemorrison/sounds/202531\nGlitch 1: \"Glitch 01\" by JacksonMiller0, https://freesound.org/people/JacksonMiller0/sounds/237607\nGlitch 2: \"VHS Glitch\" by Sassaby, https://freesound.org/people/Sassaby/sounds/264935\nGlitch 3: \"Glitch Corruption\" by dotY21, https://freesound.org/people/dotY21/sounds/348585\nGlitch 4: \"glitched sound 1\" by Elnosos, https://freesound.org/people/Elnosos/sounds/424375\nGlitch 5: \"Glitch Noise 1 - (Electrical, Transmission, Perturbation...)\" by Flying_Deer_Fx, https://freesound.org/people/Flying_Deer_Fx/sounds/369145\nTyping 1: \"Keyboard Typing Tapping\" by Psykophobia, https://freesound.org/people/Psykophobia/sounds/250390\nTyping 2: \"Keyboard Typing 001\" by ristooooo1, https://freesound.org/people/ristooooo1/sounds/539146\nLaugh 1: \"misc audience laughter noises\" by ChrisReierson, https://freesound.org/people/ChrisReierson/sounds/507983\nLaugh 2: \"Crowd laugh\" by deleted_user_2104797, https://freesound.org/people/deleted_user_2104797/sounds/324894\nLaugh 3: \"small audience laughter\" by cognito perceptu, https://freesound.org/people/cognito%20perceptu/sounds/17121\nLaugh 4: \"bell crowd laughter\" by cognito perceptu, https://freesound.org/people/cognito%20perceptu/sounds/17122\nLaugh 5: \"ShortStockLaughter2\" by ehohnke, https://freesound.org/people/ehohnke/sounds/242244\nApplause 1: \"A Nova Encore Claps Clap Applause Cheer - Nova Sound\" by NovaSoundTechnology, https://freesound.org/people/NovaSoundTechnology/sounds/347108\nApplause 2: \"Cheer 2\" by jayfrosting, https://freesound.org/people/jayfrosting/sounds/333404\nApplause 3: \"Applause 2\" by Sandermotions, https://freesound.org/people/Sandermotions/sounds/277021\nApplause 4: \"smallcrowd\" by sagetyrtle, https://freesound.org/people/sagetyrtle/sounds/32260\nApplause 5: \"Applause 1\" by Sandermotions, https://freesound.org/people/Sandermotions/sounds/277022\nCrickets 1: \"Cricket - Grillo\" by Lunevix, https://freesound.org/people/Lunevix/sounds/543965\nCrickets 2: \"Crickets chirping loop\" by Patrick_Corra, https://freesound.org/people/Patrick_Corra/sounds/633196\nCrickets 3: \"synth-cricket\" by guitarguy1985, https://freesound.org/people/guitarguy1985/sounds/69439\nSad trombone 1: \"horn_fail_wahwah_1\" by TaranP, https://freesound.org/people/TaranP/sounds/362206\nSad trombone 2: \"wah wah sad trombone\" by kirbydx, https://freesound.org/people/kirbydx/sounds/175409\nSad trombone 3: \"Fail\" by LittleRainySeasons, https://freesound.org/people/LittleRainySeasons/sounds/335906\nSad trombone 4: \"FX failed spell\" by v0idation, https://freesound.org/people/v0idation/sounds/115140\nSad trombone 5: \"fail down\" by jugraf, https://freesound.org/people/jugraf/sounds/370209\nSad trombone 6: \"Fail sound\" by Sjonas88, https://freesound.org/people/Sjonas88/sounds/538540\nBoing 1: \"Boing Spring Mouth harp downward 1\" by pan14, https://freesound.org/people/pan14/sounds/334031\nBoing 2: \"Boing Spring Mouth harp 04-20-13 4\" by pan14, https://freesound.org/people/pan14/sounds/334032\nBoing 3: \"Funny Boing\" by se2001, https://freesound.org/people/se2001/sounds/543641\nBoing 4: \"M tyre boing 3\" by AtevonHes, https://freesound.org/people/AtevonHes/sounds/275058\nBoing 5: \"boing 2\" by AuDRoger, https://freesound.org/people/AuDRoger/sounds/471152\nWrong buzzer 1: \"Wrong Answer\" by -Andreas, https://freesound.org/people/-Andreas/sounds/648462\nWrong buzzer 2: \"buzzer2\" by hypocore, https://freesound.org/people/hypocore/sounds/164089\nWrong buzzer 3: \"buzzer\" by hypocore, https://freesound.org/people/hypocore/sounds/164090\nWrong buzzer 4: \"Wrong Answer Buzzer\" by -Andreas, https://freesound.org/people/-Andreas/sounds/650842\nWrong buzzer 5: \"droplet_bad\" by willy_ineedthatapp_com, https://freesound.org/people/willy_ineedthatapp_com/sounds/167328\nCorrect chime 1: \"correct\" by ertfelda, https://freesound.org/people/ertfelda/sounds/243701\nCorrect chime 2: \"Correct\" by bwg2020, https://freesound.org/people/bwg2020/sounds/456161\nCorrect chime 3: \"correct\" by lionelmatthew001, https://freesound.org/people/lionelmatthew001/sounds/538333\nCorrect chime 4: \"Correct-2\" by bwg2020, https://freesound.org/people/bwg2020/sounds/456162\nCorrect chime 5: \"ding\" by mark205, https://freesound.org/people/mark205/sounds/580649\nDramatic sting 1: \"Piano Cord\" by ecfike, https://freesound.org/people/ecfike/sounds/183500\nDramatic sting 2: \"spooky 02\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/651025\nDramatic sting 3: \"Shock Stab 10\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/578372\nDramatic sting 4: \"Shock Stab 09\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/578371\nDramatic sting 5: \"spooky 03\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/651027\n\nTrimmed and evened out in volume for Cutroom. Delete any you don't want; they won't come back.\n"
+}

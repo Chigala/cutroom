@@ -12,7 +12,7 @@ import { getSettings, publicSettings, setSettings } from "./settings.ts";
 type Handler = (...args: unknown[]) => unknown;
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
-const PROVIDERS: readonly KeyProvider[] = ["pixabay", "pexels", "klipy", "freesound", "groq"];
+const PROVIDERS: readonly KeyProvider[] = ["pixabay", "pexels", "klipy", "groq"];
 
 function diagnostics(): Diagnostics {
   return {

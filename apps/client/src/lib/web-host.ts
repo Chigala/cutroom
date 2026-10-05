@@ -205,6 +205,7 @@ export function createWebHost(): EditorApi {
         settings = { ...settings, ...patch };
         return settings;
       },
+      checkKey: async () => "offline",
     },
     pathForFile: () => "",
     on(event, listener) {

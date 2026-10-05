@@ -36,6 +36,7 @@ export const Channel = {
   agentRun: "agent:run",
   agentCancel: "agent:cancel",
   agentStatus: "agent:status",
+  checkKey: "settings:check-key",
   downloadsState: "downloads:state",
   downloadsPrepare: "downloads:prepare",
   libraryState: "library:state",

@@ -294,6 +294,11 @@ export interface DownloadState {
   readonly error?: string;
 }
 
+/** Services whose free API keys the app can use. */
+export type KeyProvider = "pixabay" | "pexels" | "klipy" | "freesound" | "groq";
+/** What a key check found: works, wrong key, over its limit, or the service couldn't be reached. */
+export type KeyCheck = "ok" | "invalid" | "limited" | "offline";
+
 /** What onboarding can start downloading ahead of the first import. */
 export type DownloadTarget = "transcription" | "models";
 
@@ -472,6 +477,8 @@ export interface EditorApi {
   readonly settings: {
     get(): Promise<Settings>;
     set(patch: Partial<Settings>): Promise<Settings>;
+    /** Tries a key with its service before it's saved. */
+    checkKey(provider: KeyProvider, key: string): Promise<KeyCheck>;
   };
   /** Absolute path of a file dropped onto the window. Empty on the web. */
   pathForFile(file: File): string;

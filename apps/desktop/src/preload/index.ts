@@ -88,6 +88,7 @@ const api: EditorApi = {
   settings: {
     get: () => invoke(Channel.settingsGet),
     set: (patch) => invoke(Channel.settingsSet, patch),
+    checkKey: (provider, key) => invoke(Channel.checkKey, provider, key),
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
   on(event, listener) {

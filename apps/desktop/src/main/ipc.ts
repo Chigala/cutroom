@@ -1,8 +1,9 @@
-import type { Diagnostics } from "@vedit/bridge";
+import type { Diagnostics, KeyProvider } from "@vedit/bridge";
 import { Channel } from "@vedit/bridge/channels";
 import { app, type IpcMainInvokeEvent, ipcMain, shell } from "electron";
 import { z } from "zod";
 import { claudeStatus } from "./claude.ts";
+import { checkKey } from "./keys.ts";
 import { logsDir, recentProblems } from "./log.ts";
 import type { ProjectService } from "./project-service.ts";
 import { assertTrustedSender } from "./security.ts";
@@ -11,6 +12,7 @@ import { getSettings, publicSettings, setSettings } from "./settings.ts";
 type Handler = (...args: unknown[]) => unknown;
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+const PROVIDERS: readonly KeyProvider[] = ["pixabay", "pexels", "klipy", "freesound", "groq"];
 
 function diagnostics(): Diagnostics {
   return {
@@ -46,6 +48,10 @@ export function registerIpc(service: ProjectService): void {
     [Channel.agentRun]: (req) => service.runAgent(req),
     [Channel.agentCancel]: (runId) => service.cancel(runId),
     [Channel.agentStatus]: () => service.agentStatus(),
+    [Channel.checkKey]: (provider, key) =>
+      PROVIDERS.includes(provider as KeyProvider)
+        ? checkKey(provider as KeyProvider, str(key).slice(0, 500))
+        : Promise.resolve("invalid"),
     [Channel.downloadsState]: () => service.downloads.state(),
     [Channel.downloadsPrepare]: (what) =>
       service.downloads.prepare(what === "models" ? "models" : "transcription"),

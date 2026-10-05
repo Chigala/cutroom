@@ -5,7 +5,7 @@
  */
 import type { DownloadState, DownloadTarget } from "@vedit/bridge";
 import { ensureModel, ensureWhisper, type ModelName, onDownload, useOpenModels } from "@vedit/media";
-import { getSettings, paths } from "./settings.ts";
+import { getSettings, whisperSetup } from "./settings.ts";
 
 /** The open models a Windows or Linux machine needs (sounds' weights and labels come with it). */
 const OPEN_MODELS: readonly ModelName[] = [
@@ -37,7 +37,7 @@ export class Downloads {
       const s = await getSettings();
       // Groq transcribes in the cloud: nothing to download.
       if (s.transcriber === "groq") return;
-      const setup = { dir: paths.whisper(), model: s.whisperModel, language: s.language };
+      const setup = whisperSetup(s);
       void ensureWhisper(setup).catch((err: Error) =>
         console.warn("[downloads] speech recognition:", err.message),
       );

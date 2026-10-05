@@ -16,6 +16,7 @@ import {
 import type { TimedWord } from "@vedit/project";
 import { downloadReporter, downloadVerified } from "./downloads.ts";
 import { bundledTool } from "./exec.ts";
+import { transcribeGroq } from "./groq.ts";
 
 export const WHISPER_VERSION = "1.7.5";
 export const WHISPER_MODELS = ["small.en", "medium.en", "large-v3-turbo", "large-v3-turbo-light"] as const;
@@ -52,6 +53,8 @@ export interface WhisperSetup {
   readonly model: WhisperModelName;
   /** "en", or "auto" to detect. */
   readonly language: string;
+  /** Transcribe on Groq with this key instead of on this computer (nothing to download then). */
+  readonly groqKey?: string;
 }
 
 const ready = new Map<string, Promise<void>>();
@@ -70,6 +73,8 @@ export function ensureWhisper(
   setup: WhisperSetup,
   onProgress?: (text: string, fraction: number) => void,
 ): Promise<void> {
+  // On Groq there's nothing to install.
+  if (setup.groqKey) return Promise.resolve();
   const key = `${setup.dir}|${setup.model}`;
   let hit = ready.get(key);
   if (!hit) {
@@ -188,6 +193,15 @@ export async function transcribeWords(
     signal?: AbortSignal;
   } = {},
 ): Promise<{ words: TimedWord[]; language: string }> {
+  if (setup.groqKey) {
+    const got = await transcribeGroq(wav, setup.groqKey, {
+      language: setup.language,
+      ...(prompt && { prompt }),
+      ...(signal && { signal }),
+      ...(onProgress && { onProgress }),
+    });
+    return { words: spellLike(cleanHallucinations(got.words), glossary), language: got.language };
+  }
   await ensureWhisper(setup);
   const output = await whisper({
     inputPath: wav,

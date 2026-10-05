@@ -56,7 +56,7 @@ import {
 } from "@vedit/project";
 import type { ProjectStore } from "@vedit/project/node";
 import { claudeStatus } from "./claude.ts";
-import { getSettings, paths } from "./settings.ts";
+import { getSettings, paths, whisperSetup } from "./settings.ts";
 
 /** At most this many vision calls at once, across every clip being indexed. */
 class Limit {
@@ -408,11 +408,7 @@ export class Indexer {
             if (!job) {
               job = upgrades
                 .run(async () => {
-                  const setup = {
-                    dir: paths.whisper(),
-                    model: settings.whisperModel,
-                    language: settings.language,
-                  };
+                  const setup = whisperSetup(settings);
                   await ensureWhisper(setup);
                   const { words } = await transcribeWords(wav, setup, {
                     signal: upgradesStop.signal,
@@ -580,7 +576,7 @@ export class Indexer {
           if (shape.hit !== null) analysis.drop = shape.hit;
         }
       } else if (source.kind === "video" && source.hasAudio) {
-        const setup = { dir: paths.whisper(), model: settings.whisperModel, language: settings.language };
+        const setup = whisperSetup(settings);
         emit("transcribe", 0.4, "Transcribing");
         await ensureWhisper(setup, (label, f) => emit("setup", 0.4, `${label} ${Math.round(f * 100)}%`));
         const { words, language } = await transcribeWords(files.wav, setup, {

@@ -5,6 +5,7 @@ export * from "./derived.ts";
 export { type DownloadState, onDownload } from "./downloads.ts";
 export * from "./exec.ts";
 export { detectFace, type Face } from "./face.ts";
+export { checkGroqKey } from "./groq.ts";
 export * from "./hear.ts";
 export * from "./joins.ts";
 export * from "./klipy.ts";

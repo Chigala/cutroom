@@ -118,3 +118,17 @@ export async function setSettings(patch: unknown): Promise<Settings> {
   await writeSettingsFile(next);
   return getSettings();
 }
+
+/**
+ * How speech gets transcribed with these settings: whisper on this computer, or on Groq when that's
+ * chosen and there's a key (Settings, or GROQ_API_KEY).
+ */
+export function whisperSetup(s: Settings) {
+  const groqKey = s.transcriber === "groq" ? s.groqKey || process.env.GROQ_API_KEY || "" : "";
+  return {
+    dir: paths.whisper(),
+    model: s.whisperModel,
+    language: s.language,
+    ...(groqKey && { groqKey }),
+  };
+}

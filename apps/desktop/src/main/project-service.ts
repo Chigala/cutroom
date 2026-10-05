@@ -95,7 +95,7 @@ import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
 import { onWindowsDrive } from "./platform.ts";
-import { getSettings, paths, setSettings } from "./settings.ts";
+import { getSettings, paths, setSettings, whisperSetup } from "./settings.ts";
 import { Versions } from "./versions.ts";
 
 const SWATCHES = ["#355761", "#2B4F63", "#5A4A36", "#45603F", "#3A3552", "#2F5A6B", "#5E4632", "#4C5A3A"];
@@ -944,7 +944,7 @@ export class ProjectService {
         const src = store.doc.sources.find((s) => s.id === sourceId);
         if (!src?.path) throw new Error("no such clip");
         const settings = await getSettings();
-        const setup = { dir: paths.whisper(), model: settings.whisperModel, language: settings.language };
+        const setup = whisperSetup(settings);
         // A second and a half either side: started mid-word, the recognizer misses what follows (measured:
         // a sung line heard in full from a second's lead-in, not at all from 0.4s).
         const lo = Math.max(0, from - 1.5);

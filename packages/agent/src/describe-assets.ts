@@ -9,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { inputSchema } from "./api.ts";
 import { VISION_MODEL } from "./describe.ts";
-import { claudeExecutable } from "./sdk.ts";
+import { claudeEnv, claudeExecutable } from "./sdk.ts";
 import type { Backend } from "./types.ts";
 
 const Item = z.object({
@@ -84,6 +84,7 @@ export async function describeAssets(
         prompt: prompt(),
         options: {
           ...claudeExecutable(),
+          env: claudeEnv(),
           model: VISION_MODEL.subscription,
           tools: [],
           maxTurns: 1,

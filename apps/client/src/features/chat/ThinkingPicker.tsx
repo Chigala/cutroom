@@ -1,19 +1,13 @@
 /**
- * In the composer, beside Send: how hard the agent thinks, and which model, like Claude's own picker.
- * The same settings as Settings → Claude.
+ * In the composer, beside Send: how hard Claude thinks (the effort slider, as in Claude's apps) and which
+ * model. The same settings as Settings → Claude.
  */
 import { clsx } from "clsx";
 import { Check, ChevronDown, Lightbulb } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { loadSettings, saveSettings, useSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
-
-export const EFFORTS = [
-  { value: "low", label: "Quick", hint: "Fastest, for small changes" },
-  { value: "medium", label: "Balanced", hint: "Most edits" },
-  { value: "high", label: "Careful", hint: "Big edits and first cuts" },
-  { value: "max", label: "Max", hint: "Thinks longest, slowest" },
-] as const;
+import { EffortSlider, effortLabel } from "./EffortSlider.tsx";
 
 export const MODELS = [
   { value: "claude-opus-5-5", label: "Opus 5.5", hint: "Best edits" },
@@ -41,7 +35,7 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
     };
   }, [open]);
   if (!settings) return null;
-  const effort = EFFORTS.find((e) => e.value === settings.effort) ?? EFFORTS[2];
+  const effort = effortLabel(settings.effort);
   const model = MODELS.find((m) => m.value === settings.model);
   const save = (patch: Parameters<typeof saveSettings>[0]) =>
     void saveSettings(patch).catch((err: Error) => toast(`Couldn't change it: ${err.message}`, "warn"));
@@ -53,7 +47,7 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        title={`${model?.label ?? settings.model}, thinking: ${effort.label}`}
+        title={`${model?.label ?? settings.model}, effort: ${effort}`}
         onClick={() => setOpen(!open)}
         className={clsx(
           "inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 text-xs whitespace-nowrap disabled:opacity-40",
@@ -61,41 +55,33 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
         )}
       >
         <Lightbulb size={13} className="shrink-0" />
-        {effort.label}
+        {effort}
         <ChevronDown size={12} className="shrink-0 text-faint" />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-30 mb-2 w-[232px] overflow-hidden rounded-xl border border-line-strong bg-panel p-1 shadow-2xl animate-rise"
+          className="absolute bottom-full left-0 z-30 mb-2 w-[340px] overflow-hidden rounded-2xl border border-line-strong bg-panel shadow-2xl animate-rise"
         >
-          <MenuLabel>How hard it thinks</MenuLabel>
-          {EFFORTS.map((e) => (
-            <MenuItem
-              key={e.value}
-              label={e.label}
-              hint={e.hint}
-              on={settings.effort === e.value}
-              onPick={() => {
-                save({ effort: e.value });
-                setOpen(false);
-              }}
-            />
-          ))}
-          <div className="my-1 border-t border-line" />
-          <MenuLabel>Model</MenuLabel>
-          {MODELS.map((m) => (
-            <MenuItem
-              key={m.value}
-              label={m.label}
-              hint={m.hint}
-              on={settings.model === m.value}
-              onPick={() => {
-                save({ model: m.value });
-                setOpen(false);
-              }}
-            />
-          ))}
+          <div className="px-4 pt-4 pb-2">
+            <EffortSlider value={settings.effort} onChange={(effort) => save({ effort })} />
+          </div>
+          <div className="mx-2 my-1 border-t border-line" />
+          <div className="p-1">
+            <MenuLabel>Model</MenuLabel>
+            {MODELS.map((m) => (
+              <MenuItem
+                key={m.value}
+                label={m.label}
+                hint={m.hint}
+                on={settings.model === m.value}
+                onPick={() => {
+                  save({ model: m.value });
+                  setOpen(false);
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

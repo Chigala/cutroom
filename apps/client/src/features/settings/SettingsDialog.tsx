@@ -2,7 +2,7 @@
  * Settings: a section list on the left, the section's rows on the right (what it does on the left of each
  * row, its control on the right). Every change saves as it's made; keys save as they're typed or pasted.
  */
-import type { AgentStatus, Diagnostics, Settings } from "@vedit/bridge";
+import type { AgentStatus, Diagnostics, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
 import {
   AudioLines,
@@ -26,6 +26,7 @@ import { followLibrary, useLibrary } from "../../state/library.ts";
 import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
+import { EffortSlider } from "../chat/EffortSlider.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
 
 const SECTIONS = [
@@ -43,20 +44,13 @@ const MODELS = [
   ["claude-sonnet-5-5", "Sonnet 5.5 · faster"],
 ] as const;
 
-const EFFORT = [
-  { value: "low", label: "Quick" },
-  { value: "medium", label: "Balanced" },
-  { value: "high", label: "Careful" },
-  { value: "max", label: "Max" },
-] as const;
-
 const WHISPER = [
-  { value: "small.en", label: "Fast" },
-  { value: "medium.en", label: "Better" },
   { value: "large-v3-turbo", label: "Best" },
+  { value: "large-v3-turbo-light", label: "Light" },
+  { value: "small.en", label: "Fast" },
 ] as const;
 
-/** Languages whisper knows, for the Best model (Fast and Better are English only). */
+/** Languages whisper knows, for Best, Light and Groq (Fast is English only). */
 const LANGUAGES = [
   ["auto", "Detect it"],
   ["en", "English"],
@@ -69,6 +63,14 @@ const LANGUAGES = [
   ["sw", "Swahili"],
   ["ar", "Arabic"],
 ] as const;
+
+/** What a key check found, as the row says it. */
+const KEY_RESULT: Record<KeyCheck, string> = {
+  ok: "Works. Saved.",
+  invalid: "That key didn't work. Check you copied all of it.",
+  limited: "It works, but it's over its limit right now. Saved anyway.",
+  offline: "Couldn't reach the service to check it. Saved; it'll be tried when it's used.",
+};
 
 const KEYS = [
   {
@@ -131,8 +133,8 @@ export function SettingsDialog() {
 
   if (!settings) return null;
   const close = () => setUi({ dialog: null });
-  const usingApi = status?.backend === "api";
-  const best = settings.whisperModel === "large-v3-turbo";
+  const groq = settings.transcriber === "groq";
+  const englishOnly = !groq && settings.whisperModel.endsWith(".en");
 
   return (
     <Dialog title="Settings" onClose={close} width={800}>
@@ -158,27 +160,8 @@ export function SettingsDialog() {
 
         <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
           {section === "claude" && (
-            <Page title="Claude" intro="The model that edits with you, and how it connects.">
-              <ClaudeSetup usingApiKey={usingApi} />
-              <Row
-                title="Connect with"
-                hint={
-                  usingApi
-                    ? "Using your API key (ANTHROPIC_API_KEY), billed per request."
-                    : "Using your Claude subscription through Claude Code. Automatic switches to an API key when ANTHROPIC_API_KEY is set."
-                }
-                wide
-              >
-                <Segmented
-                  value={settings.backend}
-                  options={[
-                    { value: "auto", label: "Automatic" },
-                    { value: "subscription", label: "Subscription" },
-                    { value: "api", label: "API key" },
-                  ]}
-                  onChange={(backend) => void update({ backend })}
-                />
-              </Row>
+            <Page title="Claude" intro="The model that edits with you, on your own Claude plan.">
+              <ClaudeSetup />
               <Row title="Model" hint="Opus makes the best edits; Sonnet answers sooner.">
                 <Select
                   value={settings.model}
@@ -186,17 +169,9 @@ export function SettingsDialog() {
                   options={withCurrent(MODELS, settings.model)}
                 />
               </Row>
-              <Row
-                title="How hard it thinks"
-                hint="Careful and Max are slower and better for big edits. First cuts always think carefully."
-                wide
-              >
-                <Segmented
-                  value={EFFORT.some((e) => e.value === settings.effort) ? settings.effort : "high"}
-                  options={EFFORT}
-                  onChange={(effort) => void update({ effort })}
-                />
-              </Row>
+              <div className="flex flex-col gap-2 border-t border-line pt-5">
+                <EffortSlider value={settings.effort} onChange={(effort) => void update({ effort })} />
+              </div>
               <Row
                 title="Show its thinking"
                 hint="A summary of its thinking streams into the chat as it works, folded away when it's done."
@@ -236,29 +211,71 @@ export function SettingsDialog() {
           )}
 
           {section === "transcription" && (
-            <Page title="Transcription" intro="Speech to text runs on this Mac; nothing is uploaded.">
+            <Page
+              title="Transcription"
+              intro="Every word said becomes captions, cut points and something the agent can read."
+            >
               <Row
-                title="Quality"
-                hint="Best is the most accurate and knows other languages. It downloads 1.6 GB once."
+                title="Where it runs"
+                hint={
+                  groq
+                    ? "On Groq: the same model as Best, in seconds, with nothing to download. The audio is sent to Groq."
+                    : "On this computer: nothing leaves it."
+                }
                 wide
               >
                 <Segmented
-                  value={settings.whisperModel}
-                  options={WHISPER}
-                  onChange={(whisperModel) => void update({ whisperModel })}
+                  value={settings.transcriber}
+                  options={[
+                    { value: "local", label: "This computer" },
+                    { value: "groq", label: "Groq (Instant)" },
+                  ]}
+                  onChange={(transcriber) => void update({ transcriber })}
                 />
               </Row>
+              {groq ? (
+                <KeyRow
+                  provider="groq"
+                  name="Groq"
+                  what="Free key; needed for transcription on Groq"
+                  get="console.groq.com/keys"
+                  source={status?.keys?.groq ?? null}
+                  onSave={(groqKey) => update({ groqKey })}
+                />
+              ) : (
+                <Row
+                  title="Quality"
+                  hint={
+                    settings.whisperModel === "large-v3-turbo-light"
+                      ? "Light: a third of the size (574 MB). The same words on clean speech, a few slips on noisy audio."
+                      : settings.whisperModel === "small.en"
+                        ? "Fast: small and quick, English only, and least accurate."
+                        : "Best: the most accurate; holds up on streams, music and slang. Downloads 1.6 GB once."
+                  }
+                  wide
+                >
+                  <Segmented
+                    value={
+                      WHISPER.some((w) => w.value === settings.whisperModel)
+                        ? settings.whisperModel
+                        : "large-v3-turbo"
+                    }
+                    options={WHISPER}
+                    onChange={(whisperModel) => void update({ whisperModel })}
+                  />
+                </Row>
+              )}
               <Row
                 title="Language"
                 hint={
-                  best
-                    ? "What's spoken in your footage. Nigerian Pidgin transcribes best as English."
-                    : "Fast and Better only know English: choose Best for other languages."
+                  englishOnly
+                    ? "Fast only knows English: choose Best or Light for other languages."
+                    : "What's spoken in your footage. Nigerian Pidgin transcribes best as English."
                 }
               >
                 <Select
-                  value={best ? settings.language : "en"}
-                  disabled={!best}
+                  value={englishOnly ? "en" : settings.language}
+                  disabled={englishOnly}
                   onChange={(language) => void update({ language })}
                   options={withCurrent(LANGUAGES, settings.language)}
                 />
@@ -276,17 +293,18 @@ export function SettingsDialog() {
               {KEYS.map((k) => (
                 <KeyRow
                   key={k.key}
+                  provider={k.env}
                   name={k.name}
                   what={k.what}
                   get={k.get}
                   source={status?.keys?.[k.env] ?? null}
-                  onChange={(v) => void update({ [k.key]: v })}
+                  onSave={(v) => update({ [k.key]: v })}
                 />
               ))}
               <p className="text-xs leading-relaxed text-faint">
-                Keys are kept in your Mac's keychain, never in a settings file. Without one here, the key is
-                read from the environment or a .env file (KLIPY_API_KEY, PEXELS_API_KEY, PIXABAY_API_KEY,
-                FREESOUND_API_KEY). KLIPY test keys allow 100 searches an hour.
+                Keys are kept encrypted on this computer, never in a settings file, and each is checked with
+                its service before it's saved. One stock footage key is enough. KLIPY test keys allow 100
+                searches an hour.
               </p>
             </Page>
           )}
@@ -295,7 +313,7 @@ export function SettingsDialog() {
             <Page title="Advanced" intro="For when the defaults don't fit.">
               <Row
                 title="Claude Code location"
-                hint="Leave empty to use the Claude Code installed on this Mac, or the app's own copy if there's none."
+                hint="Leave empty to use the Claude Code installed on this computer, or the app's own copy if there's none."
                 wide
               >
                 <TextInput
@@ -509,22 +527,38 @@ function Glossary({ words, onSave }: { words: readonly string[]; onSave: (w: str
 }
 
 function KeyRow({
+  provider,
   name,
   what,
   get,
   source,
-  onChange,
+  onSave,
 }: {
+  provider: KeyProvider;
   name: string;
   what: string;
   get: string;
-  /** Where the key in use comes from; its value never reaches the window. */
-  source: "saved" | "env" | null;
-  onChange: (v: string) => void;
+  /** Whether a key is saved; its value never reaches the window. */
+  source: "saved" | null;
+  onSave: (v: string) => Promise<void>;
 }) {
   const [shown, setShown] = useState(false);
   const [typed, setTyped] = useState("");
-  const state = typed || source === "saved" ? "Saved" : source === "env" ? "From .env" : null;
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<KeyCheck | null>(null);
+  // Tried with its service first, and saved unless it's plainly wrong.
+  const check = async () => {
+    const key = typed.trim();
+    if (!key) return;
+    setChecking(true);
+    const r = await host.settings.checkKey(provider, key);
+    setChecking(false);
+    setResult(r);
+    if (r !== "invalid") {
+      await onSave(key);
+      setTyped("");
+    }
+  };
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-5">
       <div className="flex items-baseline justify-between gap-3">
@@ -532,23 +566,21 @@ function KeyRow({
           <span className="text-[13px] font-medium">{name}</span>
           <span className="text-xs text-muted">{what}</span>
         </div>
-        {state ? (
+        {source === "saved" ? (
           <span className="flex shrink-0 items-center gap-2 text-xs">
             <span className="flex items-center gap-1 text-ok">
-              <Check size={12} /> {state}
+              <Check size={12} /> Saved
             </span>
-            {state === "Saved" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTyped("");
-                  onChange("");
-                }}
-                className="rounded px-1 text-faint hover:bg-button hover:text-fg-2"
-              >
-                Remove
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setResult(null);
+                void onSave("");
+              }}
+              className="rounded px-1 text-faint hover:bg-button hover:text-fg-2"
+            >
+              Remove
+            </button>
           </span>
         ) : (
           <a
@@ -561,41 +593,51 @@ function KeyRow({
           </a>
         )}
       </div>
-      <div className="relative">
-        <input
-          type={shown ? "text" : "password"}
-          autoComplete="off"
-          spellCheck={false}
-          value={typed}
-          // Saved as it's pasted or typed: closing right after can't lose it.
-          onChange={(e) => {
-            const v = e.target.value.trim();
-            setTyped(v);
-            if (v) onChange(v);
-          }}
-          placeholder={
-            source === "saved"
-              ? "Saved in the keychain · paste a new key to replace it"
-              : source === "env"
-                ? "Using the key from .env · paste one to use it instead"
-                : `${name} API key`
-          }
-          className="h-[34px] w-full rounded-lg border border-line-strong bg-raised pr-9 pl-3 font-mono text-[12px] text-fg outline-none placeholder:font-sans placeholder:text-faint focus:border-edge"
-        />
-        <button
-          type="button"
-          aria-label={shown ? "Hide key" : "Show key"}
-          onClick={() => setShown(!shown)}
-          className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1 text-faint hover:bg-button hover:text-fg-2"
-        >
-          {shown ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
+      <div className="flex gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <input
+            type={shown ? "text" : "password"}
+            autoComplete="off"
+            spellCheck={false}
+            value={typed}
+            onChange={(e) => {
+              setTyped(e.target.value);
+              setResult(null);
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") void check();
+            }}
+            placeholder={source === "saved" ? "Paste a new key to replace it" : `Paste your ${name} key`}
+            className="h-[34px] w-full rounded-lg border border-line-strong bg-raised pr-9 pl-3 font-mono text-[12px] text-fg outline-none placeholder:font-sans placeholder:text-faint focus:border-edge"
+          />
+          <button
+            type="button"
+            aria-label={shown ? "Hide key" : "Show key"}
+            onClick={() => setShown(!shown)}
+            className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1 text-faint hover:bg-button hover:text-fg-2"
+          >
+            {shown ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <Button size="sm" disabled={!typed.trim() || checking} onClick={() => void check()}>
+          {checking ? "Checking…" : "Check"}
+        </Button>
       </div>
+      {result && (
+        <span
+          className={clsx(
+            "text-xs",
+            result === "invalid" ? "text-bad" : result === "ok" ? "text-ok" : "text-muted",
+          )}
+        >
+          {KEY_RESULT[result]}
+        </span>
+      )}
     </div>
   );
 }
 
-/** Where the shared asset library lives, with the way to it and the way to move it. */
 function LibraryRow() {
   const state = useLibrary((s) => s.state);
   useEffect(() => followLibrary(), []);

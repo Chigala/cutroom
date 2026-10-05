@@ -52,9 +52,12 @@ export interface AgentResult {
   readonly doc: ProjectDoc;
 }
 
-/** API key present: use it. Otherwise the Claude subscription the user is signed in with. */
+/**
+ * The Claude subscription the user signed in to Claude Code with. The API backend (api.ts) is kept,
+ * but switched off for now: Cutroom runs on each person's own Claude plan.
+ */
 export function defaultBackend(): Backend {
-  return process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN ? "api" : "subscription";
+  return "subscription";
 }
 
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {

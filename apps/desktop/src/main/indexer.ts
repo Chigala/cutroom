@@ -649,10 +649,9 @@ export class Indexer {
     files: ReturnType<typeof cachePaths>,
     signal: AbortSignal,
   ): Promise<ShotLog> {
-    const settings = await getSettings();
-    const backend = settings.backend === "auto" ? defaultBackend() : settings.backend;
+    const backend = defaultBackend();
     // Which Claude Code to run (found once at startup; this waits for it).
-    if (backend === "subscription") await claudeStatus();
+    await claudeStatus();
     const segments = segmentsOf(source.duration, analysis.shots);
     const perSheet = 8;
     const sheets = await contactSheets(files.proxy, segments, {

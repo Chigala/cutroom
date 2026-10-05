@@ -11,7 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ShotSegment } from "@vedit/project";
 import { z } from "zod";
 import { inputSchema } from "./api.ts";
-import { claudeExecutable } from "./sdk.ts";
+import { claudeEnv, claudeExecutable } from "./sdk.ts";
 import type { Backend } from "./types.ts";
 
 /**
@@ -137,6 +137,7 @@ async function viaSubscription(batch: SheetBatch, signal?: AbortSignal): Promise
       prompt: prompt(),
       options: {
         ...claudeExecutable(),
+        env: claudeEnv(),
         model: VISION_MODEL.subscription,
         tools: [],
         maxTurns: 1,

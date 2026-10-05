@@ -360,8 +360,8 @@ export class Library {
       (a) => a.kind === "meme" && !a.edited && !a.description && !this.described.has(`${root.dir}|${a.file}`),
     );
     if (!todo.length) return;
-    const backend = settings.backend === "auto" ? defaultBackend() : settings.backend;
-    if (backend === "subscription") await claudeStatus();
+    const backend = defaultBackend();
+    await claudeStatus();
     for (let i = 0; i < todo.length; i += 12) {
       const group = todo.slice(i, i + 12);
       for (const a of group) this.described.add(`${root.dir}|${a.file}`);

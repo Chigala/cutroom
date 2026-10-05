@@ -15,7 +15,7 @@ You need **Node 22.12+**, **Git**, and **pnpm** (the repo pins its version: `cor
 git clone <this repo> && cd ai-native-videoeditor
 corepack enable
 pnpm install
-cp .env.example .env   # optional: API keys for stock footage, memes and sounds
+cp .env.example .env   # optional: development settings (API keys go in the app, not here)
 pnpm dev               # the desktop app (Electron), with hot reload for the UI
 ```
 
@@ -110,16 +110,18 @@ elsewhere). Each downloads once, the first time it's needed, checked against a p
 
 ## Claude
 
-The agent runs on whichever Claude you have:
+The agent runs on your own Claude plan (Pro or Max) through Claude Code: install it and sign in, and
+there's no key to set. The app can install and update it from Settings → Claude, or:
 
-- **Claude subscription**: install Claude Code and sign in with your own Claude plan, and the agent runs
-  through it. No key needed. The app can install and update it from Settings → Claude, or:
-  - macOS, Linux, WSL: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude` to sign in
-  - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`, then `claude` to sign in
-- **API key**: set `ANTHROPIC_API_KEY` in your environment or in a `.env` at the repo root (development)
-  or in the app's data folder. Uses the Claude API directly.
+- macOS, Linux, WSL: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude` to sign in
+- Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`, then `claude` to sign in
 
-Settings (the gear) can force one or the other, and pick how hard the agent thinks.
+Settings → Claude also picks the model and how hard it thinks. (An API-key backend exists in
+`packages/agent/src/api.ts` but is switched off for now.)
+
+API keys for stock footage, memes, sound effects and Groq transcription are each person's own, entered
+in onboarding or Settings → Media sources and stored encrypted on the computer; they're never read from
+the environment.
 
 ## What it does
 

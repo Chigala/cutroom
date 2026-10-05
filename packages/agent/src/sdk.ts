@@ -105,7 +105,7 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
         // A neutral working directory: no project CLAUDE.md or settings leak into the editor's agent.
         cwd: tmpdir(),
         abortController: abort,
-        env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "ai-native-videoeditor/0.1" },
+        env: claudeEnv(),
       },
     });
     for await (const message of stream) {
@@ -204,4 +204,13 @@ async function* withImages(
       ],
     },
   };
+}
+
+/**
+ * The environment Claude Code runs with: the user's own Claude plan, so any Anthropic API credentials in
+ * the environment are left out (Claude Code would bill those instead), and Cutroom says who it is.
+ */
+export function claudeEnv(): NodeJS.ProcessEnv {
+  const { ANTHROPIC_API_KEY: _key, ANTHROPIC_AUTH_TOKEN: _token, ...rest } = process.env;
+  return { ...rest, CLAUDE_AGENT_SDK_CLIENT_APP: "cutroom/0.1" };
 }

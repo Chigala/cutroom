@@ -4,7 +4,6 @@
  * The login is the user's own Claude Code login, so signing in here signs in Claude Code too.
  */
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
-import { clsx } from "clsx";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui.tsx";
@@ -33,7 +32,7 @@ const act = (fn: () => Promise<void>) => () =>
     toast(err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""), "warn"),
   );
 
-export function ClaudeSetup({ usingApiKey }: { usingApiKey: boolean }) {
+export function ClaudeSetup() {
   const { status, task, checking } = useClaude();
   useEffect(() => {
     followClaude();
@@ -68,10 +67,7 @@ export function ClaudeSetup({ usingApiKey }: { usingApiKey: boolean }) {
         {ok ? (
           <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-ok" />
         ) : (
-          <AlertTriangle
-            size={16}
-            className={clsx("mt-0.5 shrink-0", usingApiKey ? "text-muted" : "text-accent")}
-          />
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-accent" />
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-[13px] text-fg">

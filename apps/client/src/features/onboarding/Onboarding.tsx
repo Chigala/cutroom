@@ -658,7 +658,7 @@ function Extras({ keys }: { keys: AgentStatus["keys"] }) {
 }
 
 /** A provider most people won't need, one line until it's opened (open already when its key is set). */
-function Folded({ provider, source }: { provider: Provider; source: "saved" | "env" | null }) {
+function Folded({ provider, source }: { provider: Provider; source: "saved" | null }) {
   const [open, setOpen] = useState(Boolean(source));
   if (open) return <ProviderSteps provider={provider} source={source} />;
   return (
@@ -672,7 +672,7 @@ function Folded({ provider, source }: { provider: Provider; source: "saved" | "e
   );
 }
 
-function ProviderSteps({ provider, source }: { provider: Provider; source: "saved" | "env" | null }) {
+function ProviderSteps({ provider, source }: { provider: Provider; source: "saved" | null }) {
   return (
     <div className="flex flex-col gap-3 border-t border-line pt-4">
       <span className="flex items-baseline justify-between gap-2">
@@ -718,7 +718,7 @@ const CHECKED: Record<KeyCheck, string> = {
 };
 
 /** A key field that tries the key with its service, and saves it when it works. */
-function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved" | "env" | null }) {
+function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved" | null }) {
   const [typed, setTyped] = useState("");
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<KeyCheck | null>(null);
@@ -733,7 +733,7 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
   if (source && result === null)
     return (
       <span className="flex items-center gap-1.5 text-xs text-ok">
-        <Check size={12} /> {source === "env" ? "Already set (from .env)" : "Already added"}
+        <Check size={12} /> Already added
       </span>
     );
   return (

@@ -855,10 +855,11 @@ export class ProjectService {
 
   async agentSettings(): Promise<AgentSettings> {
     const s = await getSettings();
-    // Which Claude Code to run (found once at startup; this waits for it).
-    if ((s.backend === "auto" ? defaultBackend() : s.backend) === "subscription") await claudeStatus();
+    // Which Claude Code to run (found once at startup; this waits for it). Always the subscription for
+    // now: the API-key backend is switched off (defaultBackend).
+    await claudeStatus();
     return {
-      backend: s.backend === "auto" ? defaultBackend() : s.backend,
+      backend: defaultBackend(),
       model: s.model,
       effort: s.effort,
       showThinking: s.showThinking,
@@ -868,17 +869,17 @@ export class ProjectService {
   async agentStatus(): Promise<AgentStatus> {
     const s = await this.agentSettings();
     const k = await getSettings();
-    const env = process.env;
+    // Keys come from Settings only: each person brings their own.
     return {
       backend: s.backend,
       model: s.model,
-      apiKey: Boolean(env.ANTHROPIC_API_KEY),
+      apiKey: false,
       keys: {
-        klipy: k.klipyKey ? "saved" : env.KLIPY_API_KEY ? "env" : null,
-        pexels: k.pexelsKey ? "saved" : env.PEXELS_API_KEY ? "env" : null,
-        pixabay: k.pixabayKey ? "saved" : env.PIXABAY_API_KEY ? "env" : null,
-        freesound: k.freesoundKey ? "saved" : env.FREESOUND_API_KEY ? "env" : null,
-        groq: k.groqKey ? "saved" : env.GROQ_API_KEY ? "env" : null,
+        klipy: k.klipyKey ? "saved" : null,
+        pexels: k.pexelsKey ? "saved" : null,
+        pixabay: k.pixabayKey ? "saved" : null,
+        freesound: k.freesoundKey ? "saved" : null,
+        groq: k.groqKey ? "saved" : null,
       },
     };
   }
@@ -1000,8 +1001,8 @@ export class ProjectService {
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
         const keys = {
-          pexels: settings.pexelsKey || process.env.PEXELS_API_KEY || "",
-          pixabay: settings.pixabayKey || process.env.PIXABAY_API_KEY || "",
+          pexels: settings.pexelsKey,
+          pixabay: settings.pixabayKey,
         };
         const candidates = await searchStock(query, { kind, orientation, keys });
         return { candidates, sheet: candidates.length ? await stockSheet(candidates) : null };
@@ -1010,7 +1011,7 @@ export class ProjectService {
       measureJoins: (doc) => this.measureJoins(doc),
       findSounds: async (query, maxSeconds) => {
         const settings = await getSettings();
-        const freesoundKey = settings.freesoundKey || process.env.FREESOUND_API_KEY || "";
+        const freesoundKey = settings.freesoundKey;
         return findSounds(query, { maxSeconds, ...(freesoundKey && { freesoundKey }) });
       },
       addSound: async (c, label, doc) => {
@@ -1038,7 +1039,7 @@ export class ProjectService {
       },
       findMemes: async (query, kind) => {
         const settings = await getSettings();
-        const key = settings.klipyKey || process.env.KLIPY_API_KEY || "";
+        const key = settings.klipyKey;
         // KLIPY asks for a stable, anonymous id per user: made once, kept in settings.
         let customerId = settings.klipyUser;
         if (!customerId) {
@@ -1177,9 +1178,7 @@ export class ProjectService {
                 /authentication|api.?key|x-api-key|authorization|401|unauthori[sz]ed|not logged in|credential/i.test(
                     (err as Error).message,
                   )
-                ? settings.backend === "api"
-                  ? "Claude couldn't sign in: there's no valid API key. Add one, or choose Automatic or Subscription in Settings to use your Claude subscription."
-                  : "Claude couldn't sign in with your subscription. Sign in again (claude login), or add an API key in Settings."
+                ? "Claude isn't signed in. Sign in from Settings → Claude (it opens Claude Code's own sign-in)."
                 : `Something went wrong: ${(err as Error).message}`;
         send({ type: "error", message });
       })

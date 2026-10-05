@@ -1,11 +1,15 @@
 /**
  * Hardening that applies to every window. The renderer is treated as untrusted: it gets no Node, runs
- * sandboxed, can't open windows or navigate away, and gets no device permissions.
+ * sandboxed, can't open windows or navigate away, and gets no device permissions (it may write to the
+ * clipboard).
  */
 import { app, type IpcMainInvokeEvent, session, shell } from "electron";
 
 export const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 export const APP_ORIGIN = "app://bundle";
+
+/** The only permission the page gets: putting text on the clipboard. */
+const CLIPBOARD_WRITE = new Set(["clipboard-sanitized-write", "clipboard-write"]);
 
 /** Origins allowed to load in our windows and to call IPC. */
 export function isTrustedUrl(raw: string): boolean {
@@ -28,8 +32,14 @@ export function assertTrustedSender(event: IpcMainInvokeEvent): void {
 }
 
 export function harden(): void {
-  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  // No device permissions, with one exception: writing text to the clipboard (Copy on a reply), for our
+  // own page only. Reading the clipboard stays off.
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
+    callback(CLIPBOARD_WRITE.has(permission) && isTrustedUrl(wc.getURL())),
+  );
+  session.defaultSession.setPermissionCheckHandler(
+    (_wc, permission, origin) => CLIPBOARD_WRITE.has(permission) && isTrustedUrl(origin),
+  );
 
   app.on("web-contents-created", (_event, contents) => {
     contents.setWindowOpenHandler(({ url }) => {

@@ -192,7 +192,7 @@ export const Settings = z.object({
   pixabayKey: z.string().max(200).default(""),
   /** Optional: Freesound's own search (freesound.org/apiv2/apply); without it, sounds come through Openverse. */
   freesoundKey: z.string().max(500).default(""),
-  /** KLIPY (klipy.com): reaction GIFs, stickers, clips and memes for the agent. Empty: KLIPY_API_KEY. */
+  /** KLIPY (klipy.com): reaction GIFs, stickers, clips and memes for the agent. */
   klipyKey: z.string().max(500).default(""),
   /** An anonymous id KLIPY asks for with each search (the same for this install), made on first use. */
   klipyUser: z.string().max(64).default(""),
@@ -215,9 +215,7 @@ export interface AgentStatus {
    * Where each media key comes from (never its value): saved in the app (kept in the keychain), the
    * environment or a .env file, or nowhere.
    */
-  readonly keys?: Readonly<
-    Record<"klipy" | "pexels" | "pixabay" | "freesound" | "groq", "saved" | "env" | null>
-  >;
+  readonly keys?: Readonly<Record<"klipy" | "pexels" | "pixabay" | "freesound" | "groq", "saved" | null>>;
 }
 
 /** A warning or error the app logged this session (API keys taken out). */

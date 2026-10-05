@@ -276,10 +276,8 @@ export interface ClaudeTask {
   readonly state: "running" | "done" | "failed";
   /** The latest line of its output, or why it failed. */
   readonly message?: string;
-  /** Signing in: the page to sign in on (opened in the browser). */
-  readonly url?: string;
-  /** Signing in: the page will show a code to paste back. */
-  readonly needsCode?: boolean;
+  /** Signing in, when no terminal could be opened: the command to run in one. */
+  readonly command?: string;
 }
 
 /** One message in the persisted conversation. */
@@ -410,8 +408,6 @@ export interface EditorApi {
     install(): Promise<void>;
     login(): Promise<void>;
     update(): Promise<void>;
-    /** Signing in: the code the sign-in page showed. */
-    code(code: string): Promise<void>;
     cancel(): Promise<void>;
   };
   readonly kits: {

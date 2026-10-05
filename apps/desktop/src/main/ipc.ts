@@ -80,7 +80,6 @@ export function registerIpc(service: ProjectService): void {
     [Channel.claudeInstall]: () => service.claude.install(),
     [Channel.claudeLogin]: () => service.claude.login(),
     [Channel.claudeUpdate]: () => service.claude.update(),
-    [Channel.claudeCode]: (code) => service.claude.code(str(code).slice(0, 2000)),
     [Channel.claudeCancel]: () => service.claude.cancel(),
     [Channel.exportStart]: () => service.exporter.start(),
     [Channel.exportCancel]: (jobId) => service.exporter.cancel(jobId),

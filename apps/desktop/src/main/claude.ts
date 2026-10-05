@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
 import { app } from "electron";
+import { commandLine, openTerminal } from "./platform.ts";
 import { getSettings } from "./settings.ts";
 
 /** Older than this, the SDK's protocol isn't spoken (the oldest the SDK's users report working). */
@@ -284,6 +285,8 @@ const opt = async (v: Promise<string | null>) => {
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, "g");
 
 let task: { child: ChildProcess; kind: ClaudeTask["kind"] } | null = null;
+/** A sign-in being finished in a terminal, watched until Claude Code reports it. */
+let watching: { stopped: boolean } | null = null;
 
 export function claudeTasks(emit: (t: ClaudeTask) => void) {
   const start = async (kind: ClaudeTask["kind"], file: string, args: string[]) => {
@@ -291,8 +294,6 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
     const child = spawn(file, args, { env: claudeEnv(), stdio: ["pipe", "pipe", "pipe"] });
     task = { child, kind };
     let last = "";
-    let url: string | undefined;
-    let needsCode = false;
     const onData = (buf: Buffer) => {
       // Without colours and cursor moves: the installer and the CLI draw for a terminal.
       const text = buf.toString("utf8").replace(ANSI, "");
@@ -301,17 +302,7 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
         .map((l) => l.trim())
         .filter(Boolean);
       if (lines.length) last = lines.at(-1)!;
-      const link = /https:\/\/\S+/.exec(text)?.[0];
-      if (kind === "login" && link && !url) url = link;
-      // The CLI opens the browser itself; the page then shows a code to paste back.
-      if (kind === "login" && /paste code/i.test(text)) needsCode = true;
-      emit({
-        kind,
-        state: "running",
-        message: last.slice(0, 300),
-        ...(url && { url }),
-        ...(needsCode && { needsCode }),
-      });
+      emit({ kind, state: "running", message: last.slice(0, 300) });
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
@@ -340,10 +331,48 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
           ])
         : // Anthropic's installer: Claude Code into ~/.local/bin, updated by itself from then on.
           start("install", "/bin/bash", ["-c", "curl -fsSL https://claude.ai/install.sh | bash"]),
+    /**
+     * Signing in happens in a terminal the user sees, with Claude Code's own sign-in: the app never
+     * handles the sign-in page, its code or the account's tokens. It only watches Claude Code's record of
+     * who is signed in, and says so when that changes.
+     */
     login: async () => {
       const s = await claudeStatus();
       if (!s.path) throw new Error("Install Claude Code first.");
-      await start("login", s.path, ["auth", "login"]);
+      if (task || watching)
+        throw new Error("Claude Code is busy with something else. Wait for it, or cancel it.");
+      const before = s.signedIn === true ? (s.email ?? "signed in") : null;
+      const args = ["auth", "login"];
+      const opened = await openTerminal(s.path, args);
+      emit({
+        kind: "login",
+        state: "running",
+        message: opened
+          ? "Finish signing in in the terminal window that opened."
+          : "Open a terminal and run this to sign in:",
+        ...(!opened && { command: commandLine(s.path, args) }),
+      });
+      const started = Date.now();
+      const watch = { stopped: false };
+      watching = watch;
+      const tick = async () => {
+        if (watch.stopped) return;
+        const now = await claudeStatus(true).catch(() => null);
+        if (watch.stopped) return;
+        // Signed in now, or (switching account) as someone else.
+        const done = now?.signedIn === true && (before === null || (now.email ?? "signed in") !== before);
+        if (done || Date.now() - started > 15 * 60_000) {
+          watching = null;
+          emit(
+            done
+              ? { kind: "login", state: "done" }
+              : { kind: "login", state: "failed", message: "Signing in didn't finish. Try again." },
+          );
+          return;
+        }
+        setTimeout(() => void tick(), 2000);
+      };
+      setTimeout(() => void tick(), 2000);
     },
     update: async () => {
       const s = await claudeStatus();
@@ -352,11 +381,18 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
       if (!file) throw new Error("Install Claude Code first.");
       await start("update", file, ["update"]);
     },
-    code: async (code: string) => {
-      if (task?.kind !== "login") throw new Error("Not signing in.");
-      task.child.stdin?.write(`${code.trim()}\n`);
-    },
     cancel: async () => {
+      // Stops watching a sign-in (the terminal is the user's to close); whatever it reached stands.
+      if (watching) {
+        watching.stopped = true;
+        watching = null;
+        const now = await claudeStatus(true);
+        emit(
+          now.signedIn === true
+            ? { kind: "login", state: "done" }
+            : { kind: "login", state: "failed", message: "Cancelled." },
+        );
+      }
       task?.child.kill("SIGTERM");
     },
   };

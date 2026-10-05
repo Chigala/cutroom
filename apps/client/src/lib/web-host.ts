@@ -156,7 +156,6 @@ export function createWebHost(): EditorApi {
       update: async () => {
         throw new Error(DESKTOP_ONLY);
       },
-      code: async () => {},
       cancel: async () => {},
     },
     kits: {

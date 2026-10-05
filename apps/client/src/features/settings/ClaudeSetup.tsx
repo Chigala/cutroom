@@ -155,19 +155,20 @@ export function ClaudeSetup({ usingApiKey }: { usingApiKey: boolean }) {
 }
 
 function TaskProgress({ task }: { task: ClaudeTask }) {
-  const [code, setCode] = useState("");
-  const send = () => {
-    if (!code.trim()) return;
-    void host.claude.code(code.trim()).catch((err: Error) => toast(err.message, "warn"));
-    setCode("");
-  };
+  const [copied, setCopied] = useState(false);
+  const copy = () =>
+    void navigator.clipboard.writeText(task.command ?? "").then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => toast("Couldn't copy. Select the command instead.", "warn"),
+    );
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-xs text-fg-2">
         <Loader2 size={13} className="shrink-0 animate-spin text-muted" />
-        <span className="min-w-0 flex-1 truncate">
-          {task.kind === "login" ? "Finish signing in in your browser." : (task.message ?? DOING[task.kind])}
-        </span>
+        <span className="min-w-0 flex-1 truncate">{task.message ?? DOING[task.kind]}</span>
         <button
           type="button"
           onClick={() => void host.claude.cancel()}
@@ -176,33 +177,20 @@ function TaskProgress({ task }: { task: ClaudeTask }) {
           Cancel
         </button>
       </div>
-      {task.kind === "login" && task.url && (
-        <span className="text-xs text-muted">
-          Browser didn't open?{" "}
-          <a href={task.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-            Open the sign-in page
-          </a>
-        </span>
-      )}
-      {task.kind === "login" && task.needsCode && (
-        <div className="flex gap-1.5">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter") send();
-            }}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="Paste the code the page shows"
-            aria-label="Sign-in code"
-            className="min-w-0 flex-1 rounded-lg border border-line-strong bg-raised px-3 py-1.5 font-mono text-xs text-fg outline-none focus:border-edge"
-          />
-          <Button size="sm" variant="accent" disabled={!code.trim()} onClick={send}>
-            Continue
+      {task.kind === "login" && task.command && (
+        <div className="flex items-center gap-1.5">
+          <code className="min-w-0 flex-1 select-all truncate rounded-lg border border-line-strong bg-raised px-3 py-1.5 font-mono text-xs text-fg">
+            {task.command}
+          </code>
+          <Button size="sm" onClick={copy}>
+            {copied ? "Copied" : "Copy"}
           </Button>
         </div>
+      )}
+      {task.kind === "login" && (
+        <span className="text-xs text-muted">
+          Claude Code signs you in itself, in your browser. This updates when it's done.
+        </span>
       )}
     </div>
   );

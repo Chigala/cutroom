@@ -57,7 +57,6 @@ const api: EditorApi = {
     install: () => invoke(Channel.claudeInstall),
     login: () => invoke(Channel.claudeLogin),
     update: () => invoke(Channel.claudeUpdate),
-    code: (code) => invoke(Channel.claudeCode, code),
     cancel: () => invoke(Channel.claudeCancel),
   },
   exporter: {

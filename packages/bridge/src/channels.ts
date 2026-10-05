@@ -50,7 +50,6 @@ export const Channel = {
   claudeInstall: "claude:install",
   claudeLogin: "claude:login",
   claudeUpdate: "claude:update",
-  claudeCode: "claude:code",
   claudeCancel: "claude:cancel",
   exportStart: "export:start",
   exportCancel: "export:cancel",

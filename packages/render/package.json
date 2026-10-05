@@ -1,0 +1,45 @@
+{
+  "name": "@vedit/render",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./entry": "./src/entry.tsx",
+    "./runtime": "./src/runtime.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/archivo-black": "^5.3.0",
+    "@fontsource/bebas-neue": "^5.3.0",
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/inter-tight": "^5.3.0",
+    "@fontsource/montserrat": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
+    "@fontsource/space-grotesk": "^5.3.0",
+    "@remotion/bundler": "4.0.532",
+    "@remotion/renderer": "4.0.532",
+    "@vedit/composition": "workspace:*",
+    "@vedit/media": "workspace:*",
+    "@vedit/project": "workspace:*",
+    "chart.js": "4.5.1",
+    "d3": "7.9.0",
+    "gsap": "3.15.0",
+    "lottie-web": "5.13.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "4.0.532",
+    "roughjs": "4.6.6",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0"
+  }
+}

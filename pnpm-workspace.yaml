@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Electron's install script downloads its binary; nothing else needs to run scripts.
+allowBuilds:
+  electron: true
+  esbuild: true
+  electron-winstaller: false

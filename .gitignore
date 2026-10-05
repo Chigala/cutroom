@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+release/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+.tmp/
+
+# Bundled third-party tools: rebuilt by `pnpm --filter @vedit/desktop tools`.
+apps/desktop/resources/tools/

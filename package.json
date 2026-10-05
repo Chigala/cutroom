@@ -1,0 +1,27 @@
+{
+  "name": "ai-native-videoeditor",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.1",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @vedit/desktop dev",
+    "dev:web": "pnpm --filter @vedit/client dev",
+    "build": "pnpm --filter @vedit/desktop build",
+    "dist": "pnpm --filter @vedit/desktop dist",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

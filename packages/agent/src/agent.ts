@@ -1,0 +1,173 @@
+/**
+ * One agent request: plan, edit, run checks, fix, report. The agent works on a scratch copy of the
+ * project (a private branch, in effect) and returns its edits as labelled op groups. The host commits
+ * them on top of whatever the user did meanwhile; ops are id-addressed, so that rebase almost always
+ * just works.
+ *
+ * Two backends, same tools: the Claude API when an API key is configured, otherwise the Claude Agent
+ * SDK on the user's Claude subscription.
+ */
+import type { AgentContext, ToolCall } from "@vedit/bridge";
+import type { ChangeGroup, Op, ProjectDoc, Source } from "@vedit/project";
+import { runWithApi } from "./api.ts";
+import { buildPrompt, type Turn } from "./context.ts";
+import { runWithSubscription } from "./sdk.ts";
+import { type AgentHost, refitMusic, type Scratch, type ToolContext } from "./tools.ts";
+import { type Backend, type Effort, Stalled, StepLimit } from "./types.ts";
+
+export const DEFAULT_MODEL = "claude-opus-5-5";
+
+export interface AgentOptions {
+  readonly doc: ProjectDoc;
+  readonly prompt: string;
+  readonly context?: AgentContext;
+  readonly history?: readonly Turn[];
+  /** Source ids the user attached to this request. */
+  readonly attachments?: readonly string[];
+  /** The user's hand edits since the agent's last change (handEdits of the project's log). */
+  readonly handEdits?: readonly string[];
+  readonly host: AgentHost;
+  readonly backend?: Backend;
+  readonly model?: string;
+  /** Editing is interactive, so latency matters: medium by default, high for first cuts. */
+  readonly effort?: Effort;
+  /** Model turns before it has to stop (40 by default; a first cut needs more). */
+  readonly maxTurns?: number;
+  /** Stream its thinking to onThinking (default), or leave it out. */
+  readonly showThinking?: boolean;
+  readonly signal?: AbortSignal;
+  onStep?(text: string, status: "done" | "warn"): void;
+  onText?(delta: string, turn?: boolean): void;
+  onThinking?(delta: string, block?: boolean): void;
+  onActivity?(text: string): void;
+  onTool?(call: ToolCall): void;
+}
+
+export interface AgentResult {
+  readonly ops: Op[];
+  readonly groups: ChangeGroup[];
+  readonly summary: string;
+  /** A next request the editor might make, offered in the composer. */
+  readonly next?: string;
+  readonly doc: ProjectDoc;
+}
+
+/** API key present: use it. Otherwise the Claude subscription the user is signed in with. */
+export function defaultBackend(): Backend {
+  return process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN ? "api" : "subscription";
+}
+
+export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
+  const scratch: Scratch = { doc: opts.doc, ops: [], groups: [] };
+  const ctx: ToolContext = {
+    scratch,
+    host: opts.host,
+    step: (text, status = "done") => opts.onStep?.(text, status),
+    activity: (text) => opts.onActivity?.(text),
+    tool: (call) => opts.onTool?.(call),
+  };
+  const attached = (opts.attachments ?? [])
+    .map((id) => opts.doc.sources.find((s) => s.id === id))
+    .filter((s) => s !== undefined);
+  let run = {
+    prompt: buildPrompt(opts.doc, opts.prompt, opts.context, opts.history ?? [], attached, opts.handEdits),
+    images: await attachmentImages(attached, opts.host),
+    model: opts.model ?? DEFAULT_MODEL,
+    effort: opts.effort ?? "medium",
+    maxTurns: opts.maxTurns ?? 40,
+    thinking: opts.showThinking === false ? ("omitted" as const) : ("summarized" as const),
+    ...(opts.signal && { signal: opts.signal }),
+    onText: (delta: string, turn?: boolean) => opts.onText?.(delta, turn),
+    onThinking: (delta: string, block?: boolean) => opts.onThinking?.(delta, block),
+    onActivity: (text: string) => opts.onActivity?.(text),
+  };
+  const backend = opts.backend ?? defaultBackend();
+  for (let resumed = 0; ; resumed++) {
+    try {
+      const reply = backend === "api" ? await runWithApi(run, ctx) : await runWithSubscription(run, ctx);
+      await refitMusic(ctx);
+      const { summary, next } = splitNext(reply);
+      return { ops: scratch.ops, groups: scratch.groups, summary, ...(next && { next }), doc: scratch.doc };
+    } catch (err) {
+      // Claude went silent mid-request (a stalled connection): pick up where it stopped, on the work so
+      // far, rather than end the request half done. Twice at most.
+      if (err instanceof Stalled && resumed < MAX_RESUMES && !opts.signal?.aborted) {
+        ctx.step("Claude stalled; picking up where it stopped", "warn");
+        run = {
+          ...run,
+          prompt: buildPrompt(
+            scratch.doc,
+            resumePrompt(
+              opts.prompt,
+              scratch.groups.map((g) => g.label),
+            ),
+            opts.context,
+            opts.history ?? [],
+            attached,
+            opts.handEdits,
+          ),
+        };
+        continue;
+      }
+      // Out of turns, or stalled again: keep what it did (often most of a first cut) rather than throw
+      // it all away.
+      if (!(err instanceof StepLimit) || !scratch.ops.length) throw err;
+      const stalled = err instanceof Stalled;
+      ctx.step(stalled ? "Claude stopped responding" : "Ran out of steps before finishing", "warn");
+      const summary = [
+        err.partial,
+        `${stalled ? "Claude stopped responding partway through" : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      await refitMusic(ctx);
+      return { ops: scratch.ops, groups: scratch.groups, summary, doc: scratch.doc };
+    }
+  }
+}
+
+/**
+ * The reply's closing "Next: ..." line (a request the editor might make next, which the prompt asks
+ * for) taken off the reply: the composer offers it instead.
+ */
+export function splitNext(reply: string): { summary: string; next?: string } {
+  const m = /\n*^[*_]*next[*_]*:[*_]*\s*(.+?)\s*$(?![\s\S])/im.exec(reply.trimEnd());
+  if (!m) return { summary: reply };
+  const next = m[1]!.replace(/^["“'*_]+|["”'*_]+$/g, "").trim();
+  return { summary: reply.trimEnd().slice(0, m.index).trimEnd(), ...(next && { next: next.slice(0, 200) }) };
+}
+
+/** How many times a stalled request picks up again by itself. */
+const MAX_RESUMES = 2;
+
+/** The request again, for picking up after a stall: what's already done is in the project. */
+export function resumePrompt(request: string, done: readonly string[]): string {
+  return [
+    request,
+    "",
+    `(You were partway through this request when the connection to you stalled. What you had already done is in the project now${done.length ? `: ${done.join("; ")}` : ""}. Don't redo or undo it: check the project as it is and carry on with what's left of the request.)`,
+  ].join("\n");
+}
+
+/**
+ * What the model sees of the attachments up front: a photo or screenshot whole (wide enough to read
+ * text in it), and one frame from the middle of a clip. It can look at more of a clip with look.
+ */
+async function attachmentImages(
+  sources: readonly Source[],
+  host: AgentHost,
+): Promise<{ data: string; mediaType: "image/jpeg" }[]> {
+  const shots = await Promise.all(
+    sources.map(async (s) => {
+      if (s.kind !== "image" && s.kind !== "video") return null;
+      try {
+        const jpeg =
+          s.kind === "image" ? await host.frame(s.id, 0, 1280) : await host.frame(s.id, s.duration / 2, 768);
+        return { data: jpeg.toString("base64"), mediaType: "image/jpeg" as const };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return shots.filter((x) => x !== null);
+}

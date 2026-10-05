@@ -1,0 +1,26 @@
+{
+  "name": "@vedit/composition",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@remotion/media": "4.0.532",
+    "@vedit/project": "workspace:*",
+    "remotion": "4.0.532",
+    "dompurify": "^3.3.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  }
+}

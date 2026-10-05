@@ -1,0 +1,40 @@
+appId: com.vedit.desktop
+productName: Video Editor
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+  # Not the workspace's dependency tree (electron-builder collects it by default): only what's staged below.
+  - "!node_modules/**"
+  # What the main bundle leaves out (scripts/runtime-deps.mjs): Remotion's renderer, the Agent SDK, zod.
+  # Their native programs ship beside the archive instead (extraResources below): they can't run from it.
+  - from: .tmp/runtime/node_modules
+    to: node_modules
+    filter:
+      - "**/*"
+      - "!@remotion/compositor-*/**"
+      - "!@anthropic-ai/claude-agent-sdk-*/**"
+asar: true
+# Nothing to rebuild: the app has no native Node modules of its own.
+npmRebuild: false
+mac:
+  category: public.app-category.video
+  # The bundled whisper uses Accelerate calls from macOS 13.3.
+  minimumSystemVersion: "13.3"
+  # ffmpeg, ffprobe, whisper, the voice cleaner and the sound classifier (made by `pnpm tools`).
+  extraResources:
+    - from: resources/tools/darwin-${arch}
+      to: tools
+    # Remotion's compositor and Claude Code (the Agent SDK's binary), found via VEDIT_REMOTION_BIN and
+    # VEDIT_CLAUDE_BIN (src/main/index.ts).
+    - from: .tmp/runtime/node_modules/@remotion/compositor-darwin-${arch}
+      to: native/remotion-compositor
+    - from: .tmp/runtime/node_modules/@anthropic-ai/claude-agent-sdk-darwin-${arch}
+      to: native/claude-agent-sdk
+  target: [dmg]
+  hardenedRuntime: true
+win:
+  target: [nsis]
+linux:
+  target: [AppImage]

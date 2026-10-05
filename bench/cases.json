@@ -1,0 +1,16 @@
+{
+  "out": "~/Movies/vedit-bench",
+  "cases": [
+    {
+      "name": "watch-talk",
+      "clips": ["~/Downloads/1.mp4"],
+      "brief": "Edit this into a TikTok that would do well: a hook in the first second, tight cuts, captions, motion graphics and sound design at the level of a top studio. Make a cover.",
+      "followUps": ["The graphics feel busy. Keep the best two and make the rest calmer."]
+    },
+    {
+      "name": "raw-ramble",
+      "clips": ["~/Movies/raw-test/footage/IMG_3402.MOV", "~/Movies/raw-test/footage/IMG_3415.MOV"],
+      "brief": "This is raw footage with retakes and rambling. Find the strongest 45-60 seconds, cut the retakes and dead air, and finish it to a TechCrunch-level standard: captions, graphics, music, sound. Make a cover."
+    }
+  ]
+}

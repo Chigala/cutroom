@@ -206,6 +206,65 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
   }
 }
 
+/** Who Claude Code runs as, from what it reports when it starts (its account), and the plan's limits. */
+export interface ClaudeAccount {
+  readonly email?: string;
+  readonly organization?: string;
+  /** "Claude Max", "Claude Pro"...: signed in with a Claude plan. */
+  readonly subscriptionType?: string;
+  /** Where an API key comes from when Claude Code would use one (ahead of the plan): an env var, a helper, a Console login. */
+  readonly apiKeySource?: string;
+  readonly apiProvider?: string;
+  readonly limits?: AgentUsage["limits"];
+}
+
+/**
+ * What the agent will run as, found the way the agent runs: the same Claude Code, settings and
+ * environment, started with a prompt that never comes, so it reports its account at start-up and is
+ * stopped before anything reaches Anthropic (t3code's approach). Truer than `claude auth status`, which
+ * reads the user's own settings: an API key there, say, is used ahead of a signed-in Claude plan.
+ * Null when Claude Code couldn't be started.
+ */
+export async function probeClaude(timeoutMs = 25_000): Promise<ClaudeAccount | null> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  const never = (async function* (): AsyncGenerator<SDKUserMessage> {
+    await new Promise((resolve) => abort.signal.addEventListener("abort", resolve, { once: true }));
+  })();
+  try {
+    const stream = query({
+      prompt: never,
+      options: {
+        ...claudeExecutable(),
+        tools: [],
+        settingSources: [],
+        strictMcpConfig: true,
+        settings: { disableClaudeAiConnectors: true },
+        persistSession: false,
+        cwd: tmpdir(),
+        abortController: abort,
+        env: claudeEnv(),
+      },
+    });
+    const { account } = await stream.initializationResult();
+    const limits = account?.subscriptionType ? await planLimits(stream) : undefined;
+    return {
+      ...(account?.email && { email: account.email }),
+      ...(account?.organization && { organization: account.organization }),
+      ...(account?.subscriptionType && { subscriptionType: account.subscriptionType }),
+      ...(account?.apiKeySource && account.apiKeySource !== "none" && { apiKeySource: account.apiKeySource }),
+      ...(account?.apiProvider && { apiProvider: account.apiProvider }),
+      ...(limits && { limits }),
+    };
+  } catch (err) {
+    console.warn(`[claude] couldn't start Claude Code to see its account: ${(err as Error).message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+    abort.abort();
+  }
+}
+
 /** The Claude plan's 5-hour and weekly windows, from Claude Code's /usage; nothing if it can't say. */
 async function planLimits(stream: Query): Promise<AgentUsage["limits"] | undefined> {
   try {

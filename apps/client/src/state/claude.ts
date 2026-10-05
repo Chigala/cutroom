@@ -6,6 +6,7 @@ import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { host } from "../lib/host.ts";
+import { notePlanLimits } from "./chat.ts";
 
 export const useClaude = create<{
   status: ClaudeStatus | null;
@@ -18,7 +19,10 @@ export async function checkClaude(refresh = false): Promise<void> {
   if (refresh && useClaude.getState().checking) return;
   useClaude.setState({ checking: true });
   try {
-    useClaude.setState({ status: await host.claude.status(refresh) });
+    const status = await host.claude.status(refresh);
+    useClaude.setState({ status });
+    // The check reads the plan's limits too: the usage meter has them before the first request.
+    if (status.limits) notePlanLimits(status.limits);
   } finally {
     useClaude.setState({ checking: false });
   }

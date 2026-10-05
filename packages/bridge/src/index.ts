@@ -295,12 +295,22 @@ export interface ClaudeStatus {
   readonly versionState: "ok" | "old" | "unsupported";
   /** A usable install that was passed over (too old), so the bundled copy is in use instead. */
   readonly skipped?: { readonly path: string; readonly version: string };
-  /** Null when it couldn't tell (an old Claude Code without `auth status`). */
+  /**
+   * Ready to run the agent on a Claude plan (or a company's cloud provider). False when signed out, or
+   * when Claude Code would bill an API key instead (apiKey). Null when it couldn't tell.
+   */
   readonly signedIn: boolean | null;
   /** "Claude Max", "API key", "Amazon Bedrock"... */
   readonly method?: string;
   readonly email?: string;
   readonly org?: string;
+  /**
+   * Claude Code would use an API key, ahead of any Claude plan: where it comes from ("ANTHROPIC_API_KEY",
+   * "an Anthropic Console sign-in"...). Cutroom runs on the plan, so it asks to sign in with that instead.
+   */
+  readonly apiKey?: string;
+  /** The plan's 5-hour and weekly limits, as Claude Code reported them when it was checked. */
+  readonly limits?: AgentUsage["limits"];
 }
 
 /** Installing, signing in to or updating Claude Code, as it goes. */

@@ -247,7 +247,13 @@ function ClaudeStep() {
           <StatusRow done={installed === true} label="Claude Code installed" />
           <StatusRow
             done={signedIn}
-            label={signedIn && status?.email ? `Signed in as ${status.email}` : "Signed in"}
+            label={
+              signedIn && status?.email
+                ? `Signed in as ${status.email}${status.method ? ` · ${status.method}` : ""}`
+                : status?.apiKey
+                  ? "Signed in with your Claude plan (it's set to use an API key now)"
+                  : "Signed in"
+            }
           />
           {busy && (
             <span className="flex items-center gap-2 text-[13px] text-fg-2">
@@ -264,7 +270,17 @@ function ClaudeStep() {
           {!busy && installed === false && (
             <Pill onClick={act(host.claude.install)}>Install Claude Code</Pill>
           )}
-          {!busy && installed && !signedIn && <Pill onClick={act(host.claude.login)}>Sign in</Pill>}
+          {!busy && installed && !signedIn && (
+            <Pill onClick={act(host.claude.login)}>
+              {status?.apiKey ? "Sign in with your Claude plan" : "Sign in"}
+            </Pill>
+          )}
+          {!busy && status?.apiKey && (
+            <span className="text-xs leading-relaxed text-muted">
+              Claude Code would bill an API key (from {status.apiKey}) instead of your plan. Signing in with
+              your Claude plan fixes it.
+            </span>
+          )}
           {task?.state === "failed" && !busy && (
             <span className="text-xs text-bad">Didn't finish{task.message ? `: ${task.message}` : "."}</span>
           )}

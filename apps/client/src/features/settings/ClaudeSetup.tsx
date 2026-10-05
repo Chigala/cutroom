@@ -52,11 +52,13 @@ export function ClaudeSetup() {
     ? status.path
       ? `No Claude Code at ${home(status.path)}`
       : "Claude Code isn't installed"
-    : status.signedIn === true
-      ? `Signed in${status.email ? ` as ${status.email}` : ""}`
-      : status.signedIn === false
-        ? "Claude Code isn't signed in"
-        : "Couldn't tell if Claude Code is signed in";
+    : status.apiKey
+      ? "Claude Code is set to use an API key"
+      : status.signedIn === true
+        ? `Signed in${status.email ? ` as ${status.email}` : ""}`
+        : status.signedIn === false
+          ? "Claude Code isn't signed in"
+          : "Couldn't tell if Claude Code is signed in";
   const updatable = !missing && status.source !== "bundled" && status.versionState !== "ok";
 
   return (
@@ -93,6 +95,14 @@ export function ClaudeSetup() {
               Version {status.recommended} or newer has the latest models.
             </span>
           )}
+          {status.apiKey && (
+            <span className="text-xs leading-relaxed text-muted">
+              It would bill the API key from {status.apiKey}, ahead of any Claude plan. Cutroom runs on your
+              Claude plan: sign in with it here.
+              {/^ANTHROPIC_/.test(status.apiKey) &&
+                " Then remove that variable, or Claude Code keeps using the key."}
+            </span>
+          )}
           {status.skipped && (
             <span className="text-xs text-muted">
               Your Claude Code {status.skipped.version} ({home(status.skipped.path)}) is too old, so the app's
@@ -123,7 +133,7 @@ export function ClaudeSetup() {
           )}
           {!missing && status.signedIn !== true && (
             <Button size="sm" variant="accent" onClick={act(host.claude.login)}>
-              Sign in
+              {status.apiKey ? "Sign in with your Claude plan" : "Sign in"}
             </Button>
           )}
           {(updatable || status.skipped) && (

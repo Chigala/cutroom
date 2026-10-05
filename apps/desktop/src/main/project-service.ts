@@ -1114,6 +1114,19 @@ export class ProjectService {
     const send = (e: AgentEventBody) => this.emit("agent", { runId, ...e } as AgentEvent);
     const started = Date.now();
     send({ type: "start", backend: settings.backend });
+    // Claude Code set to bill an API key (it uses one ahead of a signed-in plan) or signed out: say so
+    // now, plainly, instead of a request that never answers.
+    const claude = await claudeStatus();
+    if (claude.apiKey || claude.signedIn === false) {
+      this.runs.delete(runId);
+      send({
+        type: "error",
+        message: claude.apiKey
+          ? `Claude Code is set to use an API key (from ${claude.apiKey}) instead of your Claude plan. Sign in with your plan in Settings → Claude.`
+          : "Claude isn't signed in. Sign in from Settings → Claude (it opens Claude Code's own sign-in).",
+      });
+      return { runId };
+    }
     // What the user did by hand since the agent's last change, so it keeps their choices.
     const hand = await store
       .flush()

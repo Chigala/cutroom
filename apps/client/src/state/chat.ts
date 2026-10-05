@@ -105,6 +105,11 @@ function savedUsage(): Usage {
   }
 }
 
+/** The plan's limits, from a check of Claude Code (no request needed). */
+export function notePlanLimits(limits: NonNullable<AgentUsage["limits"]>): void {
+  noteUsage({ limits });
+}
+
 /** New figures from Claude, merged over the last ones. */
 function noteUsage(e: AgentUsage): void {
   set((s) => ({

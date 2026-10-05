@@ -7,7 +7,7 @@ const settings = { claudePath: "" };
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 vi.mock("./settings.ts", () => ({ getSettings: async () => settings }));
 
-const { claudeStatus, compareVersions } = await import("./claude.ts");
+const { claudeStatus, compareVersions, fromAccount } = await import("./claude.ts");
 // Finding Claude Code reads PATH from a login shell, which can take seconds while other tests run.
 vi.setConfig({ testTimeout: 30_000 });
 // The stand-in below is a shell script, and finding Claude Code reads PATH from a Unix login shell.
@@ -30,6 +30,31 @@ exit 2
 }
 
 describe("claude", () => {
+  it("is ready on a Claude plan, and not on an API key, which Claude Code uses ahead of the plan", () => {
+    expect(
+      fromAccount({ subscriptionType: "Claude Max", email: "a@example.com", apiProvider: "firstParty" }),
+    ).toMatchObject({
+      signedIn: true,
+      method: "Claude Max",
+      email: "a@example.com",
+    });
+    // Signed in with a plan, and a key from a Console sign-in: the key is what would be billed.
+    const key = fromAccount({
+      subscriptionType: "Claude Max",
+      apiKeySource: "/login managed key",
+      apiProvider: "firstParty",
+    });
+    expect(key).toMatchObject({ signedIn: false, method: "API key" });
+    expect(key.apiKey).toMatch(/Console/);
+    expect(fromAccount({ apiKeySource: "ANTHROPIC_API_KEY" }).apiKey).toMatch(/^ANTHROPIC_API_KEY/);
+    // A company's cloud provider runs the agent too.
+    expect(fromAccount({ apiProvider: "bedrock" })).toMatchObject({
+      signedIn: true,
+      method: "Amazon Bedrock",
+    });
+    expect(fromAccount({ apiProvider: "firstParty" })).toEqual({ signedIn: false });
+  });
+
   it("compares versions", () => {
     expect(compareVersions("2.1.283", "2.1.286")).toBe(-1);
     expect(compareVersions("2.2.0", "2.1.286")).toBe(1);

@@ -11,6 +11,7 @@ import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
+import { type ClaudeAccount, probeClaude } from "@vedit/agent";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
 import { app } from "electron";
 import { commandLine, openTerminal } from "./platform.ts";
@@ -260,10 +261,19 @@ async function read(out: {
 }
 
 let cached: Promise<ClaudeStatus> | null = null;
+/** A look under way: asks for a fresh one while it runs share it (each starts Claude Code). */
+let looking: Promise<ClaudeStatus> | null = null;
 
 /** Finds Claude Code, chooses one, and points the agent at it. Cached; `refresh` looks again. */
 export function claudeStatus(refresh = false): Promise<ClaudeStatus> {
-  if (refresh || !cached) cached = look().catch(() => ({ ...missing }));
+  if (looking) return looking;
+  if (refresh || !cached) {
+    looking = cached = look()
+      .catch(() => ({ ...missing }))
+      .finally(() => {
+        looking = null;
+      });
+  }
   return cached;
 }
 
@@ -317,8 +327,52 @@ async function look(): Promise<ClaudeStatus> {
     recommended: RECOMMENDED,
     versionState: versionState(chosen.v),
     ...(chosen.skipped && { skipped: chosen.skipped }),
-    ...(await signIn(chosen.file)),
+    ...(await account(chosen.file)),
   };
+}
+
+/** Where Claude Code's API key comes from, in words. */
+function keySource(source: string): string {
+  if (/^ANTHROPIC_/.test(source)) return `${source} (set on this computer)`;
+  if (/login managed key|console/i.test(source)) return "an Anthropic Console sign-in (API billing)";
+  if (/helper/i.test(source)) return "an API key helper in Claude Code's settings";
+  return source;
+}
+
+/**
+ * Who the agent will run as: Claude Code started the way the agent starts it reports its account
+ * (probeClaude). A Claude plan is ready; an API key, which Claude Code uses ahead of any plan, isn't:
+ * Cutroom runs on the plan. When Claude Code can't be started that way, `claude auth status` says.
+ */
+async function account(file: string): Promise<AccountStatus> {
+  const a = await probeClaude();
+  return a ? fromAccount(a) : signIn(file);
+}
+
+type AccountStatus = Pick<ClaudeStatus, "signedIn" | "method" | "email" | "org" | "apiKey" | "limits">;
+
+/** What Claude Code's account means for the agent: a plan (ready), an API key (not, for Cutroom), or none. */
+export function fromAccount(a: ClaudeAccount): AccountStatus {
+  const provider =
+    a.apiProvider && a.apiProvider !== "firstParty" ? (PROVIDERS[a.apiProvider] ?? a.apiProvider) : null;
+  const who = { ...(a.email && { email: a.email }), ...(a.organization && { org: a.organization }) };
+  if (a.apiKeySource && !provider) {
+    note(
+      `account: an API key, from ${a.apiKeySource}${a.subscriptionType ? ` (ahead of ${a.subscriptionType})` : ""}`,
+      "warn",
+    );
+    return { signedIn: false, method: "API key", apiKey: keySource(a.apiKeySource), ...who };
+  }
+  if (provider) {
+    note(`account: ${provider}`);
+    return { signedIn: true, method: provider, ...who };
+  }
+  if (a.subscriptionType) {
+    note(`account: ${a.subscriptionType}`);
+    return { signedIn: true, method: a.subscriptionType, ...who, ...(a.limits && { limits: a.limits }) };
+  }
+  note("account: not signed in");
+  return { signedIn: false };
 }
 
 const opt = async (v: Promise<string | null>) => {
@@ -388,8 +442,10 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
       if (!s.path) throw new Error("Install Claude Code first.");
       if (task || watching)
         throw new Error("Claude Code is busy with something else. Wait for it, or cancel it.");
+      // Signing in to switch accounts waits for a different one; otherwise for a Claude plan to be ready.
       const before = s.signedIn === true ? (s.email ?? "signed in") : null;
-      const args = ["auth", "login"];
+      // The Claude plan, not the Console's API billing.
+      const args = ["auth", "login", "--claudeai"];
       const opened = await openTerminal(s.path, args);
       emit({
         kind: "login",

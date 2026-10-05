@@ -185,7 +185,7 @@ function selfContained(file: string) {
     // glibc's own libraries (libmvec too: its vector maths), and the C++ runtime every desktop Linux has
     // (its package manager needs it; the .deb also asks for it).
     const SYSTEM =
-      /^(linux-vdso|ld-linux|libc|libm|libmvec|libpthread|libdl|librt|libresolv|libgcc_s|libstdc\+\+)\b/;
+      /^(linux-vdso|ld-linux|libc|libm|libmvec|libpthread|libdl|librt|libresolv|libgcc_s|libstdc\+\+)(?=[.-]|$)/;
     const foreign = text
       .split("\n")
       .map((l) => l.trim().split(" ")[0]!)

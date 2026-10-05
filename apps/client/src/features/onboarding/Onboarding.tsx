@@ -498,11 +498,26 @@ const EXTRAS: readonly Extra[] = [
     demo: "stock",
     providers: [
       {
+        id: "pexels",
+        name: "Pexels",
+        site: "https://www.pexels.com/api/",
+        siteLabel: "pexels.com/api",
+        note: "Free; the key is issued straight away. If Pexels shows a notice that keys are paused, Pixabay below works just as well.",
+        steps: [
+          <>
+            Open the Pexels API page and click <b>Get Started</b>.
+          </>,
+          <>Sign up or log in, with Google or your email.</>,
+          <>Your API key appears straight away: copy it.</>,
+          <>Paste it below.</>,
+        ],
+      },
+      {
         id: "pixabay",
         name: "Pixabay",
         site: "https://pixabay.com/api/docs/",
         siteLabel: "pixabay.com/api/docs",
-        note: "Free and instant.",
+        note: "Also free and instant. One of the two is enough; both gives the agent more to choose from.",
         steps: [
           <>
             Open the Pixabay API page and click <b>Sign up</b> (or log in).
@@ -513,15 +528,6 @@ const EXTRAS: readonly Extra[] = [
           </>,
           <>Copy it and paste it below.</>,
         ],
-      },
-      {
-        id: "pexels",
-        name: "Pexels",
-        site: "https://www.pexels.com/api/",
-        siteLabel: "pexels.com/api",
-        note: "Pexels isn't giving out new keys right now, so this is only for a key you already have.",
-        steps: [<>Find your key on your Pexels API page, copy it and paste it below.</>],
-        folded: true,
       },
     ],
   },

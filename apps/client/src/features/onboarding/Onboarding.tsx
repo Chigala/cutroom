@@ -750,19 +750,26 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
   const [typed, setTyped] = useState("");
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<KeyCheck | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   // Checked and saved as soon as it's pasted (or the box is left), not only on Check: a key pasted and
   // left behind when the section closes is still saved. Then every section knows it's there.
   const check = async (value = typed) => {
     const key = value.trim();
     if (!key || checking) return;
     setChecking(true);
+    setFailed(null);
     const r = await host.settings.checkKey(provider, key).catch((): KeyCheck => "offline");
+    // "Saved" only once it is: a key that checks out but can't be stored says so instead.
+    if (r !== "invalid") {
+      try {
+        await saveSettings({ [KEY_FIELD[provider]]: key } as Partial<Settings>);
+        await reloadKeys();
+      } catch (err) {
+        setFailed((err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+      }
+    }
     setChecking(false);
     setResult(r);
-    if (r !== "invalid") {
-      await saveSettings({ [KEY_FIELD[provider]]: key } as Partial<Settings>);
-      await reloadKeys();
-    }
   };
   if (source && result === null)
     return (
@@ -806,15 +813,19 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
           {checking ? <CircleNotchIcon size={13} className="animate-spin" /> : "Check"}
         </button>
       </div>
-      {result && (
-        <span
-          className={clsx(
-            "text-xs",
-            result === "invalid" ? "text-bad" : result === "ok" ? "text-ok" : "text-muted",
-          )}
-        >
-          {CHECKED[result]}
-        </span>
+      {failed ? (
+        <span className="text-xs text-bad">Couldn't save it: {failed}</span>
+      ) : (
+        result && (
+          <span
+            className={clsx(
+              "text-xs",
+              result === "invalid" ? "text-bad" : result === "ok" ? "text-ok" : "text-muted",
+            )}
+          >
+            {CHECKED[result]}
+          </span>
+        )
       )}
     </div>
   );

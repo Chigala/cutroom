@@ -19,6 +19,8 @@ asar: true
 # Nothing to rebuild: the app has no native Node modules of its own.
 npmRebuild: false
 mac:
+  # The app icon (build/icon.svg is the source; icon.icns is drawn on Apple's grid from icon-mac.svg).
+  icon: build/icon.icns
   category: public.app-category.video
   # The bundled whisper uses Accelerate calls from macOS 13.3.
   minimumSystemVersion: "13.3"
@@ -35,6 +37,7 @@ mac:
   target: [dmg]
   hardenedRuntime: true
 win:
+  icon: build/icon.png
   # ffmpeg, ffprobe, whisper and the voice cleaner (made by `pnpm tools` on Windows), the compositor and
   # Claude Code, as on macOS.
   extraResources:
@@ -51,6 +54,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   perMachine: false
 linux:
+  icon: build/icon.png
   executableName: video-editor
   category: AudioVideo
   # The same, made by `pnpm tools` on Linux. glibc builds of the compositor and Claude Code.

@@ -130,6 +130,11 @@ app.on("second-instance", () => {
 
 app.whenReady().then(() => {
   harden();
+  // Running from the repo, the Dock shows Electron's icon unless told otherwise; installed, the app's own.
+  if (process.platform === "darwin" && !app.isPackaged) {
+    const icon = path.join(app.getAppPath(), "build", "icon-mac.png");
+    if (existsSync(icon)) app.dock?.setIcon(icon);
+  }
   if (!DEV_SERVER_URL) registerAppProtocol(path.join(here, "../renderer"));
   registerMediaProtocol(service.resolveMedia);
   registerIpc(service);

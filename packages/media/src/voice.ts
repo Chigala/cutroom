@@ -7,7 +7,7 @@
 import { rm, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { detectSilences } from "./audio.ts";
-import { ffmpegProgress, run } from "./exec.ts";
+import { ffmpegMajor, ffmpegProgress, run } from "./exec.ts";
 import { roomToneStretch } from "./joins.ts";
 
 export type VoiceSegment =
@@ -188,13 +188,16 @@ export async function buildVoiceTrack(
   }
   const script = `${output}.filter`;
   await writeFile(script, parts.join(";\n"));
+  // The graph is read from a file (it can outgrow a command line, Windows' especially). ffmpeg 7 spells
+  // that -/filter_complex; the older ones Linux distributions ship (4 to 6), -filter_complex_script.
+  const fromFile = (await ffmpegMajor()) >= 7 ? "-/filter_complex" : "-filter_complex_script";
   try {
     await run(
       "ffmpeg",
       [
         "-y",
         ...inputs.flat(),
-        "-/filter_complex",
+        fromFile,
         script,
         "-map",
         "[out]",

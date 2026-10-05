@@ -117,3 +117,18 @@ export function ffmpegProgress(duration: number, onProgress?: (fraction: number)
     if (m) onProgress(Math.min(1, (Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])) / duration));
   };
 }
+
+let ffmpegVersion: Promise<number> | null = null;
+/**
+ * The major version of the ffmpeg in use (the app's own is 9; a Linux distribution's can be 4 to 6), for
+ * options that changed between them. A build that doesn't say (a development snapshot) counts as new.
+ */
+export function ffmpegMajor(): Promise<number> {
+  ffmpegVersion ??= run("ffmpeg", ["-hide_banner", "-version"])
+    .then(({ stdout }) => {
+      const m = /ffmpeg version n?(\d+)\./.exec(stdout);
+      return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+    })
+    .catch(() => Number.POSITIVE_INFINITY);
+  return ffmpegVersion;
+}

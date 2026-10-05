@@ -5,25 +5,93 @@ shots, beats). The agent makes the first cut on its own, and you change anything
 want, pointing at the video, or editing the words. Every change shows up as a chip you can keep or undo,
 and the project is a real folder of plain files you can open in any editor.
 
+## Getting started
+
+You need **Node 22.12+**, **Git**, and **pnpm** (the repo pins its version: `corepack enable` sets it up).
+
 ```bash
+git clone <this repo> && cd ai-native-videoeditor
+corepack enable
 pnpm install
-pnpm dev            # the desktop app (Electron), with hot reload for the UI
+cp .env.example .env   # optional: API keys for stock footage, memes and sounds
+pnpm dev               # the desktop app (Electron), with hot reload for the UI
+```
+
+Other commands:
+
+```bash
 pnpm dev:web        # the UI alone in a browser, on an in-memory demo project
 pnpm check          # lint + typecheck + tests
 pnpm build          # production build (includes the export renderer bundle)
-pnpm dist           # package the app with electron-builder
+pnpm dist           # package the app for this platform with electron-builder
 ```
 
-Needs ffmpeg (`brew install ffmpeg`). Speech recognition (whisper.cpp) installs itself on first import.
+Speech recognition (whisper.cpp and its model, about 1.6 GB) installs itself on the first import.
+
+### macOS
+
+```bash
+brew install ffmpeg
+```
+
+To package the app with its own ffmpeg, whisper and audio tools (so users install nothing), run
+`pnpm --filter @vedit/desktop tools` once (needs Xcode's command line tools and cmake).
+
+### Windows
+
+```powershell
+winget install Git.Git OpenJS.NodeJS.LTS Gyan.FFmpeg
+```
+
+Open a new terminal afterwards so `ffmpeg` is on your PATH, then follow Getting started.
+
+### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt install ffmpeg git build-essential cmake \
+  libgtk-3-0 libnss3 libgbm1 libasound2 libxss1 libxshmfence1 libdrm2
+```
+
+On Ubuntu 24.04+ the sound library is `libasound2t64`. whisper.cpp is compiled on the first import
+(that's what `build-essential` and `cmake` are for). `pnpm dev` runs Electron without Chromium's
+sandbox helper when it isn't set up as root (it never is in a fresh `node_modules`), and says so.
+
+### WSL (Windows Subsystem for Linux)
+
+Works on Windows 11 with WSL 2, whose WSLg shows Linux windows on your desktop. Install as for Linux,
+inside the distro, and:
+
+- **Keep the repo and your projects in the Linux file system** (`~/...`), not under `/mnt/c`. Files on
+  the Windows drive are slow from Linux and never report changes, so edits made outside the app and
+  library drops aren't seen.
+- Exports render in software (no GPU video encoding in WSL): they work, just slower than native.
+- For everyday editing, the native Windows app is the better choice. WSL suits development.
+
+### What works where
+
+| | macOS | Windows | Linux / WSL |
+|---|---|---|---|
+| Editing, agent, captions, graphics, music, export | yes | yes* | yes* |
+| Whisper transcription | GPU (Metal) | downloads on first import* | built on first import (CPU) |
+| Face framing, tracking, sound recognition, voice cleanup | yes | not yet | not yet |
+| Cutouts (text behind the person, background changes) | yes | not yet | not yet |
+| Packaged installer with bundled tools | yes | not yet | not yet |
+
+The macOS-only features use Apple's frameworks. Cross-platform versions are planned.
+
+\* Windows and Linux support is new and still being tested: expect rough edges, and please report them.
+Known issue: exporting a project that uses cutouts fails off macOS.
 
 ## Claude
 
 The agent runs on whichever Claude you have:
 
+- **Claude subscription**: install Claude Code and sign in with your own Claude plan, and the agent runs
+  through it. No key needed. The app can install and update it from Settings → Claude, or:
+  - macOS, Linux, WSL: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude` to sign in
+  - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`, then `claude` to sign in
 - **API key**: set `ANTHROPIC_API_KEY` in your environment or in a `.env` at the repo root (development)
   or in the app's data folder. Uses the Claude API directly.
-- **Claude subscription**: no key needed. If you're signed in to Claude Code (`claude` in a terminal),
-  the agent runs through the Claude Agent SDK on your plan.
 
 Settings (the gear) can force one or the other, and pick how hard the agent thinks.
 

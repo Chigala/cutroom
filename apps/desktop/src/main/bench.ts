@@ -4,7 +4,7 @@
  * settings and data, so it never touches yours), writes each case's project into the output folder, and
  * a results.json and report.md comparing with the run before:
  *
- *   { "out": "~/Movies/vedit-bench",
+ *   { "out": "~/Videos/vedit-bench",
  *     "cases": [{ "name": "watch-talk", "clips": ["/path/a.mp4"], "brief": "A 40 second TikTok..." }] }
  */
 import { existsSync } from "node:fs";
@@ -12,12 +12,14 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentEvent } from "@vedit/bridge";
+import { app } from "electron";
 import { z } from "zod";
 import { type EditScore, scoreEdit } from "./bench-score.ts";
 import type { ProjectService } from "./project-service.ts";
 
 const BenchSpec = z.object({
-  out: z.string().default("~/Movies/vedit-bench"),
+  /** Where the runs go; the user's videos folder by default. */
+  out: z.string().default(""),
   cases: z
     .array(
       z.object({
@@ -41,11 +43,11 @@ interface CaseResult {
   readonly score: EditScore | null;
 }
 
-const home = (p: string) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
+const home = (p: string) => (/^~[\\/]/.test(p) ? path.join(os.homedir(), p.slice(2)) : p);
 
 export async function runBench(service: ProjectService, file: string): Promise<string> {
   const spec = BenchSpec.parse(JSON.parse(await readFile(file, "utf8")));
-  const out = home(spec.out);
+  const out = spec.out ? home(spec.out) : path.join(app.getPath("videos"), "vedit-bench");
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
   const root = path.join(out, stamp);
   await mkdir(root, { recursive: true });

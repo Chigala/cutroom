@@ -12,3 +12,6 @@ coverage/
 
 # Bundled third-party tools: rebuilt by `pnpm --filter @vedit/desktop tools`.
 apps/desktop/resources/tools/
+
+# Your own benchmark cases (copy bench/cases.example.json): they point at your footage.
+bench/cases.json

@@ -10,6 +10,12 @@ const root = path.resolve(import.meta.dirname, "../../..");
 const env = path.join(root, ".env");
 if (existsSync(env)) process.loadEnvFile(env);
 const cases = path.resolve(process.argv[2] ?? path.join(root, "bench/cases.json"));
+if (!existsSync(cases)) {
+  console.error(
+    `No ${path.relative(root, cases)}: copy bench/cases.example.json there and point it at your footage.`,
+  );
+  process.exit(1);
+}
 const electron = createRequire(import.meta.url)("electron");
 const child = spawn(electron, ["."], {
   cwd: path.resolve(import.meta.dirname, ".."),

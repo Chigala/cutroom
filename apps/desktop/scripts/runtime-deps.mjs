@@ -1,5 +1,5 @@
 // The node_modules the packaged app ships: the packages the main bundle leaves out (bundle.mjs: RUNTIME),
-// at exactly the versions this repo uses, installed flat with npm for one Mac architecture into
+// at exactly the versions this repo uses, installed flat with npm for this platform and one architecture into
 // .tmp/runtime (electron-builder copies it into the app; their native parts are unpacked from the archive).
 //
 //   node scripts/runtime-deps.mjs [--arch arm64|x64]
@@ -36,8 +36,10 @@ writeFileSync(
   `${JSON.stringify({ name: "vedit-runtime", private: true, dependencies }, null, 2)}\n`,
 );
 console.log("runtime deps:", dependencies);
+// npm is npm.cmd on Windows, which only runs through a shell.
+const windows = process.platform === "win32";
 execFileSync(
-  "npm",
+  windows ? "npm.cmd" : "npm",
   [
     "install",
     "--omit=dev",
@@ -45,9 +47,9 @@ execFileSync(
     "--no-fund",
     "--no-package-lock",
     "--install-strategy=hoisted",
-    "--os=darwin",
+    `--os=${process.platform}`,
     `--cpu=${arch}`,
   ],
-  { cwd: out, stdio: "inherit" },
+  { cwd: out, stdio: "inherit", shell: windows },
 );
-console.log(`runtime node_modules for darwin-${arch} in ${path.relative(process.cwd(), out)}`);
+console.log(`runtime node_modules for ${process.platform}-${arch} in ${path.relative(process.cwd(), out)}`);

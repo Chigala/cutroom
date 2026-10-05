@@ -22,6 +22,7 @@ import {
   nameFromFile,
   PROJECT_ASSETS_DIR,
 } from "@vedit/project";
+import { app } from "electron";
 import { claudeStatus } from "./claude.ts";
 import { getSettings, paths } from "./settings.ts";
 
@@ -46,7 +47,8 @@ agent always uses them. Every project can also have its own assets/ folder for o
 /** Longer than this, a sound file is music. */
 const MUSIC_SECONDS = 45;
 
-export const defaultLibraryDir = () => path.join(homedir(), "Movies", "Video Editor Library");
+/** In the user's videos folder: Movies on a Mac, Videos on Windows and Linux. */
+export const defaultLibraryDir = () => path.join(app.getPath("videos"), "Video Editor Library");
 
 interface Root {
   readonly scope: Scope;
@@ -109,7 +111,7 @@ export class Library {
   /** Starts on the shared library (made if missing). The project's assets/ come with setProject. */
   async start(): Promise<void> {
     const dir = (await getSettings()).libraryDir.trim() || defaultLibraryDir();
-    await this.open("library", dir.replace(/^~(?=$|\/)/, homedir()), true);
+    await this.open("library", dir.replace(/^~(?=$|[\\/])/, homedir()), true);
     this.broadcast();
   }
 

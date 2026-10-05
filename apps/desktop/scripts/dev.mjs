@@ -1,6 +1,7 @@
 // Dev loop: Vite dev server for the UI (instant HMR), watch builds for main and preload, and an Electron
 // process that restarts whenever either of those rebuilds. UI edits never restart Electron.
 import { spawn } from "node:child_process";
+import { statSync } from "node:fs";
 import path from "node:path";
 import electronPath from "electron";
 import { createServer } from "vite";
@@ -18,8 +19,27 @@ let child = null;
 let restarting = false;
 let timer = null;
 
+// On Linux, Chromium's sandbox helper must be owned by root with the setuid bit, which a fresh install
+// in node_modules never is (and Ubuntu 23.10+ blocks the fallback). In development only, run without it
+// rather than abort; `sudo chown root <it> && sudo chmod 4755 <it>` turns it back on.
+const args = ["."];
+if (process.platform === "linux") {
+  const helper = path.join(path.dirname(electronPath), "chrome-sandbox");
+  let usable = false;
+  try {
+    const s = statSync(helper);
+    usable = s.uid === 0 && (s.mode & 0o4000) !== 0;
+  } catch {}
+  if (!usable) {
+    console.log(
+      `dev    no setuid ${path.relative(process.cwd(), helper)}: running Electron with --no-sandbox`,
+    );
+    args.push("--no-sandbox");
+  }
+}
+
 function start() {
-  child = spawn(electronPath, ["."], {
+  child = spawn(electronPath, args, {
     cwd: desktopDir,
     stdio: "inherit",
     env: { ...process.env, VITE_DEV_SERVER_URL: url, NODE_ENV: "development" },

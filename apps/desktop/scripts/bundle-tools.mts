@@ -24,7 +24,12 @@ import {
 const args = process.argv.slice(2);
 const arch = args.includes("--arch") ? args[args.indexOf("--arch") + 1]! : process.arch;
 const force = args.includes("--force");
-if (process.platform !== "darwin") throw new Error("The bundled tools are built on a Mac, for macOS.");
+// Only macOS builds bundle tools so far. Elsewhere the app uses ffmpeg from PATH and downloads whisper
+// on first use, so packaging carries on without them.
+if (process.platform !== "darwin") {
+  console.log(`Bundled tools are macOS-only for now: skipping on ${process.platform}.`);
+  process.exit(0);
+}
 if (arch !== "arm64" && arch !== "x64") throw new Error(`Unknown arch ${arch}`);
 
 const root = path.resolve(import.meta.dirname, "..");

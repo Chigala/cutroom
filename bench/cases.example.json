@@ -1,0 +1,15 @@
+{
+  "cases": [
+    {
+      "name": "watch-talk",
+      "clips": ["/path/to/a-talking-head-video.mp4"],
+      "brief": "Edit this into a TikTok that would do well: a hook in the first second, tight cuts, captions, motion graphics and sound design at the level of a top studio. Make a cover.",
+      "followUps": ["The graphics feel busy. Keep the best two and make the rest calmer."]
+    },
+    {
+      "name": "raw-ramble",
+      "clips": ["/path/to/raw-take-1.mov", "/path/to/raw-take-2.mov"],
+      "brief": "This is raw footage with retakes and rambling. Find the strongest 45-60 seconds, cut the retakes and dead air, and finish it to a TechCrunch-level standard: captions, graphics, music, sound. Make a cover."
+    }
+  ]
+}

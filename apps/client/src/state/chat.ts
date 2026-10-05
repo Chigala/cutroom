@@ -3,7 +3,7 @@
  * the project folder, and the last few exchanges go to the agent with each request so follow-ups like
  * "shorter" or "bring the zooms back" make sense.
  */
-import type { AgentContext, AgentEvent, Backend, ChatRecord, WorkEntry } from "@vedit/bridge";
+import type { AgentContext, AgentEvent, AgentUsage, Backend, ChatRecord, WorkEntry } from "@vedit/bridge";
 import type { Commit } from "@vedit/project";
 import { create } from "zustand";
 import { host } from "../lib/host.ts";
@@ -59,19 +59,73 @@ export interface ChangeNote {
 
 export type ChatItem = UserMessage | AgentRun | ChangeNote;
 
+/** A message written while the agent was busy: it's sent when the current request finishes. */
+export interface QueuedMessage {
+  readonly id: string;
+  readonly text: string;
+  readonly context: AgentContext;
+  readonly depth: "quick" | "thorough";
+  readonly attachments: readonly string[];
+}
+
 interface ChatState {
   items: ChatItem[];
   activeRun: string | null;
+  /** Messages waiting their turn, oldest first. */
+  queue: QueuedMessage[];
   backend: Backend | null;
   /** Settings' autoFirstCut, mirrored for the switch on import cards. */
   autoFirstCut: boolean;
+  /** Claude's latest figures: the last request's context, and the plan's limits (kept between launches). */
+  usage: Usage;
+}
+
+export interface Usage {
+  readonly context?: NonNullable<AgentUsage["context"]>;
+  readonly limits?: NonNullable<AgentUsage["limits"]>;
+}
+
+const USAGE_KEY = "cutroom.usage";
+function savedUsage(): Usage {
+  try {
+    const u = JSON.parse(localStorage.getItem(USAGE_KEY) ?? "{}") as Usage;
+    // Windows that have reset since are stale: drop them.
+    const fresh = (w?: { resetsAt?: number }) => w && (!w.resetsAt || w.resetsAt > Date.now());
+    const { fiveHour, weekly, plan } = u.limits ?? {};
+    return {
+      ...(u.context && { context: u.context }),
+      limits: {
+        ...(fresh(fiveHour) && { fiveHour }),
+        ...(fresh(weekly) && { weekly }),
+        ...(plan && { plan }),
+      },
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** New figures from Claude, merged over the last ones. */
+function noteUsage(e: AgentUsage): void {
+  set((s) => ({
+    usage: {
+      ...s.usage,
+      ...(e.context && { context: e.context }),
+      ...(e.limits && { limits: { ...s.usage.limits, ...e.limits } }),
+    },
+  }));
+  try {
+    localStorage.setItem(USAGE_KEY, JSON.stringify(useChat.getState().usage));
+  } catch {}
 }
 
 export const useChat = create<ChatState>()(() => ({
   items: [],
   activeRun: null,
+  queue: [],
   backend: null,
   autoFirstCut: true,
+  usage: savedUsage(),
 }));
 
 /** Auto: the first cut makes itself once clips are indexed. Manual: it waits to be asked. Sticks. */
@@ -132,7 +186,12 @@ export async function send(
   attachments: readonly string[] = [],
 ): Promise<void> {
   const trimmed = text.trim();
-  if (!trimmed || useChat.getState().activeRun) return;
+  if (!trimmed) return;
+  // Busy: it waits its turn, and goes when this request is done.
+  if (useChat.getState().activeRun) {
+    set((s) => ({ queue: [...s.queue, { id: id(), text: trimmed, context, depth, attachments }] }));
+    return;
+  }
   const memory = history();
   const runItem: AgentRun = {
     kind: "agent",
@@ -177,6 +236,8 @@ export async function send(
       activeRun: merged.status === "running" ? runId : null,
       items: s.items.map((m) => (m.id === runItem.id ? merged : m)),
     }));
+    // It finished before run() even answered: the queue moves on all the same.
+    if (merged.status === "done") setTimeout(sendNextQueued, 0);
   } catch (err) {
     set((s) => ({
       activeRun: null,
@@ -200,6 +261,20 @@ export function retry(runItemId: string): void {
   if (at < 0 || !asked) return;
   set({ items: items.filter((m) => m.id !== runItemId && m.id !== asked.id) });
   void send(asked.text, asked.context, asked.depth ?? "quick", asked.attachments ?? []);
+}
+
+/** Takes a waiting message out of the queue. */
+export function removeQueued(queuedId: string): void {
+  set((s) => ({ queue: s.queue.filter((q) => q.id !== queuedId) }));
+}
+
+/** Sends the next waiting message, if nothing's running (after a stop or an error paused the queue). */
+export function sendNextQueued(): void {
+  const { queue, activeRun } = useChat.getState();
+  const next = queue[0];
+  if (!next || activeRun) return;
+  set({ queue: queue.slice(1) });
+  void send(next.text, next.context, next.depth, next.attachments);
 }
 
 export function stop(): void {
@@ -248,6 +323,8 @@ function reduce(run: AgentRun, e: AgentEvent): Partial<AgentRun> {
     }
     case "activity":
       return { activity: e.text };
+    case "usage":
+      return {};
     case "done": {
       // The last turn's narration is the reply itself: it moves out of the work to stand on its own.
       const last = run.work.at(-1);
@@ -313,6 +390,8 @@ async function loadChat(): Promise<void> {
   const records = await host.project.loadChat().catch(() => [] as ChatRecord[]);
   set({
     activeRun: null,
+    // Waiting messages belong to the project they were written in.
+    queue: [],
     items: records.map((r): ChatItem => {
       if (r.kind === "user")
         return {
@@ -337,12 +416,16 @@ export const FIRST_CUT_PROMPT =
 export function connectChat(): () => void {
   const offAgent = host.on("agent", (e) => {
     if (e.type === "start") set({ backend: e.backend });
+    if (e.type === "usage") noteUsage(e);
     const known = useChat.getState().items.some((m) => m.kind === "agent" && m.runId === e.runId);
     if (!known) early.set(e.runId, [...(early.get(e.runId) ?? []), e]);
     else updateRun(e.runId, (run) => reduce(run, e));
     if (known && (e.type === "done" || e.type === "error")) {
       set((s) => (s.activeRun === e.runId ? { activeRun: null } : s));
       persist();
+      // The queue moves on after a request that finished; a stop or an error pauses it.
+      const run = useChat.getState().items.find((m) => m.kind === "agent" && m.runId === e.runId);
+      if (run?.kind === "agent" && run.status === "done") setTimeout(sendNextQueued, 0);
     }
   });
   // Imports and outside file edits show up in the conversation as notes with undoable chips.

@@ -82,7 +82,30 @@ export type AgentEvent =
       /** What the editor might ask for next, in their words: offered in the composer (Tab takes it). */
       readonly next?: string;
     }
-  | { readonly runId: string; readonly type: "error"; readonly message: string };
+  | { readonly runId: string; readonly type: "error"; readonly message: string }
+  /** How much of Claude's context the request filled, and how much of the plan's limits are used. */
+  | ({ readonly runId: string; readonly type: "usage" } & AgentUsage);
+
+/** One of the Claude plan's usage windows: how much of it is used, and when it starts over. */
+export interface PlanWindow {
+  /** Percent used, 0-100. */
+  readonly pct: number;
+  /** When it resets, in ms since the epoch. */
+  readonly resetsAt?: number;
+}
+
+/** Claude's usage figures, as they come in during a request (each field only when it's known). */
+export interface AgentUsage {
+  /** Tokens of Claude's context window the request's last turn used, of how many. */
+  readonly context?: { readonly used: number; readonly window: number };
+  /** The plan's limits: the 5-hour window and the weekly one. */
+  readonly limits?: {
+    readonly fiveHour?: PlanWindow;
+    readonly weekly?: PlanWindow;
+    /** "pro", "max", "team"... */
+    readonly plan?: string;
+  };
+}
 
 export type Backend = "api" | "subscription";
 

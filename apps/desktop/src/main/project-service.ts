@@ -1143,6 +1143,7 @@ export class ProjectService {
       onText: (delta, turn) => send({ type: "text", delta, ...(turn && { turn: true }) }),
       onThinking: (delta, block) => send({ type: "thinking", delta, ...(block && { block: true }) }),
       onActivity: (text) => send({ type: "activity", text }),
+      onUsage: (usage) => send({ type: "usage", ...usage }),
       onTool: (call) => send({ type: "tool", ...call }),
     })
       .then((result) => {

@@ -10,6 +10,7 @@ import {
   Crosshair,
   Film,
   Lightbulb,
+  ListPlus,
   Loader2,
   Music2,
   Paperclip,
@@ -30,9 +31,11 @@ import {
   type ChangeNote,
   type ChatItem,
   FIRST_CUT_PROMPT,
+  removeQueued,
   retry,
   STARTERS,
   send,
+  sendNextQueued,
   setAutoFirstCut,
   stop,
   useChat,
@@ -46,6 +49,7 @@ import { setRange, useTimeline } from "../../state/timeline.ts";
 import { toast } from "../../state/toast.ts";
 import { composerRef, setUi, useUi } from "../../state/ui.ts";
 import { ThinkingPicker } from "./ThinkingPicker.tsx";
+import { UsageMeter } from "./UsageMeter.tsx";
 
 export function ChatPanel() {
   const items = useChat((s) => s.items);
@@ -185,11 +189,7 @@ function Run({ run }: { run: AgentRun }) {
     <div className="flex flex-col gap-2.5 animate-rise">
       <div className="flex items-center gap-2 font-mono text-xs text-muted">
         <span className={clsx("size-2 rounded-full bg-accent", running && "animate-pulse")} />
-        Agent
-        {run.backend && (
-          <span className="text-faint">· {run.backend === "api" ? "Claude API" : "Claude subscription"}</span>
-        )}{" "}
-        · <Elapsed run={run} />
+        Agent · <Elapsed run={run} />
         {run.status === "stopped" && <span className="text-faint">· stopped</span>}
       </div>
       {(run.work.length > 0 || running) && <Work run={run} />}
@@ -670,7 +670,8 @@ function Composer() {
     });
 
   const ready = attachments.filter((a) => a.status === "ready").map((a) => a.source!);
-  const canSend = (text.trim().length > 0 || ready.length > 0) && !uploading && !activeRun;
+  // While the agent works, a message joins the queue instead (it goes when this request is done).
+  const canSend = (text.trim().length > 0 || ready.length > 0) && !uploading;
 
   const submit = () => {
     if (!canSend) return;
@@ -688,6 +689,7 @@ function Composer() {
 
   return (
     <div className="px-[18px] pt-2.5 pb-[18px]">
+      <Queue />
       {/* Files dropped here attach to the message instead of joining the cut (the window's drop). */}
       <div
         onDragOver={(e) => {
@@ -819,6 +821,7 @@ function Composer() {
             <ThinkingPicker />
           </div>
           <div className="flex items-center gap-2.5">
+            <UsageMeter />
             {/* Beside Send, so it never sits under a suggestion that runs to two lines. */}
             {offer && text !== offer && (
               <span
@@ -832,14 +835,27 @@ function Composer() {
               </span>
             )}
             {activeRun ? (
-              <button
-                type="button"
-                aria-label="Stop"
-                onClick={stop}
-                className="flex size-9 items-center justify-center rounded-full bg-fg text-bg hover:bg-fg-2"
-              >
-                <Square size={12} fill="currentColor" />
-              </button>
+              <>
+                {canSend && (
+                  <button
+                    type="button"
+                    aria-label="Queue it"
+                    title="Queue it: it's sent when this request is done (Enter)"
+                    onClick={submit}
+                    className="flex size-9 items-center justify-center rounded-full bg-control text-fg-2 hover:bg-selected animate-fade-in"
+                  >
+                    <ListPlus size={16} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-label="Stop"
+                  onClick={stop}
+                  className="flex size-9 items-center justify-center rounded-full bg-fg text-bg hover:bg-fg-2"
+                >
+                  <Square size={12} fill="currentColor" />
+                </button>
+              </>
             ) : (
               <button
                 type="button"
@@ -855,6 +871,55 @@ function Composer() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Messages written while the agent was busy, above the box: each goes when the one before it is done,
+ * and can be taken back. After a stop or an error the queue waits, with a button to carry on.
+ */
+function Queue() {
+  const queue = useChat((s) => s.queue);
+  const busy = useChat((s) => s.activeRun !== null);
+  if (!queue.length) return null;
+  return (
+    <div className="mb-2 flex flex-col gap-1 animate-fade-in">
+      <div className="flex items-center justify-between px-1 text-[11px] text-faint">
+        <span>
+          {queue.length === 1 ? "1 message" : `${queue.length} messages`}{" "}
+          {busy ? "waiting for this request to finish" : "waiting"}
+        </span>
+        {!busy && (
+          <button
+            type="button"
+            onClick={sendNextQueued}
+            className="rounded-md px-1.5 py-0.5 text-accent hover:bg-button"
+          >
+            Send next
+          </button>
+        )}
+      </div>
+      {queue.map((q, i) => (
+        <div
+          key={q.id}
+          className="flex items-center gap-2 rounded-lg border border-line bg-panel py-1.5 pr-1.5 pl-3 text-[13px] text-fg-2"
+        >
+          <span className="shrink-0 font-mono text-[11px] text-faint">{i + 1}</span>
+          <span className="min-w-0 flex-1 truncate">{q.text}</span>
+          {q.attachments.length > 0 && (
+            <span className="shrink-0 text-[11px] text-faint">+{q.attachments.length}</span>
+          )}
+          <button
+            type="button"
+            aria-label="Remove from the queue"
+            onClick={() => removeQueued(q.id)}
+            className="shrink-0 rounded-md p-1 text-faint hover:bg-button hover:text-fg-2"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

@@ -7,10 +7,13 @@ import { tmpdir } from "node:os";
 import {
   createSdkMcpServer,
   type McpSdkServerConfigWithInstance,
+  type Query,
   query,
+  type SDKRateLimitInfo,
   type SDKUserMessage,
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentUsage } from "@vedit/bridge";
 import { SYSTEM_PROMPT } from "./prompt.ts";
 import { runTool, TOOLS, type ToolContext } from "./tools.ts";
 import {
@@ -57,12 +60,10 @@ export function claudeExecutable(): { pathToClaudeCodeExecutable?: string } {
   return bin ? { pathToClaudeCodeExecutable: bin } : {};
 }
 
-const MISSING =
-  "Claude Code isn't installed. Open Settings → Claude to install it, or set ANTHROPIC_API_KEY.";
+const MISSING = "Claude Code isn't installed. Open Settings → Claude to install it.";
 
 const ERRORS: Record<string, string> = {
-  authentication_failed:
-    "Not signed in to Claude. Open Settings → Claude to sign in, or set ANTHROPIC_API_KEY.",
+  authentication_failed: "Not signed in to Claude. Open Settings → Claude to sign in.",
   oauth_org_not_allowed: "Your Claude organization doesn't allow this sign-in.",
   billing_error: "Claude reported a billing problem with your account.",
   rate_limit: "You've hit your Claude usage limit. Try again later.",
@@ -79,6 +80,8 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
   let summary = "";
   let turnText = "";
   let thinkingStarts = false;
+  let askedLimits = false;
+  let used = 0;
   try {
     const stream = query({
       prompt: run.images?.length ? withImages(run.prompt, run.images) : run.prompt,
@@ -110,6 +113,11 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
     });
     for await (const message of stream) {
       watchdog.beat();
+      // The plan's limits, once per request, alongside the work (it never holds the request up).
+      if (!askedLimits && run.onUsage) {
+        askedLimits = true;
+        void planLimits(stream).then((limits) => limits && run.onUsage?.({ limits }));
+      }
       switch (message.type) {
         case "stream_event": {
           const e = message.event;
@@ -150,7 +158,9 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
             );
           }
           break;
-        case "rate_limit_event":
+        case "rate_limit_event": {
+          const window = limitWindow(message.rate_limit_info);
+          if (window) run.onUsage?.({ limits: window });
           if (message.rate_limit_info.status === "rejected") {
             const at = message.rate_limit_info.resetsAt;
             throw new AgentError(
@@ -158,14 +168,25 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
             );
           }
           break;
-        case "assistant":
+        }
+        case "assistant": {
           if (message.error) throw new AgentError(ERRORS[message.error] ?? `Claude error: ${message.error}`);
           if (turnText) summary = turnText;
+          // What this turn sent Claude: how full its context is. The last turn's is the request's peak.
+          const u = message.message.usage;
+          if (u && !message.parent_tool_use_id)
+            used = u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
           break;
-        case "result":
+        }
+        case "result": {
+          const window =
+            message.modelUsage[run.model]?.contextWindow ??
+            Object.values(message.modelUsage)[0]?.contextWindow;
+          if (used && window) run.onUsage?.({ context: { used, window } });
           if (message.subtype === "success") return (message.result || summary).trim();
           if (message.subtype === "error_max_turns") throw new StepLimit(summary);
           throw new AgentError("The agent stopped with an error. Try again.");
+        }
       }
     }
     if (watchdog.stalled) throw new Stalled(summary);
@@ -183,6 +204,45 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
     watchdog.stop();
     run.signal?.removeEventListener("abort", onAbort);
   }
+}
+
+/** The Claude plan's 5-hour and weekly windows, from Claude Code's /usage; nothing if it can't say. */
+async function planLimits(stream: Query): Promise<AgentUsage["limits"] | undefined> {
+  try {
+    const usage = await Promise.race([
+      stream.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), 15_000)),
+    ]);
+    const r = usage.rate_limits;
+    if (!usage.rate_limits_available || !r) return undefined;
+    const window = (w: { utilization: number | null; resets_at: string | null } | null | undefined) =>
+      w && w.utilization !== null
+        ? { pct: w.utilization, ...(w.resets_at && { resetsAt: Date.parse(w.resets_at) }) }
+        : undefined;
+    const fiveHour = window(r.five_hour);
+    const weekly = window(r.seven_day);
+    return {
+      ...(fiveHour && { fiveHour }),
+      ...(weekly && { weekly }),
+      ...(usage.subscription_type && { plan: usage.subscription_type }),
+    };
+  } catch (err) {
+    console.warn(`[agent] plan usage unavailable: ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
+/** A rate-limit notice from Claude, as the window it's about (5-hour or weekly), when it says how much is used. */
+function limitWindow(info: SDKRateLimitInfo): AgentUsage["limits"] | undefined {
+  if (info.utilization === undefined) return undefined;
+  // A fraction in some versions, a percent in others.
+  const w = {
+    pct: info.utilization <= 1 ? info.utilization * 100 : info.utilization,
+    ...(info.resetsAt && { resetsAt: info.resetsAt * 1000 }),
+  };
+  if (info.rateLimitType === "five_hour") return { fiveHour: w };
+  if (info.rateLimitType === "seven_day") return { weekly: w };
+  return undefined;
 }
 
 /** A first message with images (attachments), as the SDK's streaming input. */

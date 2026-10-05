@@ -1,3 +1,5 @@
+import type { AgentUsage } from "@vedit/bridge";
+
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /** Which Claude the agent runs on. */
@@ -82,6 +84,8 @@ export interface BackendRun {
   onThinking(delta: string, block?: boolean): void;
   /** What it's doing right now, before a step lands: thinking, running a tool, waiting on a retry. */
   onActivity(text: string): void;
+  /** Context and plan-limit figures, as Claude reports them. */
+  onUsage?(usage: AgentUsage): void;
 }
 
 /** What each tool is doing, as a status line while it runs. */

@@ -4,10 +4,10 @@
  * them on top of whatever the user did meanwhile; ops are id-addressed, so that rebase almost always
  * just works.
  *
- * Two backends, same tools: the Claude API when an API key is configured, otherwise the Claude Agent
- * SDK on the user's Claude subscription.
+ * Two backends, same tools: the Claude Agent SDK on the user's Claude subscription (what runs today),
+ * and the Claude API loop (api.ts), kept for a later cloud tier but switched off.
  */
-import type { AgentContext, ToolCall } from "@vedit/bridge";
+import type { AgentContext, AgentUsage, ToolCall } from "@vedit/bridge";
 import type { ChangeGroup, Op, ProjectDoc, Source } from "@vedit/project";
 import { runWithApi } from "./api.ts";
 import { buildPrompt, type Turn } from "./context.ts";
@@ -40,6 +40,7 @@ export interface AgentOptions {
   onText?(delta: string, turn?: boolean): void;
   onThinking?(delta: string, block?: boolean): void;
   onActivity?(text: string): void;
+  onUsage?(usage: AgentUsage): void;
   onTool?(call: ToolCall): void;
 }
 
@@ -83,6 +84,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     onText: (delta: string, turn?: boolean) => opts.onText?.(delta, turn),
     onThinking: (delta: string, block?: boolean) => opts.onThinking?.(delta, block),
     onActivity: (text: string) => opts.onActivity?.(text),
+    onUsage: (usage: AgentUsage) => opts.onUsage?.(usage),
   };
   const backend = opts.backend ?? defaultBackend();
   for (let resumed = 0; ; resumed++) {

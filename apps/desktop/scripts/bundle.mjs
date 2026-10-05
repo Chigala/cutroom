@@ -17,6 +17,7 @@ export const RUNTIME = [
   "@anthropic-ai/claude-agent-sdk",
   "@remotion/renderer",
   "@remotion/install-whisper-cpp",
+  "onnxruntime-node",
   "zod",
 ];
 

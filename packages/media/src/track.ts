@@ -2,12 +2,15 @@
  * Motion tracking: where each face (and each person) is, frame by frame, over a stretch of a clip.
  * Apple's Vision framework detects faces and bodies on frames sampled from the preview copy; detections
  * are linked into tracks (nearest centre, same kind), broken at shot changes, and smoothed. Run on
- * demand over the stretch an edit actually uses, not over whole clips. macOS only (elsewhere: no tracks).
+ * demand over the stretch an edit actually uses, not over whole clips. Off macOS, open models do the
+ * detecting instead (vision.ts): YuNet for faces, YOLOX for people.
  */
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { run } from "./exec.ts";
+import { useOpenModels } from "./models.ts";
+import { detectBoxes } from "./vision.ts";
 
 export interface TrackPoint {
   /** Seconds, source time. */
@@ -204,7 +207,10 @@ export async function trackRange(
     signal?: AbortSignal;
   } = {},
 ): Promise<Track[]> {
-  if (process.platform !== "darwin" || to <= from) return [];
-  const { times, frames } = await detect(video, from, to, rate, signal);
+  if (to <= from) return [];
+  if (!useOpenModels() && process.platform !== "darwin") return [];
+  const { times, frames } = useOpenModels()
+    ? await detectBoxes(video, from, to, rate, signal)
+    : await detect(video, from, to, rate, signal);
   return linkTracks(times, frames, cuts, idPrefix);
 }

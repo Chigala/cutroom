@@ -7,3 +7,6 @@ allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+  # Its install script only fetches optional NVIDIA (CUDA) libraries on Linux; the CPU, DirectML and
+  # CoreML builds the app uses come with the package.
+  onnxruntime-node: false

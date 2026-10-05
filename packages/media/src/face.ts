@@ -1,12 +1,14 @@
 /**
  * Where the speaker's face sits, via Apple's Vision framework (ported from tiktok-studio's cli/face.js).
  * Runs on a handful of frames and keeps the median, so one turned head doesn't move the framing.
- * macOS only: elsewhere it returns null and framing falls back to the frame's upper middle.
+ * Off macOS, the open face detector does it (vision.ts). Null when no face is clear enough, and framing
+ * falls back to the frame's upper middle.
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { run } from "./exec.ts";
+import { useOpenModels } from "./models.ts";
 import { grabFrame } from "./transcode.ts";
 
 const VISION = `
@@ -46,7 +48,9 @@ export async function detectFace(
   duration: number,
   signal?: AbortSignal,
 ): Promise<Face | null> {
-  if (process.platform !== "darwin" || duration <= 0) return null;
+  if (duration <= 0) return null;
+  if (useOpenModels()) return openModelFace(video, duration, signal);
+  if (process.platform !== "darwin") return null;
   const dir = await mkdtemp(path.join(tmpdir(), "vedit-face-"));
   try {
     const frames: string[] = [];
@@ -70,5 +74,27 @@ export async function detectFace(
     return null;
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const median = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)]!;
+
+/** The same, with the open face detector: the biggest face on five stills, the median of them. */
+async function openModelFace(video: string, duration: number, signal?: AbortSignal): Promise<Face | null> {
+  try {
+    const { facesAt } = await import("./vision.ts");
+    const times = [1, 2, 3, 4, 5].map((i) => (duration * i) / 6);
+    const found = (await facesAt(video, times, signal)).filter((f) => f !== null);
+    // A face on at least half the stills, as with Vision: one lucky frame doesn't set the framing.
+    if (found.length < Math.max(1, Math.floor(times.length / 2))) return null;
+    const r = (n: number) => Math.round(Math.min(1, Math.max(0, n)) * 1000) / 1000;
+    return {
+      x: r(median(found.map((f) => f.x))),
+      y: r(median(found.map((f) => f.y))),
+      size: r(median(found.map((f) => f.size))),
+    };
+  } catch (err) {
+    console.warn("[face] the open face detector failed:", (err as Error).message);
+    return null;
   }
 }

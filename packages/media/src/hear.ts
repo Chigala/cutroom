@@ -7,14 +7,20 @@
  *   emphasis   how hard each word is said: louder, higher or drawn out against the words around it
  *   character  a music track's instruments (piano, strings, synth, drums...), for its feel
  *
- * The classifier runs in a small native helper compiled once on the Mac (macOS only; elsewhere hearing
- * is simply absent and everything else works as before).
+ * On the Mac the classifier runs in a small native helper compiled once. Elsewhere PANNs (an AudioSet
+ * model) does the same job on ONNX Runtime (models.ts), over the same one-second windows, its labels
+ * written and its scores scaled the way Apple's classifier gives them, so everything downstream reads
+ * them alike.
  */
+
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { bundledTool, run } from "./exec.ts";
+import { bundledTool, CancelledError, findBinary, run } from "./exec.ts";
+import { ensureModel, onnx, session, useOpenModels } from "./models.ts";
 
 const HEAR_SWIFT = `
 import Foundation
@@ -55,6 +61,11 @@ let building: Promise<string | null> | null = null;
  * built (not macOS, no Swift compiler).
  */
 export function ensureHear(dir: string): Promise<string | null> {
+  // The open model where Apple's classifier isn't there: its file stands for it.
+  if (useOpenModels())
+    return Promise.all([ensureModel("sounds"), ensureModel("soundsData"), ensureModel("soundLabels")]).then(
+      ([model]) => model,
+    );
   if (process.platform !== "darwin") return Promise.resolve(null);
   // Built with the app: no compiler needed on this Mac.
   const shipped = bundledTool("hear");
@@ -223,6 +234,7 @@ interface Window {
 }
 
 async function classify(bin: string, file: string, signal?: AbortSignal): Promise<Window[]> {
+  if (bin.endsWith(".onnx")) return classifyOpen(file, signal);
   const { stdout } = await run(bin, [file, "1.0", "0.5"], signal ? { signal } : {});
   return stdout
     .split("\n")
@@ -387,3 +399,149 @@ const FUNCTION_WORDS = new Set(
     " ",
   ),
 );
+
+/** AudioSet names where Apple's classifier has its own. */
+const APPLE_NAMES: Readonly<Record<string, string>> = {
+  slam: "door_slam",
+  computer_keyboard: "typing_computer_keyboard",
+  baby_cry_infant_cry: "baby_crying",
+  choir: "choir_singing",
+};
+
+let labels: Promise<string[]> | null = null;
+/** AudioSet's 527 class names as Apple's classifier spells its identifiers ("Belly laugh": belly_laugh). */
+function soundLabels(): Promise<string[]> {
+  labels ??= ensureModel("soundLabels").then(async (file) =>
+    (await readFile(file, "utf8"))
+      .trim()
+      .split("\n")
+      .slice(1)
+      .map((line) => {
+        // index,mid,"display name"
+        const name = line.slice(line.indexOf(",", line.indexOf(",") + 1) + 1).replace(/^"|"$/g, "");
+        const id = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_|_$/g, "");
+        return APPLE_NAMES[id] ?? id;
+      }),
+  );
+  return labels;
+}
+
+/**
+ * The open model's scores run lower than Apple's classifier's: a laugh under speech scores about 0.25
+ * where Apple says 0.8. These are where its scores mean the same as the thresholds in EDIT_SOUNDS (set on
+ * Apple's); scores are scaled so they line up, and everything downstream reads them alike. Others
+ * (instruments) scale by OTHER_SCALE.
+ */
+const OPEN_MIN: Readonly<Record<string, number>> = {
+  laughter: 0.15,
+  belly_laugh: 0.12,
+  chuckle_chortle: 0.15,
+  giggle: 0.12,
+  snicker: 0.2,
+  applause: 0.2,
+  clapping: 0.25,
+  cheering: 0.2,
+  crowd: 0.25,
+  gasp: 0.15,
+  sigh: 0.2,
+  whispering: 0.2,
+  shout: 0.2,
+  yell: 0.2,
+  screaming: 0.2,
+  singing: 0.25,
+  rapping: 0.25,
+  music: 0.3,
+  cough: 0.1,
+  sneeze: 0.08,
+  door_slam: 0.15,
+  knock: 0.15,
+  telephone_bell_ringing: 0.2,
+  ringtone: 0.2,
+  camera: 0.15,
+  typing: 0.07,
+  typing_computer_keyboard: 0.07,
+  wind_noise_microphone: 0.2,
+  dog: 0.2,
+  bark: 0.2,
+  baby_crying: 0.2,
+  silence: 0.5,
+};
+const OTHER_SCALE = 2.5;
+
+/** 16 kHz audio heard a second at a time, every half second (as the Mac helper is asked to). */
+const RATE = 16_000;
+const WINDOW = RATE;
+const HOP = RATE / 2;
+
+/**
+ * The open model's windows, in the same form as the Mac helper's: each window's likeliest sounds above
+ * 0.1 (after scaling), eight at most. The audio streams through ffmpeg, so a long recording never sits
+ * in memory.
+ */
+async function classifyOpen(file: string, signal?: AbortSignal): Promise<Window[]> {
+  const [ort, model, names] = await Promise.all([onnx(), session("sounds"), soundLabels()]);
+  const scale = names.map((id) => {
+    const open = OPEN_MIN[id];
+    const apple = EDIT_SOUNDS[id]?.min;
+    return open && apple ? apple / open : OTHER_SCALE;
+  });
+  const child = spawn(
+    await findBinary("ffmpeg"),
+    ["-v", "error", "-i", file, "-vn", "-ac", "1", "-ar", String(RATE), "-f", "f32le", "-"],
+    { stdio: ["ignore", "pipe", "ignore"] },
+  );
+  const exited = once(child, "close") as Promise<[number | null]>;
+  const abort = () => child.kill("SIGKILL");
+  signal?.addEventListener("abort", abort, { once: true });
+  const windows: Window[] = [];
+  let samples = new Float32Array(0);
+  // Where `samples` starts in the recording, in samples.
+  let offset = 0;
+  const hear = async (audio: Float32Array, at: number) => {
+    const out = await model.run({
+      [model.inputNames[0]!]: new ort.Tensor("float32", audio, [1, audio.length]),
+    });
+    const data = out[model.outputNames[0]!]!.data as Float32Array;
+    const top: [string, number][] = [];
+    for (let c = 0; c < data.length; c++) {
+      const v = Math.min(1, data[c]! * scale[c]!);
+      if (v > 0.1) top.push([names[c] ?? `class_${c}`, Math.round(v * 1000) / 1000]);
+    }
+    top.sort((a, b) => b[1] - a[1]);
+    windows.push({ t: at / RATE, d: WINDOW / RATE, c: top.slice(0, 8) });
+  };
+  let tail = new Uint8Array(0);
+  try {
+    for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
+      // Bytes to floats, keeping a partial float for the next chunk.
+      const bytes = new Uint8Array(tail.length + chunk.length);
+      bytes.set(tail);
+      bytes.set(chunk, tail.length);
+      const whole = bytes.length - (bytes.length % 4);
+      tail = bytes.slice(whole);
+      const more = new Float32Array(bytes.buffer.slice(0, whole));
+      const next = new Float32Array(samples.length + more.length);
+      next.set(samples);
+      next.set(more, samples.length);
+      samples = next;
+      let used = 0;
+      while (samples.length - used >= WINDOW) {
+        await hear(samples.subarray(used, used + WINDOW), offset + used);
+        used += HOP;
+      }
+      samples = samples.slice(used);
+      offset += used;
+    }
+    // The last part-second, if there's a quarter second of it.
+    if (samples.length >= RATE / 4) await hear(samples, offset);
+    await exited;
+    if (signal?.aborted) throw new CancelledError();
+  } finally {
+    signal?.removeEventListener("abort", abort);
+    if (child.exitCode === null) child.kill("SIGKILL");
+  }
+  return windows;
+}

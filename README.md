@@ -89,15 +89,24 @@ inside the distro, and:
 | Editing, agent, captions, graphics, music, export | yes | yes* | yes* |
 | Whisper transcription | GPU (Metal) | downloads on first import* | built on first import (CPU) |
 | Voice cleanup (DeepFilterNet) | yes | yes* | yes* |
-| Face framing, tracking, sound recognition | yes | not yet | not yet |
-| Cutouts (text behind the person, background changes) | yes | not yet | not yet |
+| Face framing, tracking, sound recognition | yes | yes* | yes* |
+| Cutouts (text behind the person, background changes) | yes | yes* | yes* |
 | Packaged installer with bundled tools | yes | yes* | yes* |
 
-The macOS-only features use Apple's frameworks. Cross-platform versions are planned.
+On macOS, faces, people, sounds and cutouts use Apple's frameworks. On Windows and Linux, open models
+do the same jobs on ONNX Runtime (on the graphics card through DirectML on Windows, on the CPU
+elsewhere). Each downloads once, the first time it's needed, checked against a pinned hash:
+
+| Job | Model | Download | Licence |
+|---|---|---|---|
+| Faces | YuNet (OpenCV) | 0.2 MB | MIT |
+| People | YOLOX-Nano (Megvii) | 3.5 MB | Apache-2.0 |
+| Sounds | PANNs CNN14 (labels: Google's AudioSet) | 330 MB | MIT (labels CC BY 4.0) |
+| Cutouts | Robust Video Matting | 15 MB | GPL-3.0 |
+
+`VEDIT_VISION=onnx` makes a Mac use them too, to compare the two.
 
 \* Windows and Linux support is new and still being tested: expect rough edges, and please report them.
-Off macOS, shots that use cutouts play and export without them (text meant to go behind the person
-shows in front, and backgrounds stay as filmed).
 
 ## Claude
 

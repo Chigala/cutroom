@@ -30,6 +30,8 @@ for (const file of envFiles) {
 // app's resources once packaged, in resources/tools/<platform>-<arch> when run from the repo (made by
 // `pnpm tools`). Without them, tools are looked for on the machine.
 // The graphics runtime's libraries and fonts, copied in at build time (scripts/runtime-assets.mts).
+// The open models (faces, people, sounds, cutouts off macOS) download here once, when first needed.
+if (!process.env.VEDIT_MODELS) process.env.VEDIT_MODELS = path.join(app.getPath("userData"), "models");
 if (!process.env.VEDIT_RUNTIME_ASSETS)
   process.env.VEDIT_RUNTIME_ASSETS = path.join(here, "../runtime-assets");
 

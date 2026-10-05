@@ -18,7 +18,9 @@ import {
   type Source,
 } from "@vedit/project";
 import { findBinary, run } from "./exec.ts";
+import { useOpenModels } from "./models.ts";
 import { renderableAsIs } from "./transcode.ts";
+import { matteFrames } from "./vision.ts";
 
 const opts = (signal?: AbortSignal) => (signal ? { signal } : {});
 
@@ -142,12 +144,64 @@ function run(argv) {
  * The person in `video` over [from, to), alone on transparency (VP9 with alpha), at `fps`. Frames with
  * nobody in them come out empty. macOS only; elsewhere it throws.
  */
+/** Apple's person segmentation over every frame, a matte per frame (frames it found nobody in, black). */
+async function appleMattes(
+  dir: string,
+  frames: string,
+  mattes: string,
+  files: readonly string[],
+  signal: AbortSignal | undefined,
+  onProgress: ((fraction: number) => void) | undefined,
+): Promise<void> {
+  const script = path.join(dir, "matte.js");
+  await writeFile(script, MATTE_JS);
+  // Batches, two at a time: Vision keeps the Neural Engine and GPU busy without starving the app.
+  const batches: string[][] = [];
+  for (let i = 0; i < files.length; i += 60) batches.push(files.slice(i, i + 60));
+  let next = 0;
+  let done = 0;
+  const worker = async () => {
+    while (next < batches.length) {
+      const b = batches[next++]!;
+      await run(
+        "/usr/bin/osascript",
+        ["-l", "JavaScript", script, mattes, ...b.map((f) => path.join(frames, f))],
+        opts(signal),
+      );
+      done += b.length;
+      onProgress?.(0.1 + 0.8 * (done / files.length));
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  // Frames Vision found nobody in get an empty matte, so frames and mattes stay in step.
+  const made = new Set(await readdir(mattes));
+  const missing = files.filter((f) => !made.has(f));
+  if (missing.length === files.length) throw new Error("No person found in that stretch");
+  for (const f of missing)
+    await run(
+      "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=black:s=64x64",
+        "-frames:v",
+        "1",
+        path.join(mattes, f),
+      ],
+      opts(signal),
+    );
+}
+
 /**
- * Whether this machine can cut people out: it uses Apple's person segmentation, so macOS only for now.
- * Elsewhere the video plays and exports without the subject layer (what's "behind" the person shows
- * over them, and backgrounds stay as filmed), the same as before a cutout is made.
+ * Whether this machine can cut people out: Apple's person segmentation on macOS, the open matting model
+ * (Robust Video Matting, vision.ts) where ONNX Runtime runs. Where neither does, the video plays and
+ * exports without the subject layer, the same as before a cutout is made.
  */
-export const cutoutsAvailable = () => process.platform === "darwin";
+export const cutoutsAvailable = () => process.platform === "darwin" || useOpenModels();
 
 export async function makeCutout(
   video: string,
@@ -160,7 +214,7 @@ export async function makeCutout(
     onProgress,
   }: { fps?: number; signal?: AbortSignal; onProgress?: (fraction: number) => void } = {},
 ): Promise<string> {
-  if (process.platform !== "darwin") throw new Error("Cutouts need macOS (Apple's person segmentation)");
+  if (!cutoutsAvailable()) throw new Error("Cutouts aren't available on this computer");
   const dir = await mkdtemp(path.join(tmpdir(), "vedit-cutout-"));
   try {
     const frames = path.join(dir, "frames");
@@ -188,47 +242,6 @@ export async function makeCutout(
     const files = (await readdir(frames)).filter((f) => f.endsWith(".png")).sort();
     if (!files.length) throw new Error("No footage in that stretch");
     onProgress?.(0.1);
-    const script = path.join(dir, "matte.js");
-    await writeFile(script, MATTE_JS);
-    // Batches, two at a time: Vision keeps the Neural Engine and GPU busy without starving the app.
-    const batches: string[][] = [];
-    for (let i = 0; i < files.length; i += 60) batches.push(files.slice(i, i + 60));
-    let next = 0;
-    let done = 0;
-    const worker = async () => {
-      while (next < batches.length) {
-        const b = batches[next++]!;
-        await run(
-          "/usr/bin/osascript",
-          ["-l", "JavaScript", script, mattes, ...b.map((f) => path.join(frames, f))],
-          opts(signal),
-        );
-        done += b.length;
-        onProgress?.(0.1 + 0.8 * (done / files.length));
-      }
-    };
-    await Promise.all([worker(), worker()]);
-    // Frames Vision found nobody in get an empty matte, so frames and mattes stay in step.
-    const made = new Set(await readdir(mattes));
-    const missing = files.filter((f) => !made.has(f));
-    if (missing.length === files.length) throw new Error("No person found in that stretch");
-    for (const f of missing)
-      await run(
-        "ffmpeg",
-        [
-          "-v",
-          "error",
-          "-y",
-          "-f",
-          "lavfi",
-          "-i",
-          "color=black:s=64x64",
-          "-frames:v",
-          "1",
-          path.join(mattes, f),
-        ],
-        opts(signal),
-      );
     // The frame size the matte stretches to (Vision's mask has its own shape but covers the whole frame).
     const { stdout } = await run(
       "ffprobe",
@@ -246,6 +259,13 @@ export async function makeCutout(
       opts(signal),
     );
     const [w, h] = stdout.trim().split(",").map(Number);
+    if (useOpenModels())
+      // The open matting model, frame after frame (it needs them in order: it carries over what it saw).
+      await matteFrames(frames, files.length, w!, h!, mattes, {
+        ...(signal && { signal }),
+        onProgress: (f) => onProgress?.(0.1 + 0.8 * f),
+      });
+    else await appleMattes(dir, frames, mattes, files, signal, onProgress);
     await mkdir(path.dirname(out), { recursive: true });
     const part = `${out}.part.webm`;
     await run(

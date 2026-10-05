@@ -16,6 +16,9 @@ files:
       - "!@remotion/compositor-*/**"
       - "!@anthropic-ai/claude-agent-sdk-*/**"
 asar: true
+# ONNX Runtime's native library loads from disk, not from inside the archive.
+asarUnpack:
+  - "**/onnxruntime-node/bin/**"
 # Nothing to rebuild: the app has no native Node modules of its own.
 npmRebuild: false
 mac:

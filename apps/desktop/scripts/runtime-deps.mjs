@@ -4,7 +4,7 @@
 //
 //   node scripts/runtime-deps.mjs [--arch arm64|x64]
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { desktopDir, RUNTIME } from "./bundle.mjs";
 
@@ -49,7 +49,17 @@ execFileSync(
     "--install-strategy=hoisted",
     `--os=${process.platform}`,
     `--cpu=${arch}`,
+    // ONNX Runtime's install script would fetch NVIDIA's CUDA libraries on Linux: the app doesn't use them.
+    "--onnxruntime-node-install=skip",
   ],
   { cwd: out, stdio: "inherit", shell: windows },
 );
+// ONNX Runtime ships its native library for every platform (~300 MB): keep only this one's.
+const ortBin = path.join(out, "node_modules", "onnxruntime-node", "bin");
+if (existsSync(ortBin))
+  for (const napi of readdirSync(ortBin))
+    for (const os of readdirSync(path.join(ortBin, napi)))
+      for (const cpu of readdirSync(path.join(ortBin, napi, os)))
+        if (os !== process.platform || cpu !== arch)
+          rmSync(path.join(ortBin, napi, os, cpu), { recursive: true, force: true });
 console.log(`runtime node_modules for ${process.platform}-${arch} in ${path.relative(process.cwd(), out)}`);

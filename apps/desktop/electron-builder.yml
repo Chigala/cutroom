@@ -92,3 +92,6 @@ deb:
     - libsecret-1-0
     - libasound2t64 | libasound2
     - libgbm1
+    # The C++ runtime the bundled ffmpeg links.
+    - libstdc++6
+    - libgcc-s1

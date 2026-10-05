@@ -1,3 +1,4 @@
+import path from "node:path";
 import { applyOps, emptyProject, type Op, type ProjectDoc } from "@vedit/project";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,7 +9,7 @@ vi.mock("@vedit/media", async (real) => ({
   ...(await real<typeof import("@vedit/media")>()),
   makeProxy: (_in: string, out: string, o: { signal?: AbortSignal }) =>
     new Promise((_, no) => {
-      const id = out.split("/").pop()!.replace(".mp4", "");
+      const id = path.basename(out, ".mp4");
       started.push(id);
       o.signal?.addEventListener("abort", () => {
         stopped.push(id);

@@ -20,14 +20,18 @@ export const paths = {
 
 let current: Settings | null = null;
 /** The file's modification time when `current` was read or written. */
-let readAt = -1;
+let readAt = "";
 /** settings.json is there but couldn't be read: it's set aside, not overwritten, at the next save. */
 let unreadable = false;
 
+/**
+ * What settings.json looks like on disk, to tell when it changed: its time and its size. The time alone
+ * misses quick edits on Windows, where it can lag behind the write.
+ */
 const mtime = () =>
   stat(paths.settings())
-    .then((s) => s.mtimeMs)
-    .catch(() => -1);
+    .then((s) => `${s.mtimeMs}:${s.size}`)
+    .catch(() => "");
 
 const DEFAULTS = Settings.parse({});
 const NO_SECRETS = Object.fromEntries(SECRET_FIELDS.map((f) => [f, ""])) as Record<SecretField, string>;

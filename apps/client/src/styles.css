@@ -107,3 +107,66 @@
     transition-duration: 1ms !important;
   }
 }
+
+/* Onboarding: the playhead mark drawing itself in, and screens easing up. Calm, never bouncy. */
+@keyframes ob-clip-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+@keyframes ob-clip-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@keyframes ob-playhead {
+  from {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+}
+@keyframes ob-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes ob-sweep {
+  0%,
+  12% {
+    transform: translateX(-34px);
+  }
+  50%,
+  62% {
+    transform: translateX(34px);
+  }
+  100% {
+    transform: translateX(-34px);
+  }
+}
+.ob-clip-left {
+  animation: ob-clip-left 700ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+}
+.ob-clip-right {
+  animation: ob-clip-right 700ms cubic-bezier(0.22, 1, 0.36, 1) 250ms both;
+}
+.ob-playhead {
+  animation: ob-playhead 650ms cubic-bezier(0.22, 1, 0.36, 1) 600ms both;
+}
+.ob-rise {
+  animation: ob-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ob-sweep {
+  animation: ob-sweep 6s cubic-bezier(0.65, 0, 0.35, 1) 1.4s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-clip-left,
+  .ob-clip-right,
+  .ob-playhead,
+  .ob-rise,
+  .ob-sweep {
+    animation: none;
+  }
+}

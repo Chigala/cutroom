@@ -45,20 +45,23 @@ export function createWebHost(): EditorApi {
     claudePath: "",
     libraryDir: "",
   };
+  // Every event the host can send: TypeScript insists the list is complete, so a new one can't be missed.
+  const events = {
+    commit: true,
+    agent: true,
+    index: true,
+    importDone: true,
+    export: true,
+    versions: true,
+    claude: true,
+    menu: true,
+    library: true,
+    downloads: true,
+    reload: true,
+    error: true,
+  } satisfies Record<keyof EditorEvents, true>;
   const listeners = Object.fromEntries(
-    [
-      "commit",
-      "agent",
-      "index",
-      "importDone",
-      "export",
-      "versions",
-      "claude",
-      "menu",
-      "library",
-      "reload",
-      "error",
-    ].map((k) => [k, new Set()]),
+    Object.keys(events).map((k) => [k, new Set()]),
   ) as unknown as Listeners;
   const emit = <E extends keyof EditorEvents>(e: E, p: EditorEvents[E]) => {
     for (const l of listeners[e]) (l as (p: EditorEvents[E]) => void)(p);

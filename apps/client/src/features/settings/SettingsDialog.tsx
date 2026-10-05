@@ -305,6 +305,20 @@ export function SettingsDialog() {
                   onSave={(claudePath) => void update({ claudePath })}
                 />
               </Row>
+              <Row
+                title="Setup"
+                hint="The welcome screens: Claude, transcription and the optional power-ups, with how to get each key."
+              >
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setUi({ dialog: null });
+                    void update({ onboarded: false });
+                  }}
+                >
+                  Run setup again
+                </Button>
+              </Row>
             </Page>
           )}
 

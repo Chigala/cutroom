@@ -7,6 +7,7 @@ import { ExportDialog } from "./features/export/ExportDialog.tsx";
 import { GraphicEditor } from "./features/graphics/GraphicEditor.tsx";
 import { Header } from "./features/header/Header.tsx";
 import { LookEditor } from "./features/looks/LookEditor.tsx";
+import { Onboarding } from "./features/onboarding/Onboarding.tsx";
 import { Preview } from "./features/preview/Preview.tsx";
 import { openProject, ProjectsDialog } from "./features/projects/ProjectsDialog.tsx";
 import { SettingsDialog } from "./features/settings/SettingsDialog.tsx";
@@ -20,9 +21,13 @@ import { connectJobs } from "./state/jobs.ts";
 import { offerToKeep } from "./state/library.ts";
 import { currentTime, holdStep, releaseStep, seekTime, togglePlay } from "./state/playback.ts";
 import { connectHost, edit, receive, redo, undo, useProject } from "./state/project.ts";
+import { loadSettings, useSettings } from "./state/settings.ts";
 import { fitTimeline, setRange, zoomBy } from "./state/timeline.ts";
 import { dismissToast, toast, useToasts } from "./state/toast.ts";
 import { composerRef, setUi, useUi } from "./state/ui.ts";
+
+/** In development, ?onboarding shows the first-launch screens in the browser too, to work on them. */
+const PREVIEW_ONBOARDING = import.meta.env.DEV && new URLSearchParams(location.search).has("onboarding");
 
 export function App() {
   const status = useProject((s) => s.status);
@@ -33,7 +38,9 @@ export function App() {
   const editingLook = useUi((s) => s.editingLook);
   const editingStyle = useUi((s) => s.editingStyle);
 
+  const onboarded = useSettings((s) => s.settings?.onboarded);
   useEffect(() => {
+    void loadSettings();
     const offs = [connectHost(), connectChat(), connectJobs()];
     return () => {
       for (const off of offs) off();
@@ -73,6 +80,8 @@ export function App() {
       ) : (
         <div className="drag-region h-[52px] border-b border-line" />
       )}
+      {/* First launch (desktop only: the browser demo has nothing to set up). */}
+      {((onboarded === false && window.editor) || PREVIEW_ONBOARDING) && <Onboarding />}
       <Toasts />
     </div>
   );

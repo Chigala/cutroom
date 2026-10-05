@@ -2,6 +2,7 @@ import type { RecentProject } from "@vedit/bridge";
 import { formatTime, timelineOf } from "@vedit/project";
 import {
   ChevronDown,
+  Download,
   Film,
   FolderOpen,
   LayoutGrid,
@@ -20,6 +21,7 @@ import { Button, IconButton } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
 import { importClips } from "../../lib/import.ts";
 import { isMac } from "../../lib/keys.ts";
+import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { useJobs } from "../../state/jobs.ts";
 import { edit, redo, undo, useDoc, useProject } from "../../state/project.ts";
 import { setUi } from "../../state/ui.ts";
@@ -54,6 +56,7 @@ export function Header() {
           {format.width > format.height ? "16:9" : format.width === format.height ? "1:1" : "9:16"}
         </span>
         <IndexingPill />
+        <DownloadsPill />
       </div>
 
       <div className="no-drag flex flex-1 basis-0 items-center justify-end gap-2">
@@ -72,6 +75,30 @@ export function Header() {
         </Button>
       </div>
     </header>
+  );
+}
+
+/** "Downloading speech recognition · 42%": what the app is fetching for itself, while it does. */
+function DownloadsPill() {
+  // The list itself from the store (a filtered copy each render would loop), then what's still running.
+  const all = useDownloads((s) => s.list);
+  useEffect(followDownloads, []);
+  const list = all.filter((d) => d.state === "running");
+  if (!list.length) return null;
+  // Several at once read as one: the sound model's weights and its labels are one thing to wait for.
+  const labels = [...new Set(list.map((d) => d.label))];
+  const total = list.reduce((n, d) => n + d.bytes, 0);
+  const done = list.reduce((n, d) => n + d.bytes * d.fraction, 0);
+  const fraction = total ? done / total : list.reduce((n, d) => n + d.fraction, 0) / list.length;
+  return (
+    <span
+      title={list.map((d) => `${d.label}: ${Math.round(d.fraction * 100)}% of ${size(d.bytes)}`).join("\n")}
+      className="flex items-center gap-1.5 rounded-full bg-button px-2.5 py-1 text-fg-2 animate-fade-in"
+    >
+      <Download size={12} className="text-muted" />
+      Downloading {labels.length === 1 ? labels[0]!.toLowerCase() : `${labels.length} things`} ·{" "}
+      {Math.round(fraction * 100)}%
+    </span>
   );
 }
 

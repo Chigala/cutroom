@@ -646,10 +646,13 @@ function Extras({ keys }: { keys: AgentStatus["keys"] }) {
           })}
         </div>
       </Copy>
-      <Stage tall>
-        {/* One per power-up, so switching starts it fresh. */}
-        <Demo key={extra.demo} name={extra.demo} title={extra.title} />
-      </Stage>
+      {/* Stays in view while the steps scroll beside it. */}
+      <div className="sticky top-0 self-start">
+        <Stage tall>
+          {/* One per power-up, so switching starts it fresh. */}
+          <Demo key={extra.demo} name={extra.demo} title={extra.title} />
+        </Stage>
+      </div>
     </>
   );
 }

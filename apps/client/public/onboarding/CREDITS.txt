@@ -1,0 +1,8 @@
+Onboarding demo footage, from Pexels (https://www.pexels.com/license/): free to use and edit.
+The people shown don't endorse Cutroom.
+
+Talking: https://www.pexels.com/video/36931662/
+Reaction: https://www.pexels.com/video/9032413/ (Alena Darmel)
+B-roll: https://www.pexels.com/video/28889095/ (Ammad Rasool)
+
+Sound effects: synthesized by Cutroom (packages/media/src/sfx.ts).

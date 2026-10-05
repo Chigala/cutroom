@@ -10,6 +10,7 @@ import {
   ArrowRightIcon,
   ArrowSquareOutIcon,
   CaretDownIcon,
+  CheckCircleIcon,
   CheckIcon,
   CircleNotchIcon,
   FilmSlateIcon,
@@ -21,16 +22,21 @@ import {
 } from "@phosphor-icons/react";
 import type { AgentStatus, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { host } from "../../lib/host.ts";
 import { checkClaude, followClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { saveSettings, useSettings } from "../../state/settings.ts";
+import { SignInHelp } from "../settings/ClaudeSetup.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "./StylePicker.tsx";
 
 /** Which keys are saved: read when onboarding opens and again after each one is saved. */
-const useSavedKeys = create<{ keys: AgentStatus["keys"] }>()(() => ({ keys: undefined }));
+const useSavedKeys = create<{
+  keys: AgentStatus["keys"];
+  /** Keys saved during onboarding: their last characters and how the check went, to show them saved. */
+  just: Partial<Record<KeyProvider, { tail: string; result: KeyCheck }>>;
+}>()(() => ({ keys: undefined, just: {} }));
 const reloadKeys = async () => useSavedKeys.setState({ keys: (await host.agent.status()).keys });
 
 const STEPS = ["welcome", "privacy", "claude", "style", "captions", "extras", "ready"] as const;
@@ -249,6 +255,7 @@ function ClaudeStep() {
               {task?.message ?? "Working on it…"}
             </span>
           )}
+          {busy && task?.kind === "login" && <SignInHelp />}
           {task?.command && (
             <code className="select-all rounded-lg bg-sunken px-3 py-2 font-mono text-xs text-fg">
               {task.command}
@@ -746,13 +753,28 @@ const CHECKED: Record<KeyCheck, string> = {
 };
 
 /** A key field that tries the key with its service, and saves it when it works. */
+/** What a saved key's check said, under "Key saved". */
+const SAVED_NOTE: Partial<Record<KeyCheck, string>> = {
+  limited: "It works, but it's over its limit right now.",
+  offline: "Couldn't reach the service to check it; it'll be tried when it's used.",
+};
+
+/**
+ * A key: pasted, checked and saved in one go (on paste, on leaving the box, or Check), then shown as
+ * saved, with its last characters, rather than an empty box again. Replace swaps it for another.
+ */
 function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved" | null }) {
+  const just = useSavedKeys((s) => s.just[provider]);
   const [typed, setTyped] = useState("");
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<KeyCheck | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  // Checked and saved as soon as it's pasted (or the box is left), not only on Check: a key pasted and
-  // left behind when the section closes is still saved. Then every section knows it's there.
+  const [replacing, setReplacing] = useState(false);
+  const box = useRef<HTMLInputElement>(null);
+  // Replacing a key: straight to the box.
+  useEffect(() => {
+    if (replacing) box.current?.focus();
+  }, [replacing]);
   const check = async (value = typed) => {
     const key = value.trim();
     if (!key || checking) return;
@@ -763,7 +785,12 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
     if (r !== "invalid") {
       try {
         await saveSettings({ [KEY_FIELD[provider]]: key } as Partial<Settings>);
+        useSavedKeys.setState((s) => ({
+          just: { ...s.just, [provider]: { tail: key.slice(-4), result: r } },
+        }));
         await reloadKeys();
+        setTyped("");
+        setReplacing(false);
       } catch (err) {
         setFailed((err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
       }
@@ -771,17 +798,38 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
     setChecking(false);
     setResult(r);
   };
-  if (source && result === null)
+
+  if (source && !replacing) {
+    const note = just && SAVED_NOTE[just.result];
     return (
-      <span className="flex items-center gap-1.5 text-xs text-ok">
-        <CheckIcon size={12} /> Already added
-      </span>
+      <div className="flex items-center gap-2.5 rounded-xl border border-ok/30 bg-ok/10 px-3 py-2.5 animate-rise">
+        <CheckCircleIcon size={18} weight="fill" className="shrink-0 text-ok" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[13px] font-medium text-fg">
+            Key saved
+            {just && <span className="ml-2 font-mono text-xs font-normal text-muted">••••{just.tail}</span>}
+          </span>
+          {note && <span className="text-xs text-muted">{note}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setReplacing(true);
+            setResult(null);
+          }}
+          className="shrink-0 rounded-lg px-2 py-1 text-xs text-muted transition-colors hover:bg-button hover:text-fg"
+        >
+          Replace
+        </button>
+      </div>
     );
+  }
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex gap-1.5">
         <input
           value={typed}
+          ref={box}
           onChange={(e) => {
             setTyped(e.target.value);
             setResult(null);
@@ -796,11 +844,12 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Enter") void check();
+            if (e.key === "Escape" && replacing) setReplacing(false);
           }}
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder="Paste your key"
+          placeholder={replacing ? "Paste the new key" : "Paste your key"}
           aria-label={`${provider} API key`}
           className="min-w-0 flex-1 rounded-xl border border-line-strong bg-sunken px-3 py-2 font-mono text-xs text-fg outline-none transition-colors focus:border-fg/50"
         />
@@ -813,23 +862,32 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
           {checking ? <CircleNotchIcon size={13} className="animate-spin" /> : "Check"}
         </button>
       </div>
-      {failed ? (
+      {checking ? (
+        <span className="text-xs text-muted">Checking it with {PROVIDER_NAME[provider]}…</span>
+      ) : failed ? (
         <span className="text-xs text-bad">Couldn't save it: {failed}</span>
       ) : (
-        result && (
-          <span
-            className={clsx(
-              "text-xs",
-              result === "invalid" ? "text-bad" : result === "ok" ? "text-ok" : "text-muted",
-            )}
-          >
-            {CHECKED[result]}
-          </span>
-        )
+        result === "invalid" && <span className="text-xs text-bad">{CHECKED.invalid}</span>
+      )}
+      {replacing && (
+        <button
+          type="button"
+          onClick={() => setReplacing(false)}
+          className="self-start text-xs text-faint transition-colors hover:text-fg-2"
+        >
+          Keep the saved key
+        </button>
       )}
     </div>
   );
 }
+
+const PROVIDER_NAME: Record<KeyProvider, string> = {
+  pixabay: "Pixabay",
+  pexels: "Pexels",
+  klipy: "KLIPY",
+  groq: "Groq",
+};
 
 /** The same edit without and with what a power-up adds, side by side as a toggle. */
 function Demo({ name, title }: { name: string; title: string }) {

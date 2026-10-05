@@ -9,7 +9,7 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
 import { app } from "electron";
@@ -74,7 +74,9 @@ const executable = (file: string) => {
 
 /**
  * PATH as the user's terminal has it. An app opened from the Dock gets a bare PATH, without
- * ~/.local/bin, Homebrew or nvm, where Claude Code is installed. Read once from a login shell.
+ * ~/.local/bin, Homebrew or nvm, where Claude Code is installed. Read once from a login shell, with
+ * CLAUDE_CONFIG_DIR when the shell sets one: Claude Code signs in, in the terminal, wherever that says,
+ * and the app has to look in the same place.
  */
 let shellPath: Promise<string> | null = null;
 function userPath(): Promise<string> {
@@ -83,15 +85,38 @@ function userPath(): Promise<string> {
     const shellBin = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
     execFile(
       shellBin,
-      ["-ilc", 'printf "__VEDIT_PATH__%s__VEDIT_PATH__" "$PATH"'],
+      [
+        "-ilc",
+        'printf "__VEDIT_PATH__%s__VEDIT_PATH__" "$PATH"; printf "__VEDIT_CFG__%s__VEDIT_CFG__" "$CLAUDE_CONFIG_DIR"',
+      ],
       { timeout: 5000, encoding: "utf8", env: { ...process.env, DISABLE_AUTO_UPDATE: "true" } },
       (_err, stdout) => {
         const found = /__VEDIT_PATH__(.*?)__VEDIT_PATH__/s.exec(stdout ?? "")?.[1];
+        const config = /__VEDIT_CFG__(.*?)__VEDIT_CFG__/s.exec(stdout ?? "")?.[1]?.trim();
+        if (config && !process.env.CLAUDE_CONFIG_DIR) {
+          process.env.CLAUDE_CONFIG_DIR = config;
+          console.log(`[claude] Claude Code's settings are in ${config} (from your shell)`);
+        }
         resolve([found, process.env.PATH].filter(Boolean).join(path.delimiter));
       },
     );
   });
   return shellPath;
+}
+
+/**
+ * Who the user is, for Claude Code: it finds its saved sign-in in the keychain under the user's name
+ * ($USER), and without it says "not signed in" even when it is. Set when the app was started without.
+ */
+function ensureUser(): void {
+  try {
+    const me = userInfo();
+    process.env.USER ||= me.username;
+    process.env.LOGNAME ||= me.username;
+    process.env.HOME ||= me.homedir;
+  } catch {
+    // No user record (a container): Claude Code makes do.
+  }
 }
 
 /** Where installers put it, in case the shell didn't say. */
@@ -180,9 +205,30 @@ const PROVIDERS: Record<string, string> = {
   gateway: "your company's gateway",
 };
 
+/** The last sign-in check, so the log says when it changes (it runs every few seconds while waiting). */
+let lastSeen = "";
+function note(seen: string, level: "log" | "warn" = "log"): void {
+  if (seen === lastSeen) return;
+  lastSeen = seen;
+  console[level](`[claude] ${seen}`);
+}
+
 /** Who Claude Code is signed in as (`claude auth status`, which reads its saved login, no request). */
 async function signIn(file: string): Promise<Pick<ClaudeStatus, "signedIn" | "method" | "email" | "org">> {
   const out = await run(file, ["auth", "status", "--json"], 15_000);
+  const result = await read(out);
+  note(
+    result.signedIn === null
+      ? `sign-in check couldn't tell (exit ${out.code}): ${(out.stderr || out.stdout).trim().slice(0, 300) || "no output"}`
+      : `sign-in check: ${result.signedIn ? `signed in${result.method ? ` (${result.method})` : ""}` : "not signed in"}`,
+    result.signedIn === null ? "warn" : "log",
+  );
+  return result;
+}
+
+async function read(out: {
+  stdout: string;
+}): Promise<Pick<ClaudeStatus, "signedIn" | "method" | "email" | "org">> {
   try {
     const s = JSON.parse(out.stdout) as {
       loggedIn?: boolean;
@@ -229,6 +275,7 @@ const missing: ClaudeStatus = {
 };
 
 async function look(): Promise<ClaudeStatus> {
+  ensureUser();
   resolvedPath = await userPath();
   const custom = override || (await getSettings()).claudePath.trim();
   const pick = async (): Promise<{
@@ -363,6 +410,7 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
         const done = now?.signedIn === true && (before === null || (now.email ?? "signed in") !== before);
         if (done || Date.now() - started > 15 * 60_000) {
           watching = null;
+          if (!done) console.warn("[claude] stopped waiting for the sign-in after 15 minutes");
           emit(
             done
               ? { kind: "login", state: "done" }

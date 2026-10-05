@@ -6,7 +6,7 @@
 
 import { ArrowClockwiseIcon, CheckCircleIcon, CircleNotchIcon, WarningIcon } from "@phosphor-icons/react";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
 import { checkClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
@@ -186,6 +186,32 @@ function TaskProgress({ task }: { task: ClaudeTask }) {
           Claude Code signs you in itself, in your browser. This updates when it's done.
         </span>
       )}
+      {task.kind === "login" && <SignInHelp />}
+    </div>
+  );
+}
+
+/**
+ * A sign-in that's taking a while: usually Claude Code is waiting in the terminal for a code from the
+ * browser page. Says so, with a way to look again.
+ */
+export function SignInHelp() {
+  const [slow, setSlow] = useState(false);
+  const checking = useClaude((s) => s.checking);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 45_000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!slow) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-line-strong bg-raised px-3 py-2.5 text-xs leading-relaxed text-muted animate-fade-in">
+      <span>
+        Signed in in the browser, but it hasn't shown up here? Look at the Terminal window: if it asks for a
+        code, copy the one the browser shows and paste it there, then press Return.
+      </span>
+      <Button size="sm" className="self-start" disabled={checking} onClick={() => void checkClaude(true)}>
+        {checking ? "Checking…" : "Check again"}
+      </Button>
     </div>
   );
 }

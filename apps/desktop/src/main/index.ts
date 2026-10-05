@@ -1,3 +1,5 @@
+// Before anything else: the data folder may need moving from the app's former name.
+import "./rename.ts";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readyBrowser } from "@vedit/render";
@@ -46,7 +48,7 @@ app.enableSandbox();
 if (process.platform === "linux" && process.env.APPIMAGE && userNamespacesBlocked())
   app.commandLine.appendSwitch("no-sandbox");
 // Windows groups the taskbar and notifications by this.
-if (process.platform === "win32") app.setAppUserModelId("com.vedit.desktop");
+if (process.platform === "win32") app.setAppUserModelId("dev.durableagent.cutroom");
 
 // The benchmark (bench.ts) runs headless with its own settings and data, beside a running editor.
 const BENCH = process.env.VEDIT_BENCH;

@@ -1,5 +1,5 @@
 /**
- * The asset library: the shared folder (~/Movies/Video Editor Library unless Settings says otherwise)
+ * The asset library: the shared folder (Cutroom Library in the videos folder unless Settings says otherwise)
  * and the open project's assets/ folder. Both are watched; files that arrive are catalogued into the
  * folder's library.json: a sound's tags from the on-device sound classifier, a track's tempo, what a
  * meme shows (described by Claude). Names, notes and tags someone wrote are never overwritten.
@@ -31,7 +31,7 @@ type Scope = "library" | "project";
 /** The folders a new library starts with, by kind. */
 const FOLDERS: Record<AssetKind, string> = { sound: "Sounds", music: "Music", meme: "Memes" };
 const ABOUT = "About this folder.txt";
-const ABOUT_TEXT = `Video Editor's asset library.
+const ABOUT_TEXT = `Cutroom's asset library.
 
 Put the sounds, music and memes you want in your edits here:
   Sounds/  sound effects: booms, whooshes, stings, "bruh"...
@@ -48,7 +48,9 @@ agent always uses them. Every project can also have its own assets/ folder for o
 const MUSIC_SECONDS = 45;
 
 /** In the user's videos folder: Movies on a Mac, Videos on Windows and Linux. */
-export const defaultLibraryDir = () => path.join(app.getPath("videos"), "Video Editor Library");
+export const defaultLibraryDir = () => path.join(app.getPath("videos"), "Cutroom Library");
+/** Where the library lived when the app was called Video Editor: moved to the new name once (rename.ts). */
+export const formerLibraryDir = () => path.join(app.getPath("videos"), "Video Editor Library");
 
 interface Root {
   readonly scope: Scope;
@@ -110,7 +112,19 @@ export class Library {
 
   /** Starts on the shared library (made if missing). The project's assets/ come with setProject. */
   async start(): Promise<void> {
-    const dir = (await getSettings()).libraryDir.trim() || defaultLibraryDir();
+    const custom = (await getSettings()).libraryDir.trim();
+    // The library made under the app's former name moves to the new one, once (if nothing's there yet).
+    if (!custom && existsSync(formerLibraryDir()) && !existsSync(defaultLibraryDir())) {
+      try {
+        await rename(formerLibraryDir(), defaultLibraryDir());
+        console.log(`[library] moved ${formerLibraryDir()} to ${defaultLibraryDir()}`);
+      } catch (err) {
+        console.warn(`[library] couldn't move the library to its new name: ${(err as Error).message}`);
+      }
+    }
+    // (The former folder only if moving it failed.)
+    const former = !existsSync(defaultLibraryDir()) && existsSync(formerLibraryDir());
+    const dir = custom || (former ? formerLibraryDir() : defaultLibraryDir());
     await this.open("library", dir.replace(/^~(?=$|[\\/])/, homedir()), true);
     this.broadcast();
   }

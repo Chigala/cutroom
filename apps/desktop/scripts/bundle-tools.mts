@@ -319,12 +319,12 @@ if (platform === "darwin") {
 // Notices: what ships, under which licence, and where its source is (the GPL asks for that).
 writeFileSync(
   path.join(out, "NOTICES.txt"),
-  `Third-party tools bundled with Video Editor
+  `Third-party tools bundled with Cutroom
 
 ffmpeg and ffprobe ${FFMPEG_VERSION}
   Licensed under the GNU General Public License v3 (built with libx264, libx265 and others).
   Unmodified builds from ${FFMPEG_SOURCE}; source: https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz
-  They run as separate programs; Video Editor calls them, it does not link them.
+  They run as separate programs; Cutroom calls them, it does not link them.
 
 whisper.cpp ${WHISPER_VERSION}
   MIT License (see whisper/LICENSE). Source: https://github.com/ggml-org/whisper.cpp/tree/v${WHISPER_VERSION}

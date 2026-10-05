@@ -194,7 +194,7 @@ export const Settings = z.object({
   showThinking: z.boolean().default(true),
   /** Claude Code to run the agent with. Empty: the one installed on this computer, else the app's own. */
   claudePath: z.string().max(1000).default(""),
-  /** The shared asset library (sounds, music, memes). Empty: ~/Movies/Video Editor Library. */
+  /** The shared asset library (sounds, music, memes). Empty: Cutroom Library in the videos folder. */
   libraryDir: z.string().max(1000).default(""),
 });
 export type Settings = z.infer<typeof Settings>;

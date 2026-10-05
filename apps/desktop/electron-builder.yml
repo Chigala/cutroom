@@ -1,5 +1,5 @@
-appId: com.vedit.desktop
-productName: Video Editor
+appId: dev.durableagent.cutroom
+productName: Cutroom
 directories:
   output: release
 files:
@@ -55,7 +55,7 @@ nsis:
   perMachine: false
 linux:
   icon: build/icon.png
-  executableName: video-editor
+  executableName: cutroom
   category: AudioVideo
   # The same, made by `pnpm tools` on Linux. glibc builds of the compositor and Claude Code.
   extraResources:

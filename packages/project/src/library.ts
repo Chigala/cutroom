@@ -1,6 +1,6 @@
 /**
  * The asset library: sounds, music and memes the user keeps for their edits. One shared library folder
- * (~/Movies/Video Editor Library by default) and, optionally, each project's own assets/ folder. Each
+ * (Cutroom Library in the videos folder by default) and, optionally, each project's own assets/ folder. Each
  * folder has a catalogue, library.json, written by the app as files arrive (what the sound classifier
  * heard, a track's tempo, what a meme shows) and edited by the user or the agent (names, tags, notes),
  * plus roles: the asset to use for "impact", "sting.awkward", "sticker.kai"...

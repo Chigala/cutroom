@@ -108,7 +108,7 @@ export function startLog(): void {
   write(
     "info",
     "main",
-    `Video Editor ${app.getVersion()} · Electron ${process.versions.electron} · ${process.platform} ${process.arch}`,
+    `Cutroom ${app.getVersion()} · Electron ${process.versions.electron} · ${process.platform} ${process.arch}`,
   );
 }
 

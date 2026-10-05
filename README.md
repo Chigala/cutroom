@@ -1,4 +1,6 @@
-# AI-native video editor
+# Cutroom
+
+An AI-native video editor.
 
 You direct, the agent edits. Drop raw footage in, and the app understands it (every word said, pauses,
 shots, beats). The agent makes the first cut on its own, and you change anything by saying what you

@@ -1,6 +1,6 @@
 {
   "name": "@vedit/desktop",
-  "productName": "Video Editor",
+  "productName": "Cutroom",
   "version": "0.1.0",
   "private": true,
   "type": "module",

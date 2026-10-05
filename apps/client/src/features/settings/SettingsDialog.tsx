@@ -630,7 +630,7 @@ function DiagnosticsPage() {
   if (!d) return null;
   const report = () =>
     [
-      `Video Editor ${d.version} · Electron ${d.electron} · ${d.os}`,
+      `Cutroom ${d.version} · Electron ${d.electron} · ${d.os}`,
       claude
         ? `Claude Code: ${claude.source}${claude.version ? ` ${claude.version}` : ""}${claude.signedIn === true ? `, signed in (${claude.method ?? "?"})` : claude.signedIn === false ? ", not signed in" : ""}`
         : "",
@@ -648,7 +648,7 @@ function DiagnosticsPage() {
       intro="What to send along when something goes wrong. API keys are never included."
     >
       <div className="flex flex-col gap-1 rounded-lg border border-line px-3 py-2.5 font-mono text-[12px] text-fg-2">
-        <span>Video Editor {d.version}</span>
+        <span>Cutroom {d.version}</span>
         <span className="text-muted">
           Electron {d.electron} · {d.os}
         </span>

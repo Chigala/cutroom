@@ -9,6 +9,7 @@ export type EditorEventName =
   | "claude"
   | "menu"
   | "library"
+  | "downloads"
   | "reload"
   | "error";
 
@@ -35,6 +36,8 @@ export const Channel = {
   agentRun: "agent:run",
   agentCancel: "agent:cancel",
   agentStatus: "agent:status",
+  downloadsState: "downloads:state",
+  downloadsPrepare: "downloads:prepare",
   libraryState: "library:state",
   libraryAdd: "library:add",
   libraryPickAndAdd: "library:pick-add",

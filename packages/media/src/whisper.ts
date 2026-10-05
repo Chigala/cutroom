@@ -3,6 +3,7 @@
  * with the app (built from source on first use where it doesn't); the model downloads once into the
  * app's tools folder (the big download, so it reports progress).
  */
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -13,11 +14,37 @@ import {
   transcribe as whisper,
 } from "@remotion/install-whisper-cpp";
 import type { TimedWord } from "@vedit/project";
+import { downloadReporter, downloadVerified } from "./downloads.ts";
 import { bundledTool } from "./exec.ts";
 
 export const WHISPER_VERSION = "1.7.5";
-export const WHISPER_MODELS = ["small.en", "medium.en", "large-v3-turbo"] as const;
+export const WHISPER_MODELS = ["small.en", "medium.en", "large-v3-turbo", "large-v3-turbo-light"] as const;
 export type WhisperModelName = (typeof WHISPER_MODELS)[number];
+
+/**
+ * "Light": the same large-v3-turbo, compressed (q5) to a third of the size. Measured on real clips:
+ * identical words on clean speech, but 14-20% of words differed on noisy streams, so it's the choice for
+ * small disks and slow connections, not the default.
+ */
+const LIGHT = {
+  url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",
+  sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+  size: 574_041_195,
+};
+
+/** Where a model's file lives, and the name whisper knows it by (Light passes for the full model). */
+const modelFile = (setup: WhisperSetup) =>
+  setup.model === "large-v3-turbo-light"
+    ? { folder: path.join(setup.dir, "light"), model: "large-v3-turbo" as const }
+    : { folder: setup.dir, model: setup.model };
+
+/** Download sizes, for the download list (whisper.cpp's own downloader reports bytes as it goes). */
+const SIZES: Record<WhisperModelName, number> = {
+  "small.en": 487_614_201,
+  "medium.en": 1_533_774_781,
+  "large-v3-turbo": 1_624_555_275,
+  "large-v3-turbo-light": LIGHT.size,
+};
 
 export interface WhisperSetup {
   /** Folder whisper.cpp lives in (it holds the models too). */
@@ -52,12 +79,33 @@ export function ensureWhisper(
       if (!shippedWhisper())
         await installWhisperCpp({ to: setup.dir, version: WHISPER_VERSION, printOutput: false });
       await mkdir(setup.dir, { recursive: true });
-      await downloadWhisperModel({
-        model: setup.model,
-        folder: setup.dir,
-        printOutput: false,
-        onProgress: (done, total) => onProgress?.("Downloading the speech model", total ? done / total : 0),
-      });
+      const report = downloadReporter(`whisper:${setup.model}`, "Speech recognition", SIZES[setup.model]);
+      const { folder, model } = modelFile(setup);
+      if (setup.model === "large-v3-turbo-light") {
+        const file = path.join(folder, `ggml-${model}.bin`);
+        if (!existsSync(file))
+          await downloadVerified(LIGHT.url, file, LIGHT.sha256, report, (f) =>
+            onProgress?.("Downloading the speech model", f),
+          );
+      } else {
+        let reported = false;
+        try {
+          await downloadWhisperModel({
+            model,
+            folder,
+            printOutput: false,
+            onProgress: (done, total) => {
+              reported = true;
+              report.progress(total ? done / total : 0);
+              onProgress?.("Downloading the speech model", total ? done / total : 0);
+            },
+          });
+        } catch (err) {
+          if (reported) report.failed(err);
+          throw err;
+        }
+        if (reported) report.done();
+      }
     })().catch((err: unknown) => {
       ready.delete(key);
       throw err;
@@ -145,9 +193,9 @@ export async function transcribeWords(
     inputPath: wav,
     // The app's whisper.cpp when it ships one; the model always lives in setup.dir.
     whisperPath: shippedWhisper() ?? setup.dir,
-    modelFolder: setup.dir,
+    modelFolder: modelFile(setup).folder,
     whisperCppVersion: WHISPER_VERSION,
-    model: setup.model,
+    model: modelFile(setup).model,
     tokenLevelTimestamps: true,
     language: (setup.model.endsWith(".en") ? "en" : setup.language) as Language,
     splitOnWord: true,

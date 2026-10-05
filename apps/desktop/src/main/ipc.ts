@@ -46,6 +46,9 @@ export function registerIpc(service: ProjectService): void {
     [Channel.agentRun]: (req) => service.runAgent(req),
     [Channel.agentCancel]: (runId) => service.cancel(runId),
     [Channel.agentStatus]: () => service.agentStatus(),
+    [Channel.downloadsState]: () => service.downloads.state(),
+    [Channel.downloadsPrepare]: (what) =>
+      service.downloads.prepare(what === "models" ? "models" : "transcription"),
     [Channel.libraryState]: () => service.library.state(),
     [Channel.libraryAdd]: async (paths, scope) => {
       const files = z.array(z.string().max(2000)).max(500).parse(paths);

@@ -8,7 +8,7 @@ import path from "node:path";
 import { app, safeStorage } from "electron";
 import { addSecret } from "./log.ts";
 
-export const SECRET_FIELDS = ["klipyKey", "pexelsKey", "pixabayKey", "freesoundKey"] as const;
+export const SECRET_FIELDS = ["klipyKey", "pexelsKey", "pixabayKey", "freesoundKey", "groqKey"] as const;
 export type SecretField = (typeof SECRET_FIELDS)[number];
 export type Secrets = Partial<Record<SecretField, string>>;
 

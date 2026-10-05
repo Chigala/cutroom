@@ -7,10 +7,11 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type * as Ort from "onnxruntime-node";
+import { downloadReporter, downloadVerified } from "./downloads.ts";
 
 export interface ModelFile {
   readonly file: string;
@@ -77,6 +78,16 @@ export const MODELS = {
 
 export type ModelName = keyof typeof MODELS;
 
+/** What each model is for, as the download list says it. */
+const PURPOSE: Record<ModelName, string> = {
+  faces: "Face detection",
+  people: "People tracking",
+  sounds: "Sound recognition",
+  soundsData: "Sound recognition",
+  soundLabels: "Sound recognition",
+  cutouts: "Person cutouts",
+};
+
 /** Platforms ONNX Runtime ships for. */
 const ONNX_PLATFORMS = ["darwin-arm64", "darwin-x64", "win32-x64", "win32-arm64", "linux-x64", "linux-arm64"];
 
@@ -98,6 +109,8 @@ const sha256 = async (file: string) =>
     .digest("hex");
 
 const fetching = new Map<string, Promise<string>>();
+/** Files checked against their hash this session: a 330 MB model isn't read again for every clip. */
+const verified = new Set<string>();
 
 /** A model's file, downloaded and checked the first time it's needed (concurrent callers share one). */
 export function ensureModel(name: ModelName, onProgress?: (fraction: number) => void): Promise<string> {
@@ -105,25 +118,17 @@ export function ensureModel(name: ModelName, onProgress?: (fraction: number) => 
   const file = path.join(modelsDir(), m.file);
   let hit = fetching.get(file);
   if (!hit) {
+    if (verified.has(file) && existsSync(file)) return Promise.resolve(file);
     hit = (async () => {
-      if (existsSync(file) && (await sha256(file)) === m.sha256) return file;
-      await mkdir(path.dirname(file), { recursive: true });
-      const res = await fetch(m.url);
-      if (!res.ok || !res.body) throw new Error(`Couldn't download the ${name} model (${res.status})`);
-      const chunks: Uint8Array[] = [];
-      let got = 0;
-      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-        chunks.push(chunk);
-        got += chunk.length;
-        onProgress?.(Math.min(1, got / m.size));
-      }
-      const part = `${file}.part`;
-      await writeFile(part, Buffer.concat(chunks));
-      if ((await sha256(part)) !== m.sha256) {
-        await rm(part, { force: true });
-        throw new Error(`The ${name} model didn't match its checksum; not using it`);
-      }
-      await rename(part, file);
+      if (!(existsSync(file) && (await sha256(file)) === m.sha256))
+        await downloadVerified(
+          m.url,
+          file,
+          m.sha256,
+          downloadReporter(`model:${name}`, PURPOSE[name], m.size),
+          onProgress,
+        );
+      verified.add(file);
       return file;
     })().finally(() => fetching.delete(file));
     fetching.set(file, hit);

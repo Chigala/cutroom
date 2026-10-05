@@ -27,6 +27,10 @@ export function createWebHost(): EditorApi {
     model: "claude-opus-5-5",
     effort: "medium",
     whisperModel: "large-v3-turbo",
+    transcriber: "local",
+    groqKey: "",
+    // The browser demo has nothing to set up.
+    onboarded: true,
     language: "en",
     glossary: [],
     autoFirstCut: true,
@@ -117,6 +121,10 @@ export function createWebHost(): EditorApi {
       },
       cancel: async () => {},
       status: async () => ({ backend: "subscription", model: settings.model, apiKey: false }),
+    },
+    downloads: {
+      state: async () => [],
+      prepare: async () => {},
     },
     library: {
       state: async () => ({ dir: "", projectDir: null, assets: [], roles: {}, pending: 0 }),

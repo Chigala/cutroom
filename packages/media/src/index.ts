@@ -2,6 +2,7 @@ export * from "./audio.ts";
 export { type BeatMap, beatMap } from "./beats.ts";
 export * from "./clean.ts";
 export * from "./derived.ts";
+export { type DownloadState, onDownload } from "./downloads.ts";
 export * from "./exec.ts";
 export { detectFace, type Face } from "./face.ts";
 export * from "./hear.ts";

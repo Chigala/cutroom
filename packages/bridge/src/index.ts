@@ -171,7 +171,15 @@ export const Settings = z.object({
   backend: z.enum(["auto", "api", "subscription"]).default("auto"),
   model: z.string().min(1).max(80).default("claude-opus-5-5"),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
-  whisperModel: z.enum(["small.en", "medium.en", "large-v3-turbo"]).default("large-v3-turbo"),
+  whisperModel: z
+    .enum(["small.en", "medium.en", "large-v3-turbo", "large-v3-turbo-light"])
+    .default("large-v3-turbo"),
+  /** Where speech becomes words: whisper on this computer, or Groq's (the same model, in the cloud). */
+  transcriber: z.enum(["local", "groq"]).default("local"),
+  /** Groq's API key (console.groq.com), for transcriber "groq". */
+  groqKey: z.string().max(200).default(""),
+  /** First launch done (or skipped): the welcome and setup screens don't show again. */
+  onboarded: z.boolean().default(false),
   language: z.string().min(2).max(8).default("en"),
   /** Words whisper should spell right: brand names, people, jargon. */
   glossary: z.array(z.string().max(60)).max(200).default([]),
@@ -207,7 +215,9 @@ export interface AgentStatus {
    * Where each media key comes from (never its value): saved in the app (kept in the keychain), the
    * environment or a .env file, or nowhere.
    */
-  readonly keys?: Readonly<Record<"klipy" | "pexels" | "pixabay" | "freesound", "saved" | "env" | null>>;
+  readonly keys?: Readonly<
+    Record<"klipy" | "pexels" | "pixabay" | "freesound" | "groq", "saved" | "env" | null>
+  >;
 }
 
 /** A warning or error the app logged this session (API keys taken out). */
@@ -271,6 +281,22 @@ export interface ClaudeStatus {
 }
 
 /** Installing, signing in to or updating Claude Code, as it goes. */
+/** A download the app makes for itself (speech recognition, the open models), as it goes. */
+export interface DownloadState {
+  /** "whisper:large-v3-turbo", "model:sounds"... */
+  readonly id: string;
+  /** What it's for: "Speech recognition". */
+  readonly label: string;
+  /** Total size in bytes; 0 when unknown. */
+  readonly bytes: number;
+  readonly fraction: number;
+  readonly state: "running" | "done" | "failed";
+  readonly error?: string;
+}
+
+/** What onboarding can start downloading ahead of the first import. */
+export type DownloadTarget = "transcription" | "models";
+
 export interface ClaudeTask {
   readonly kind: "install" | "login" | "update";
   readonly state: "running" | "done" | "failed";
@@ -375,6 +401,11 @@ export interface EditorApi {
     cancel(runId: string): Promise<void>;
     status(): Promise<AgentStatus>;
   };
+  /** Downloads the app makes for itself, and starting them ahead of time. */
+  readonly downloads: {
+    state(): Promise<DownloadState[]>;
+    prepare(what: DownloadTarget): Promise<void>;
+  };
   readonly library: {
     state(): Promise<LibraryState>;
     /** Copies files into the shared library (or the project's assets/), each into its kind's folder. */
@@ -458,6 +489,7 @@ export interface EditorEvents {
   claude: ClaudeTask;
   menu: { action: MenuAction };
   library: LibraryState;
+  downloads: DownloadState[];
   /** The host's doc diverged from ours; replace local state. */
   reload: ProjectSnapshot;
   error: { message: string };

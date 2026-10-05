@@ -37,6 +37,10 @@ const api: EditorApi = {
     cancel: (runId) => invoke(Channel.agentCancel, runId),
     status: () => invoke(Channel.agentStatus),
   },
+  downloads: {
+    state: () => invoke(Channel.downloadsState),
+    prepare: (what) => invoke(Channel.downloadsPrepare, what),
+  },
   library: {
     state: () => invoke(Channel.libraryState),
     add: (paths, scope) => invoke(Channel.libraryAdd, paths, scope),

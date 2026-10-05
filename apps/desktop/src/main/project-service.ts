@@ -89,6 +89,7 @@ import { z } from "zod";
 import { capturePage } from "./capture.ts";
 import { claudeStatus, claudeTasks } from "./claude.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
+import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
@@ -118,6 +119,7 @@ export class ProjectService {
   readonly versions: Versions;
   /** The asset library: the shared folder and the open project's assets/. */
   readonly library = new Library((state) => this.emit("library", state));
+  readonly downloads = new Downloads((list) => this.emit("downloads", list));
   /** Installing, signing in to and updating Claude Code. */
   readonly claude = claudeTasks((t) => this.emit("claude", t));
 
@@ -876,6 +878,7 @@ export class ProjectService {
         pexels: k.pexelsKey ? "saved" : env.PEXELS_API_KEY ? "env" : null,
         pixabay: k.pixabayKey ? "saved" : env.PIXABAY_API_KEY ? "env" : null,
         freesound: k.freesoundKey ? "saved" : env.FREESOUND_API_KEY ? "env" : null,
+        groq: k.groqKey ? "saved" : env.GROQ_API_KEY ? "env" : null,
       },
     };
   }

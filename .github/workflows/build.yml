@@ -1,0 +1,67 @@
+# Installers for macOS (Apple silicon), Windows (x64) and Linux (x64), each built on its own system with
+# its own bundled tools. Run it by hand (Actions → Build installers → Run workflow) or by pushing a tag
+# like v0.2.0. The installers are unsigned for now: they appear as downloadable artifacts of the run.
+name: Build installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon)
+            os: macos-14
+            # Unsigned, but consistently ad-hoc signed so Gatekeeper's "Open Anyway" works.
+            args: --mac --arm64 -c.mac.identity=- -c.mac.hardenedRuntime=false
+            files: apps/desktop/release/*.dmg
+          - name: Windows (x64)
+            os: windows-2022
+            args: --win --x64
+            files: apps/desktop/release/*.exe
+          - name: Linux (x64)
+            # The oldest supported Ubuntu: what's built here runs on newer systems, not the other way round.
+            os: ubuntu-22.04
+            args: --linux --x64
+            files: |
+              apps/desktop/release/*.AppImage
+              apps/desktop/release/*.deb
+    runs-on: ${{ matrix.os }}
+    env:
+      # No signing certificates yet: don't go looking for them.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Downloads and whisper.cpp's source, kept between runs so rebuilds are quick.
+      - uses: actions/cache@v4
+        with:
+          path: apps/desktop/.tmp/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/bundle-tools.mts', 'packages/media/src/whisper.ts', 'packages/media/src/clean.ts') }}
+
+      - name: Build the app
+        run: pnpm --filter @vedit/desktop build
+      - name: Bundle ffmpeg, whisper and the voice cleaner
+        run: pnpm --filter @vedit/desktop tools
+      - name: Stage the runtime packages
+        run: pnpm --filter @vedit/desktop runtime-deps
+      - name: Package
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --config electron-builder.yml --publish never ${{ matrix.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error

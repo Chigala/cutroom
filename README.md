@@ -37,6 +37,19 @@ brew install ffmpeg
 To package the app with its own ffmpeg, whisper and audio tools (so users install nothing), run
 `pnpm --filter @vedit/desktop tools` once (needs Xcode's command line tools and cmake).
 
+## Installers
+
+`pnpm dist` builds the installer for the system you're on: a .dmg on macOS, an .exe installer on
+Windows, an AppImage and a .deb on Linux. First run `pnpm --filter @vedit/desktop tools` on that same
+system: it downloads ffmpeg and the voice cleaner (version-pinned and checksum-verified) and compiles
+whisper.cpp. That needs cmake and a C++ compiler: Xcode's command line tools on macOS, Visual Studio's
+"Desktop development with C++" on Windows, `build-essential` on Linux.
+
+On GitHub, the **Build installers** workflow (`.github/workflows/build.yml`) builds all three on
+their own systems, from the Actions tab or when a `v*` tag is pushed, and attaches them to the run.
+They aren't signed yet, so macOS asks for "Open Anyway" (System Settings → Privacy & Security) and
+Windows shows a SmartScreen warning ("More info" → "Run anyway").
+
 ### Windows
 
 ```powershell
@@ -73,9 +86,10 @@ inside the distro, and:
 |---|---|---|---|
 | Editing, agent, captions, graphics, music, export | yes | yes* | yes* |
 | Whisper transcription | GPU (Metal) | downloads on first import* | built on first import (CPU) |
-| Face framing, tracking, sound recognition, voice cleanup | yes | not yet | not yet |
+| Voice cleanup (DeepFilterNet) | yes | yes* | yes* |
+| Face framing, tracking, sound recognition | yes | not yet | not yet |
 | Cutouts (text behind the person, background changes) | yes | not yet | not yet |
-| Packaged installer with bundled tools | yes | not yet | not yet |
+| Packaged installer with bundled tools | yes | yes* | yes* |
 
 The macOS-only features use Apple's frameworks. Cross-platform versions are planned.
 

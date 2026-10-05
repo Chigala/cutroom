@@ -9,3 +9,12 @@ export const isWsl =
 
 /** A folder on a Windows drive, seen from WSL (/mnt/c/...): slow, and it never reports changes. */
 export const onWindowsDrive = (dir: string) => isWsl && /^\/mnt\/[a-z]\//i.test(dir);
+
+/** Ubuntu 24.04+ (AppArmor) refuses unprivileged user namespaces, which Chromium's sandbox falls back on. */
+export function userNamespacesBlocked(): boolean {
+  try {
+    return readFileSync("/proc/sys/kernel/apparmor_restrict_unprivileged_userns", "utf8").trim() === "1";
+  } catch {
+    return false;
+  }
+}

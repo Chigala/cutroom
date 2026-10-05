@@ -6,6 +6,7 @@ import { runBench } from "./bench.ts";
 import { claudeStatus } from "./claude.ts";
 import { registerIpc } from "./ipc.ts";
 import { logWindow, startLog } from "./log.ts";
+import { userNamespacesBlocked } from "./platform.ts";
 import { ProjectService } from "./project-service.ts";
 import { here, registerAppProtocol, registerMediaProtocol, registerSchemes } from "./protocols.ts";
 import { APP_ORIGIN, DEV_SERVER_URL, harden } from "./security.ts";
@@ -39,6 +40,13 @@ if (!process.env.VEDIT_TOOLS) {
 
 registerSchemes();
 app.enableSandbox();
+// An AppImage can't carry Chromium's setuid sandbox helper, and Ubuntu 24.04+ blocks its fallback
+// (unprivileged user namespaces) for apps AppArmor doesn't know: the app wouldn't start at all. Only
+// there, it runs without Chromium's sandbox (the .deb installs the helper and keeps it).
+if (process.platform === "linux" && process.env.APPIMAGE && userNamespacesBlocked())
+  app.commandLine.appendSwitch("no-sandbox");
+// Windows groups the taskbar and notifications by this.
+if (process.platform === "win32") app.setAppUserModelId("com.vedit.desktop");
 
 // The benchmark (bench.ts) runs headless with its own settings and data, beside a running editor.
 const BENCH = process.env.VEDIT_BENCH;

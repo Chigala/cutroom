@@ -18,6 +18,23 @@ export const DEEP_FILTER_BINARIES: Partial<
     name: `deep-filter-${DEEP_FILTER_VERSION}-aarch64-apple-darwin`,
     sha256: "4601e7f4e4c03e59a4c5b5000216ef3add3e808799cfccd95e14e83ea4611081",
   },
+  "darwin-x64": {
+    name: `deep-filter-${DEEP_FILTER_VERSION}-x86_64-apple-darwin`,
+    sha256: "d3be84003acb7c23e738ad7f70a158ec779a8d233a82e7fa3e717d112eb5b50f",
+  },
+  "win32-x64": {
+    name: `deep-filter-${DEEP_FILTER_VERSION}-x86_64-pc-windows-msvc.exe`,
+    sha256: "75e11fa16445f560cb6b021521ddb89e89270d13b83089705d98776f58fd7915",
+  },
+  // Static (musl): runs on any x64 distribution.
+  "linux-x64": {
+    name: `deep-filter-${DEEP_FILTER_VERSION}-x86_64-unknown-linux-musl`,
+    sha256: "70775e251eee44c0f2451a1e833326cf8bcbbe304d3e7cd12851e6fce72ef7da",
+  },
+  "linux-arm64": {
+    name: `deep-filter-${DEEP_FILTER_VERSION}-aarch64-unknown-linux-gnu`,
+    sha256: "14e02a1c0028f3ca0bdf83b62b3336e56ba0556894ef295a95e8573f06557166",
+  },
 };
 
 /** How hard to clean: the most it may take out of the sound, dB. Off leaves the voice as recorded. */

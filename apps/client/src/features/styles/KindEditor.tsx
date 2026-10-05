@@ -4,6 +4,8 @@
  * your own shots as you type, or describe what you want and Claude writes it. Saving is one undoable
  * update, written to the file like any other edit.
  */
+
+import { ArrowLeftIcon, CheckIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import type { PlayerRef } from "@remotion/player";
 import {
   STARTER_EFFECTS,
@@ -15,7 +17,6 @@ import {
   validateStyle,
 } from "@vedit/project";
 import { clsx } from "clsx";
-import { ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { STYLE_COLL, STYLE_FOLDER, styleName, stylePreview } from "../../lib/style-preview.ts";
@@ -168,7 +169,7 @@ export function KindEditor() {
         </div>
         <div className="no-drag flex gap-2">
           <Button onClick={close}>
-            <ArrowLeft size={14} /> Back to editor
+            <ArrowLeftIcon size={14} /> Back to editor
           </Button>
           {kind === "grade" && saved && !inUse && (
             <Button
@@ -202,7 +203,7 @@ export function KindEditor() {
               onClick={() => setCreating(true)}
               className="rounded p-1 text-muted hover:bg-button hover:text-fg"
             >
-              <Plus size={14} />
+              <PlusIcon size={14} />
             </button>
           </div>
           {creating && (
@@ -232,7 +233,7 @@ export function KindEditor() {
                   <span className="truncate font-mono text-[10px] text-faint">{f.id}.css</span>
                 </span>
                 {kind === "grade" && f.id === grade && (
-                  <Check size={13} className="shrink-0 text-accent" aria-label="Your video uses this" />
+                  <CheckIcon size={13} className="shrink-0 text-accent" aria-label="Your video uses this" />
                 )}
               </button>
             ))}
@@ -252,7 +253,7 @@ export function KindEditor() {
               onClick={remove}
               className="flex shrink-0 items-center gap-1 text-muted hover:text-bad"
             >
-              <Trash2 size={12} /> Delete
+              <TrashIcon size={12} /> Delete
             </button>
           </div>
         </section>

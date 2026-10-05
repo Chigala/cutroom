@@ -4,10 +4,11 @@
  * you speaking. Or describe the look you want and Claude writes it. Saving is one undoable update to the
  * captionLooks collection, written to the file like any other edit.
  */
+
+import { ArrowLeftIcon, CheckIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import type { PlayerRef } from "@remotion/player";
 import { type CaptionLook, type CaptionStyle, lookDefaults, STARTER_CAPTION_LOOKS } from "@vedit/project";
 import { clsx } from "clsx";
-import { ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { captionWindow, lookName, lookPreviewDoc } from "../../lib/caption-preview.ts";
@@ -127,7 +128,7 @@ export function LookEditor() {
         </div>
         <div className="no-drag flex gap-2">
           <Button onClick={close}>
-            <ArrowLeft size={14} /> Back to editor
+            <ArrowLeftIcon size={14} /> Back to editor
           </Button>
           {saved && id !== current && (
             <Button
@@ -155,7 +156,7 @@ export function LookEditor() {
               onClick={() => setCreating(true)}
               className="rounded p-1 text-muted hover:bg-button hover:text-fg"
             >
-              <Plus size={14} />
+              <PlusIcon size={14} />
             </button>
           </div>
           {creating && (
@@ -183,7 +184,7 @@ export function LookEditor() {
                   <span className="truncate font-mono text-[10px] text-faint">{l.id}.css</span>
                 </span>
                 {l.id === current && (
-                  <Check size={13} className="shrink-0 text-accent" aria-label="Your captions use this" />
+                  <CheckIcon size={13} className="shrink-0 text-accent" aria-label="Your captions use this" />
                 )}
               </button>
             ))}
@@ -206,7 +207,7 @@ export function LookEditor() {
               onClick={remove}
               className="flex shrink-0 items-center gap-1 text-muted hover:text-bad"
             >
-              <Trash2 size={12} /> Delete
+              <TrashIcon size={12} /> Delete
             </button>
           </div>
         </section>

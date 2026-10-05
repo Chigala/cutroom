@@ -2,8 +2,9 @@
  * In the composer, beside Send: how hard Claude thinks (the effort slider, as in Claude's apps) and which
  * model. The same settings as Settings → Claude.
  */
+
+import { CaretDownIcon, CheckIcon, LightbulbIcon } from "@phosphor-icons/react";
 import { clsx } from "clsx";
-import { Check, ChevronDown, Lightbulb } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { loadSettings, saveSettings, useSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
@@ -54,9 +55,9 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
           open ? "bg-selected text-fg" : "bg-control text-fg-2 hover:bg-selected",
         )}
       >
-        <Lightbulb size={13} className="shrink-0" />
+        <LightbulbIcon size={13} className="shrink-0" />
         {effort}
-        <ChevronDown size={12} className="shrink-0 text-faint" />
+        <CaretDownIcon size={12} className="shrink-0 text-faint" />
       </button>
       {open && (
         <div
@@ -115,7 +116,7 @@ function MenuItem({
         <span className="text-[13px] text-fg">{label}</span>
         <span className="text-[11px] text-muted">{hint}</span>
       </span>
-      {on && <Check size={14} className="shrink-0 text-accent" />}
+      {on && <CheckIcon size={14} className="shrink-0 text-accent" />}
     </button>
   );
 }

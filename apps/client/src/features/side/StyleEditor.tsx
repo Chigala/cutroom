@@ -1,3 +1,4 @@
+import { CaretRightIcon, PencilSimpleIcon } from "@phosphor-icons/react";
 import { Thumbnail } from "@remotion/player";
 import { compositionMeta, VideoComposition } from "@vedit/composition";
 import {
@@ -8,7 +9,6 @@ import {
   type Singleton,
 } from "@vedit/project";
 import { clsx } from "clsx";
-import { ChevronRight, Pencil } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FieldInput, FieldRow } from "../../components/FieldInput.tsx";
 import { captionWindow, lookName, lookPreviewDoc } from "../../lib/caption-preview.ts";
@@ -62,7 +62,7 @@ function Section({
         aria-expanded={open}
         className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-raised"
       >
-        <ChevronRight size={14} className={clsx("text-muted transition-transform", open && "rotate-90")} />
+        <CaretRightIcon size={14} className={clsx("text-muted transition-transform", open && "rotate-90")} />
         <span className="flex-1 text-[13px] font-medium">{title}</span>
         <span className="font-mono text-[10px] text-faint">{file}</span>
       </button>
@@ -142,7 +142,7 @@ function CaptionsPanel() {
           onClick={() => setUi({ editingLook: current || looks[0]?.id || null })}
           className="mt-1 flex items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-[12px] text-muted hover:bg-button hover:text-fg"
         >
-          <Pencil size={12} /> Edit, make, or describe a look to Claude
+          <PencilSimpleIcon size={12} /> Edit, make, or describe a look to Claude
         </button>
       </FieldRow>
       <FieldRow

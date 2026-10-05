@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useRef } from "react";
 
 /** A modal on the native <dialog>: real focus trapping, Escape to close, and a backdrop for free. */
@@ -42,7 +42,7 @@ export function Dialog({
           onClick={onClose}
           className="rounded-md p-1 text-muted hover:bg-button hover:text-fg"
         >
-          <X size={16} />
+          <XIcon size={16} />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>

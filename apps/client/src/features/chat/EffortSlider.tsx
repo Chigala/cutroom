@@ -2,9 +2,10 @@
  * How hard Claude thinks, the way Claude's own apps put it: one slider from Faster to Smarter over the
  * five effort levels, with the recommended one marked. Used in the composer and in Settings → Claude.
  */
+
+import { QuestionIcon } from "@phosphor-icons/react";
 import type { Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
-import { HelpCircle } from "lucide-react";
 import { useRef, useState } from "react";
 
 export const EFFORTS = [
@@ -63,7 +64,7 @@ export function EffortSlider({
           aria-label={`About effort: ${HELP}`}
           className="cursor-help rounded-full text-faint hover:text-fg-2"
         >
-          <HelpCircle size={16} />
+          <QuestionIcon size={16} />
         </button>
       </div>
       <div className="flex justify-between text-[13px] text-muted">

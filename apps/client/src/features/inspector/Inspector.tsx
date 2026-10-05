@@ -3,6 +3,14 @@
  * it also reads the graphic file's own header and builds a form from the params that file declares, so a
  * new graphic you write in HTML gets its editor for free. Every change is one ordinary, undoable op.
  */
+
+import {
+  ArrowCounterClockwiseIcon,
+  CopyIcon,
+  PencilSimpleIcon,
+  TrashIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { coverBox } from "@vedit/composition";
 import {
   type Anchor,
@@ -20,7 +28,6 @@ import {
   type Visual,
   type VisualContent,
 } from "@vedit/project";
-import { Copy, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { FieldInput, FieldRow, TextBox } from "../../components/FieldInput.tsx";
 import { Segmented } from "../../components/ui.tsx";
@@ -140,13 +147,13 @@ export function Inspector() {
           </button>
         </div>
         <IconAction label="Duplicate" onClick={duplicate}>
-          <Copy size={14} />
+          <CopyIcon size={14} />
         </IconAction>
         <IconAction label="Delete" onClick={remove}>
-          <Trash2 size={14} />
+          <TrashIcon size={14} />
         </IconAction>
         <IconAction label="Close" onClick={() => select(null)}>
-          <X size={15} />
+          <XIcon size={15} />
         </IconAction>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
@@ -257,7 +264,7 @@ function Fields({
                   onClick={() => unset(f.key)}
                   className="flex items-center gap-1 self-start rounded-md px-1.5 py-1 text-[11px] text-muted hover:bg-button hover:text-fg"
                 >
-                  <RotateCcw size={11} /> Reset to auto
+                  <ArrowCounterClockwiseIcon size={11} /> Reset to auto
                 </button>
               )}
             </fieldset>
@@ -408,7 +415,7 @@ function VisualFields({
                 onClick={() => setUi({ editingGraphic: content.graphic })}
                 className="flex items-center gap-1 rounded-md bg-control px-2 text-xs text-fg-2 hover:bg-selected"
               >
-                <Pencil size={12} /> Edit
+                <PencilSimpleIcon size={12} /> Edit
               </button>
             </div>
           </FieldRow>
@@ -617,7 +624,7 @@ function RecordList({
             onClick={() => onCommit(rows.filter((_, j) => j !== i))}
             className="flex items-center justify-center rounded text-faint hover:bg-button hover:text-fg"
           >
-            <X size={12} />
+            <XIcon size={12} />
           </button>,
         ])}
       </div>

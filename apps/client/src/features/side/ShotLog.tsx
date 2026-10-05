@@ -3,9 +3,10 @@
  * (sources/shots.json), in the order and at the times the video plays them. Click a line to go there.
  * Standout shots that aren't in the cut are listed after, one click from asking Claude to use them.
  */
+
+import { ArrowCounterClockwiseIcon, FilmSlateIcon, StarIcon } from "@phosphor-icons/react";
 import { formatTime, outputOffset, type ShotSegment, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
-import { Clapperboard, RotateCcw, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { host } from "../../lib/host.ts";
 import { send, useChat } from "../../state/chat.ts";
@@ -63,7 +64,7 @@ export function ShotLog() {
           onClick={describeNow}
           className="flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-button px-2 py-1 text-xs text-fg-2 hover:bg-chip disabled:opacity-40"
         >
-          <RotateCcw size={12} /> {asked ? "Describing…" : "Describe now"}
+          <ArrowCounterClockwiseIcon size={12} /> {asked ? "Describing…" : "Describe now"}
         </button>
       </div>
     ) : null;
@@ -109,7 +110,7 @@ export function ShotLog() {
   if (!groups.length && !unused.length) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <Clapperboard size={22} className="text-faint" strokeWidth={1.5} />
+        <FilmSlateIcon size={22} className="text-faint" weight="light" />
         <span className="text-[13px] text-muted">
           {describing
             ? "Watching your footage. What each shot shows appears here as it's ready."
@@ -138,7 +139,7 @@ export function ShotLog() {
               <span className="flex items-center gap-1.5 font-mono text-[10.5px] text-muted">
                 {formatTime(l.at, true)}
                 {l.seg.highlight && (
-                  <Star size={11} className="fill-accent text-accent" aria-label="Highlight" />
+                  <StarIcon size={11} className="fill-accent text-accent" aria-label="Highlight" />
                 )}
                 <span className="text-faint">
                   {l.seg.shot} · {l.seg.camera}
@@ -164,7 +165,7 @@ export function ShotLog() {
           <span className="px-1 text-[11px] font-medium text-muted">Standout shots not in the cut</span>
           {(allUnused ? unused : unused.slice(0, UNUSED_SHOWN)).map((u) => (
             <div key={u.key} className="flex items-start gap-2 rounded-md px-2 py-1.5">
-              <Star size={11} className="mt-1 shrink-0 fill-accent text-accent" />
+              <StarIcon size={11} className="mt-1 shrink-0 fill-accent text-accent" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-[12.5px] leading-snug text-fg-2">{u.seg.what}</span>
                 <span className="font-mono text-[10px] text-faint">

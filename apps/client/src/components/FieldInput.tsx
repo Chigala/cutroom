@@ -2,9 +2,10 @@
  * One editable field. Selects and toggles commit right away; text and numbers commit on blur or Enter;
  * sliders preview while dragging and commit once on release, so a drag is one undo step, not fifty.
  */
+
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { captionLookMeta, styleMeta } from "@vedit/project";
 import { clsx } from "clsx";
-import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type Field, type RefColl, withDefaults } from "../lib/fields.ts";
 import { useDoc } from "../state/project.ts";
@@ -407,7 +408,7 @@ function RefSelect({
         onClick={open}
         className="shrink-0 rounded-md p-1.5 text-muted hover:bg-button hover:text-fg disabled:opacity-30"
       >
-        <Pencil size={13} />
+        <PencilSimpleIcon size={13} />
       </button>
     </div>
   );

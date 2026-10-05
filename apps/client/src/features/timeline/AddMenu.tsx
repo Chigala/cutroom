@@ -4,6 +4,18 @@
  * you or by Claude, shows up here. Whatever is added opens in the inspector straight away, so adding and
  * tuning are one motion.
  */
+
+import {
+  FilmStripIcon,
+  IntersectIcon,
+  MagicWandIcon,
+  MagnifyingGlassPlusIcon,
+  MusicNotesIcon,
+  PlusIcon,
+  SparkleIcon,
+  TextTIcon,
+  UploadSimpleIcon,
+} from "@phosphor-icons/react";
 import {
   anchorAt,
   nextId,
@@ -16,7 +28,6 @@ import {
   timelineOf,
 } from "@vedit/project";
 import { clsx } from "clsx";
-import { Blend, Film, Music2, Plus, Sparkles, Type, Upload, Wand2, ZoomIn } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { importClips } from "../../lib/import.ts";
 import { currentTime } from "../../state/playback.ts";
@@ -140,14 +151,14 @@ export function AddMenu() {
         aria-expanded={open}
         className="flex items-center gap-1 rounded-md bg-control px-1.5 py-0.5 font-sans text-[11px] text-fg-2 hover:bg-selected hover:text-fg"
       >
-        <Plus size={12} /> Add
+        <PlusIcon size={12} /> Add
       </button>
       {open && (
         <div className="absolute bottom-7 left-0 z-50 flex w-64 flex-col rounded-xl border border-line-strong bg-panel p-1.5 font-sans shadow-2xl animate-rise">
           {section === null ? (
             <>
               <Item
-                icon={<Upload size={14} />}
+                icon={<UploadSimpleIcon size={14} />}
                 onClick={() => {
                   setOpen(false);
                   void importClips();
@@ -155,23 +166,23 @@ export function AddMenu() {
               >
                 Clips from your computer…
               </Item>
-              <Item icon={<Sparkles size={14} />} onClick={() => setSection("graphic")} more>
+              <Item icon={<SparkleIcon size={14} />} onClick={() => setSection("graphic")} more>
                 Graphic
               </Item>
-              <Item icon={<Film size={14} />} onClick={() => setSection("cutaway")} more>
+              <Item icon={<FilmStripIcon size={14} />} onClick={() => setSection("cutaway")} more>
                 Cutaway to a clip
               </Item>
-              <Item icon={<Wand2 size={14} />} onClick={() => setSection("effect")} more>
+              <Item icon={<MagicWandIcon size={14} />} onClick={() => setSection("effect")} more>
                 Effect
               </Item>
-              <Item icon={<Blend size={14} />} onClick={() => setSection("transition")} more>
+              <Item icon={<IntersectIcon size={14} />} onClick={() => setSection("transition")} more>
                 Transition into this shot
               </Item>
-              <Item icon={<Music2 size={14} />} onClick={() => setSection("sound")} more>
+              <Item icon={<MusicNotesIcon size={14} />} onClick={() => setSection("sound")} more>
                 Sound effect
               </Item>
               <Item
-                icon={<ZoomIn size={14} />}
+                icon={<MagnifyingGlassPlusIcon size={14} />}
                 onClick={() =>
                   add(
                     "zooms",
@@ -190,7 +201,7 @@ export function AddMenu() {
                 Zoom
               </Item>
               <Item
-                icon={<Type size={14} />}
+                icon={<TextTIcon size={14} />}
                 onClick={() =>
                   add(
                     "titles",

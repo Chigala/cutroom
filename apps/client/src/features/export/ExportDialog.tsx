@@ -1,10 +1,11 @@
+import { CheckIcon, FolderOpenIcon, WarningIcon } from "@phosphor-icons/react";
 import { runChecks } from "@vedit/checks";
 import { formatTime, SHAPES, shapeOf, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
-import { Check, FolderOpen, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
 import { Dialog } from "../../components/Dialog.tsx";
 import { Button } from "../../components/ui.tsx";
+import { took } from "../../lib/duration.ts";
 import { host } from "../../lib/host.ts";
 import { cancelExport, dismissExport, startExport, useJobs } from "../../state/jobs.ts";
 import { edit, useDoc } from "../../state/project.ts";
@@ -36,7 +37,7 @@ export function ExportDialog() {
             <div className="flex flex-col gap-1.5 rounded-lg border border-accent/30 bg-accent/5 p-3">
               {failing.map((r) => (
                 <div key={r.id} className="flex gap-2 text-[13px] text-fg-2">
-                  <TriangleAlert size={15} className="mt-0.5 shrink-0 text-accent" />
+                  <WarningIcon size={15} className="mt-0.5 shrink-0 text-accent" />
                   {r.detail ?? r.title}
                 </div>
               ))}
@@ -87,19 +88,17 @@ export function ExportDialog() {
       ) : (
         <div className="flex flex-col items-center gap-4 py-2 text-center">
           <div className="flex size-11 items-center justify-center rounded-full bg-ok/15">
-            <Check size={22} className="text-ok" />
+            <CheckIcon size={22} className="text-ok" />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[15px] font-semibold">Your video is ready</span>
             <span className="font-mono text-xs break-all text-muted">{job.file?.split(/[\\/]/).pop()}</span>
-            {job.elapsedMs && (
-              <span className="text-xs text-faint">Rendered in {Math.round(job.elapsedMs / 1000)}s</span>
-            )}
+            {job.elapsedMs && <span className="text-xs text-faint">Rendered in {took(job.elapsedMs)}</span>}
           </div>
           <div className="flex gap-2">
             <Button onClick={close}>Done</Button>
             <Button variant="accent" onClick={() => job.file && void host.project.showFile(job.file)}>
-              <FolderOpen size={14} /> Show in folder
+              <FolderOpenIcon size={14} /> Show in folder
             </Button>
           </div>
         </div>

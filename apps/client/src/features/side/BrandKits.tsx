@@ -2,9 +2,10 @@
  * Brand kits: this project's taste saved for the next one, and saved taste brought in. A kit holds the
  * look, captions, graphics, effects, fonts, mix, checks, cover style and STYLE.md (kit.ts).
  */
+
+import { StarIcon, TrashIcon } from "@phosphor-icons/react";
 import type { KitInfo } from "@vedit/project";
 import { clsx } from "clsx";
-import { Star, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
@@ -93,7 +94,7 @@ export function BrandKits() {
                 }
                 className={k.id === fallback ? "text-accent" : "text-faint hover:text-fg"}
               >
-                <Star size={13} fill={k.id === fallback ? "currentColor" : "none"} />
+                <StarIcon size={13} weight={k.id === fallback ? "fill" : "regular"} />
               </button>
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[13px]">{k.name}</span>
@@ -122,7 +123,7 @@ export function BrandKits() {
                     void run(() => host.kits.remove(k.id), "Deleted the kit");
                 }}
               >
-                <Trash2 size={13} />
+                <TrashIcon size={13} />
               </button>
             </li>
           ))}

@@ -1,5 +1,14 @@
+import {
+  BracketsCurlyIcon,
+  FileCodeIcon,
+  FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  MagnifyingGlassIcon,
+  SparkleIcon,
+  UploadSimpleIcon,
+} from "@phosphor-icons/react";
 import { type FileEntry, fileEntries, STARTER_GRAPHICS } from "@vedit/project";
-import { FileCode, FileJson, FileText, Folder, FolderOpen, Search, Sparkles, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 import { IconButton } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
@@ -67,25 +76,25 @@ export function Files() {
           onClick={() => void importClips()}
           className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-[13px] font-semibold text-accent-fg hover:bg-accent-hover"
         >
-          <Upload size={15} /> Import clips…
+          <UploadSimpleIcon size={15} /> Import clips…
         </button>
         <IconButton
           label="New or edit graphics (HTML, CSS)"
           onClick={editGraphics}
           className="size-9! border border-line-strong bg-button"
         >
-          <Sparkles size={15} className="text-accent" />
+          <SparkleIcon size={15} className="text-accent" />
         </IconButton>
         <IconButton
           label={`Show the project folder: ${dir}`}
           onClick={() => void host.project.reveal()}
           className="size-9! border border-line-strong bg-button"
         >
-          <FolderOpen size={15} />
+          <FolderOpenIcon size={15} />
         </IconButton>
       </div>
       <label className="relative block">
-        <Search
+        <MagnifyingGlassIcon
           size={13}
           className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-faint"
         />
@@ -105,7 +114,7 @@ export function Files() {
         {groups.map(([folder, files]) => (
           <div key={folder} className="flex flex-col pb-1.5">
             <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1 font-mono text-[10.5px] tracking-wide text-faint">
-              <Folder size={12} />
+              <FolderIcon size={12} />
               {folder || "project/"}
               <span className="ml-auto tabular">{files.length}</span>
             </div>
@@ -124,13 +133,13 @@ export function Files() {
                   className="flex items-center gap-2 rounded-md py-1 pr-1.5 pl-3 text-left hover:bg-raised"
                 >
                   {f.path.endsWith(".html") ? (
-                    <FileCode size={14} className="shrink-0 text-accent" />
+                    <FileCodeIcon size={14} className="shrink-0 text-accent" />
                   ) : f.path.endsWith(".css") ? (
-                    <FileCode size={14} className="shrink-0 text-[#8cb8e8]" />
+                    <FileCodeIcon size={14} className="shrink-0 text-[#8cb8e8]" />
                   ) : f.path.endsWith(".md") ? (
-                    <FileText size={14} className="shrink-0 text-muted" />
+                    <FileTextIcon size={14} className="shrink-0 text-muted" />
                   ) : (
-                    <FileJson size={14} className="shrink-0 text-muted" />
+                    <BracketsCurlyIcon size={14} className="shrink-0 text-muted" />
                   )}
                   <span className="min-w-0 shrink-0 truncate font-mono text-xs text-fg">{name}</span>
                   <span className="min-w-0 flex-1 truncate text-[11.5px] text-faint">{f.describe}</span>

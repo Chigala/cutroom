@@ -1,21 +1,21 @@
+import {
+  ArrowUUpLeftIcon,
+  ArrowUUpRightIcon,
+  CaretDownIcon,
+  CircleNotchIcon,
+  DownloadSimpleIcon,
+  FilmStripIcon,
+  FolderOpenIcon,
+  GearSixIcon,
+  MagnifyingGlassIcon,
+  PencilSimpleIcon,
+  PlusIcon,
+  SparkleIcon,
+  SquaresFourIcon,
+  UploadSimpleIcon,
+} from "@phosphor-icons/react";
 import type { RecentProject } from "@vedit/bridge";
 import { formatTime, timelineOf } from "@vedit/project";
-import {
-  ChevronDown,
-  Download,
-  Film,
-  FolderOpen,
-  LayoutGrid,
-  Loader2,
-  Pencil,
-  Plus,
-  Redo2,
-  Search,
-  Settings,
-  Sparkles,
-  Undo2,
-  Upload,
-} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
@@ -61,13 +61,13 @@ export function Header() {
 
       <div className="no-drag flex flex-1 basis-0 items-center justify-end gap-2">
         <IconButton label={`Undo (${isMac ? "⌘" : "Ctrl+"}Z)`} disabled={!canUndo} onClick={undo}>
-          <Undo2 size={16} />
+          <ArrowUUpLeftIcon size={16} />
         </IconButton>
         <IconButton label={`Redo (${isMac ? "⇧⌘" : "Ctrl+Shift+"}Z)`} disabled={!canRedo} onClick={redo}>
-          <Redo2 size={16} />
+          <ArrowUUpRightIcon size={16} />
         </IconButton>
         <IconButton label="Settings" onClick={() => setUi({ dialog: "settings" })}>
-          <Settings size={16} />
+          <GearSixIcon size={16} />
         </IconButton>
         <Button onClick={() => setUi({ view: "versions" })}>Versions</Button>
         <Button variant="accent" onClick={() => setUi({ dialog: "export" })} className="min-w-[78px]">
@@ -95,7 +95,7 @@ function DownloadsPill() {
       title={list.map((d) => `${d.label}: ${Math.round(d.fraction * 100)}% of ${size(d.bytes)}`).join("\n")}
       className="flex items-center gap-1.5 rounded-full bg-button px-2.5 py-1 text-fg-2 animate-fade-in"
     >
-      <Download size={12} className="text-muted" />
+      <DownloadSimpleIcon size={12} className="text-muted" />
       Downloading {labels.length === 1 ? labels[0]!.toLowerCase() : `${labels.length} things`} ·{" "}
       {Math.round(fraction * 100)}%
     </span>
@@ -116,7 +116,7 @@ function IndexingPill() {
     (labels.size === 1 ? active[0]!.label : `Indexing ${active.length} clips`);
   return (
     <span className="flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-accent animate-fade-in">
-      <Loader2 size={12} className="animate-spin" />
+      <CircleNotchIcon size={12} className="animate-spin" />
       {label} · {Math.round(avg * 100)}%
     </span>
   );
@@ -191,14 +191,14 @@ function ProjectMenu() {
           className="flex max-w-[320px] items-center gap-1.5 rounded-lg px-2 py-1 text-fg hover:bg-button"
         >
           <span className="truncate text-[14px] font-semibold">{name}</span>
-          <ChevronDown size={14} className="shrink-0 text-muted" />
+          <CaretDownIcon size={14} className="shrink-0 text-muted" />
         </button>
       )}
       {open && (
         <div className="absolute top-9 left-0 z-50 w-72 rounded-xl border border-line-strong bg-panel p-1.5 shadow-2xl animate-rise">
           {dir && (
             <MenuItem
-              icon={<Pencil size={14} />}
+              icon={<PencilSimpleIcon size={14} />}
               onClick={() => {
                 setOpen(false);
                 setRenaming(true);
@@ -209,7 +209,7 @@ function ProjectMenu() {
           )}
           {dir && (
             <MenuItem
-              icon={<Upload size={14} />}
+              icon={<UploadSimpleIcon size={14} />}
               onClick={() => {
                 setOpen(false);
                 void importClips();
@@ -218,16 +218,22 @@ function ProjectMenu() {
               Import clips into this project…
             </MenuItem>
           )}
-          <MenuItem icon={<Film size={14} />} onClick={() => void go(() => host.project.newFromVideos())}>
+          <MenuItem
+            icon={<FilmStripIcon size={14} />}
+            onClick={() => void go(() => host.project.newFromVideos())}
+          >
             New project from videos…
           </MenuItem>
-          <MenuItem icon={<Plus size={14} />} onClick={() => void go(() => host.project.create("Untitled"))}>
+          <MenuItem
+            icon={<PlusIcon size={14} />}
+            onClick={() => void go(() => host.project.create("Untitled"))}
+          >
             New empty project
           </MenuItem>
-          <MenuItem icon={<FolderOpen size={14} />} onClick={() => void go(() => host.project.open())}>
+          <MenuItem icon={<FolderOpenIcon size={14} />} onClick={() => void go(() => host.project.open())}>
             Open…
           </MenuItem>
-          <MenuItem icon={<Sparkles size={14} />} onClick={() => void go(() => host.project.openDemo())}>
+          <MenuItem icon={<SparkleIcon size={14} />} onClick={() => void go(() => host.project.openDemo())}>
             Demo project
           </MenuItem>
           {recent.some((r) => r.dir !== dir) && (
@@ -235,7 +241,7 @@ function ProjectMenu() {
               <div className="mx-2 my-1.5 border-t border-line" />
               {/* Many projects: type to find one; the full list is a click away. */}
               <label className="mx-1 mb-1 flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-1.5">
-                <Search size={13} className="shrink-0 text-faint" />
+                <MagnifyingGlassIcon size={13} className="shrink-0 text-faint" />
                 <input
                   // biome-ignore lint/a11y/noAutofocus: the menu opened to switch projects
                   autoFocus
@@ -262,7 +268,7 @@ function ProjectMenu() {
               ))}
               {query && !others.length && <div className="px-2.5 py-2 text-xs text-faint">No matches</div>}
               <MenuItem
-                icon={<LayoutGrid size={14} />}
+                icon={<SquaresFourIcon size={14} />}
                 onClick={() => {
                   setOpen(false);
                   setUi({ dialog: "projects" });

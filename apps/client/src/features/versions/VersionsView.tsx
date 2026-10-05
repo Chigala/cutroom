@@ -3,12 +3,20 @@
  * mix: take the cut from one, the hook from another, the music from a third. Under the hood every one of
  * those is a diff applied as a single undoable commit.
  */
+
+import {
+  ArrowLeftIcon,
+  CircleNotchIcon,
+  RobotIcon,
+  SparkleIcon,
+  TrashIcon,
+  UserIcon,
+} from "@phosphor-icons/react";
 import { Player } from "@remotion/player";
 import type { HistoryEntry, VersionInfo } from "@vedit/bridge";
 import { compositionMeta, VideoComposition } from "@vedit/composition";
 import { type Collection, diffDocs, formatTime, type ProjectDoc, type Singleton } from "@vedit/project";
 import { clsx } from "clsx";
-import { ArrowLeft, Bot, Loader2, Sparkles, Trash2, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { host, MEDIA_BASE } from "../../lib/host.ts";
@@ -130,7 +138,7 @@ export function VersionsView() {
       <header className="drag-region flex h-[52px] shrink-0 items-center justify-between border-b border-line pr-4 pl-[84px]">
         <div className="no-drag flex min-w-0 items-center gap-2">
           <Button variant="ghost" onClick={() => setUi({ view: "editor" })} className="-ml-2">
-            <ArrowLeft size={15} /> Editor
+            <ArrowLeftIcon size={15} /> Editor
           </Button>
           <span className="text-faint">/</span>
           <span className="text-[14px] font-semibold">Versions</span>
@@ -207,7 +215,11 @@ export function VersionsView() {
                     ))}
                   </fieldset>
                   <Button variant="accent" disabled={progress !== null} onClick={() => void generate()}>
-                    {progress ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    {progress ? (
+                      <CircleNotchIcon size={14} className="animate-spin" />
+                    ) : (
+                      <SparkleIcon size={14} />
+                    )}
                     {progress ? "Making…" : `Make ${count} versions`}
                   </Button>
                 </div>
@@ -279,7 +291,7 @@ function Placeholder({ label, busy }: { label: string; busy: boolean }) {
       <div className="h-4 w-24 rounded bg-raised" />
       <div className="flex aspect-[9/16] items-center justify-center rounded-[18px] border border-dashed border-line-strong bg-raised/40">
         <span className={clsx("flex items-center gap-2 text-xs", busy ? "text-fg-2" : "text-faint")}>
-          {busy && <Loader2 size={14} className="animate-spin text-accent" />}
+          {busy && <CircleNotchIcon size={14} className="animate-spin text-accent" />}
           {label}
         </span>
       </div>
@@ -338,9 +350,9 @@ function HistoryRail({
                   className="group flex items-start gap-2.5 rounded-lg px-3 py-2 hover:bg-raised"
                 >
                   {h.author === "agent" ? (
-                    <Bot size={14} className="mt-0.5 shrink-0 text-accent" />
+                    <RobotIcon size={14} className="mt-0.5 shrink-0 text-accent" />
                   ) : (
-                    <User size={14} className="mt-0.5 shrink-0 text-muted" />
+                    <UserIcon size={14} className="mt-0.5 shrink-0 text-muted" />
                   )}
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="truncate text-[13px] text-fg-2">{title}</span>
@@ -408,7 +420,7 @@ function VersionCard({
           onClick={() => void host.versions.remove(version.id)}
           className="rounded-md p-1.5 text-faint opacity-0 group-hover:opacity-100 hover:bg-button hover:text-bad focus-visible:opacity-100"
         >
-          <Trash2 size={14} />
+          <TrashIcon size={14} />
         </button>
       </div>
       <div

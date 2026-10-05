@@ -1,29 +1,30 @@
+import {
+  ArrowCounterClockwiseIcon,
+  ArrowUpIcon,
+  BracketsSquareIcon,
+  CaretRightIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  CopyIcon,
+  CrosshairIcon,
+  FilmStripIcon,
+  GearSixIcon,
+  LightbulbIcon,
+  ListPlusIcon,
+  MusicNotesIcon,
+  PaperclipIcon,
+  StopIcon,
+  WarningIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import type { AgentContext, WorkEntry } from "@vedit/bridge";
 import { formatTime } from "@vedit/project";
 import { clsx } from "clsx";
-import {
-  ArrowUp,
-  Brackets,
-  Check,
-  ChevronRight,
-  Copy,
-  Crosshair,
-  Film,
-  Lightbulb,
-  ListPlus,
-  Loader2,
-  Music2,
-  Paperclip,
-  RotateCcw,
-  Settings,
-  Square,
-  TriangleAlert,
-  X,
-} from "lucide-react";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "../../components/Markdown.tsx";
 import { ChangeChip } from "../../components/ui.tsx";
 import { type Attachment, pending, upload } from "../../lib/attach.ts";
+import { took } from "../../lib/duration.ts";
 import { MEDIA_BASE } from "../../lib/host.ts";
 import { mod } from "../../lib/keys.ts";
 import {
@@ -148,7 +149,7 @@ function SentAttachments({ sources }: { sources: readonly string[] }) {
               <video src={`${url}#t=0.5`} muted preload="metadata" className="h-full w-auto max-w-[120px]" />
             ) : (
               <span className="flex items-center gap-1.5 px-2.5 text-xs text-fg-2">
-                <Music2 size={13} /> {s?.label ?? id}
+                <MusicNotesIcon size={13} /> {s?.label ?? id}
               </span>
             )}
           </div>
@@ -177,8 +178,7 @@ function Elapsed({ run }: { run: AgentRun }) {
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, [run.status]);
-  const ms = run.elapsedMs ?? Date.now() - run.at;
-  return <>{Math.max(1, Math.round(ms / 1000))}s</>;
+  return <>{took(run.elapsedMs ?? Date.now() - run.at)}</>;
 }
 
 function Run({ run }: { run: AgentRun }) {
@@ -237,7 +237,7 @@ function RetryRow({ run }: { run: AgentRun }) {
         onClick={() => retry(run.id)}
         className="flex items-center gap-1.5 rounded-lg border border-line-strong bg-button px-2.5 py-1 text-xs text-fg-2 hover:bg-chip disabled:opacity-40"
       >
-        <RotateCcw size={12} /> Retry
+        <ArrowCounterClockwiseIcon size={12} /> Retry
       </button>
       {signIn && (
         <button
@@ -245,7 +245,7 @@ function RetryRow({ run }: { run: AgentRun }) {
           onClick={() => setUi({ dialog: "settings" })}
           className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1 text-xs font-semibold text-accent-fg hover:bg-accent-hover"
         >
-          <Settings size={12} /> Open Settings
+          <GearSixIcon size={12} /> Open Settings
         </button>
       )}
     </div>
@@ -271,7 +271,7 @@ function CopyButton({ text }: { text: string }) {
       }}
       className="flex items-center gap-1 self-start rounded-md px-1.5 py-0.5 text-[11px] text-faint opacity-0 group-hover/reply:opacity-100 hover:bg-button hover:text-fg-2 focus-visible:opacity-100"
     >
-      {done ? <Check size={12} className="text-ok" /> : <Copy size={12} />}
+      {done ? <CheckIcon size={12} className="text-ok" /> : <CopyIcon size={12} />}
       {done ? "Copied" : "Copy"}
     </button>
   );
@@ -288,8 +288,6 @@ function Work({ run }: { run: AgentRun }) {
   const shown = open ?? running;
   const tools = run.work.filter((w) => w.kind === "tool").length;
   const changes = run.work.filter((w) => w.kind === "step").length;
-  const secs = Math.round((run.elapsedMs ?? 0) / 1000);
-  const took = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${Math.max(1, secs)}s`;
   const summary = [
     tools && `${tools} ${tools === 1 ? "action" : "actions"}`,
     changes && `${changes} ${changes === 1 ? "step" : "steps"}`,
@@ -304,12 +302,12 @@ function Work({ run }: { run: AgentRun }) {
         onClick={() => setOpen(!shown)}
         className="flex items-center gap-1.5 self-start rounded text-left text-xs text-muted hover:text-fg-2"
       >
-        <ChevronRight size={13} className={clsx("shrink-0 transition-transform", shown && "rotate-90")} />
+        <CaretRightIcon size={13} className={clsx("shrink-0 transition-transform", shown && "rotate-90")} />
         {running ? (
           <span className="animate-pulse">{run.activity ?? "Reading the project…"}</span>
         ) : (
           <span>
-            Worked for {took}
+            Worked for {took(run.elapsedMs ?? 0)}
             {summary && ` · ${summary}`}
           </span>
         )}
@@ -340,9 +338,9 @@ function WorkLine({ entry, live }: { entry: WorkEntry; live: boolean }) {
       return (
         <div className="flex gap-2 animate-fade-in">
           {entry.status === "done" ? (
-            <Check size={15} className="mt-0.5 shrink-0 text-ok" strokeWidth={1.8} />
+            <CheckIcon size={15} className="mt-0.5 shrink-0 text-ok" />
           ) : (
-            <TriangleAlert size={15} className="mt-0.5 shrink-0 text-accent" strokeWidth={1.6} />
+            <WarningIcon size={15} className="mt-0.5 shrink-0 text-accent" />
           )}
           <span>{entry.text}</span>
         </div>
@@ -357,11 +355,11 @@ function WorkLine({ entry, live }: { entry: WorkEntry; live: boolean }) {
             className="group flex items-center gap-2 rounded py-0.5 text-left hover:text-fg"
           >
             {entry.status === "running" ? (
-              <Loader2 size={13} className="shrink-0 animate-spin text-muted" />
+              <CircleNotchIcon size={13} className="shrink-0 animate-spin text-muted" />
             ) : entry.status === "error" ? (
-              <X size={13} className="shrink-0 text-bad" />
+              <XIcon size={13} className="shrink-0 text-bad" />
             ) : (
-              <ChevronRight
+              <CaretRightIcon
                 size={13}
                 className={clsx("shrink-0 text-faint transition-transform", open && "rotate-90")}
               />
@@ -450,12 +448,12 @@ function Thinking({ text, live }: { text: string; live: boolean }) {
         onClick={() => setOpen(!shown)}
         className="group flex min-w-0 items-center gap-1.5 rounded py-0.5 text-left text-muted hover:text-fg-2"
       >
-        <Lightbulb
+        <LightbulbIcon
           size={13}
           className={clsx("mr-0.5 shrink-0", live ? "animate-pulse text-accent" : "text-faint")}
         />
         <span className={clsx("shrink-0", live && "animate-pulse")}>{live ? "Thinking…" : "Thought"}</span>
-        <ChevronRight
+        <CaretRightIcon
           size={13}
           className={clsx(
             "shrink-0 text-faint transition-transform group-hover:text-fg-2",
@@ -723,7 +721,7 @@ function Composer() {
         )}
         {range && (
           <div className="mr-1.5 mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-accent/10 py-0.5 pr-1 pl-2 font-mono text-[11px] text-fg animate-fade-in">
-            <Brackets size={12} className="text-accent" />
+            <BracketsSquareIcon size={12} className="text-accent" />
             {formatTime(range.start, true)}–{formatTime(range.end, true)}
             <button
               type="button"
@@ -731,13 +729,13 @@ function Composer() {
               onClick={() => setRange(null)}
               className="rounded p-0.5 text-muted hover:text-fg"
             >
-              <X size={12} />
+              <XIcon size={12} />
             </button>
           </div>
         )}
         {pointer && (
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-accent/10 py-0.5 pr-1 pl-2 font-mono text-[11px] text-fg animate-fade-in">
-            <Crosshair size={12} className="text-accent" />
+            <CrosshairIcon size={12} className="text-accent" />
             {formatTime(pointer.time, true)} · {Math.round(pointer.point.x * 100)}%,{" "}
             {Math.round(pointer.point.y * 100)}%
             <button
@@ -746,7 +744,7 @@ function Composer() {
               onClick={() => setUi({ pointer: null })}
               className="rounded p-0.5 text-muted hover:text-fg"
             >
-              <X size={12} />
+              <XIcon size={12} />
             </button>
           </div>
         )}
@@ -791,7 +789,7 @@ function Composer() {
               onClick={() => picker.current?.click()}
               className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-control text-fg-2 hover:bg-selected"
             >
-              <Paperclip size={14} />
+              <PaperclipIcon size={14} />
             </button>
             <input
               ref={picker}
@@ -815,7 +813,7 @@ function Composer() {
                 pointing ? "bg-accent/15 text-accent" : "bg-control text-fg-2 hover:bg-selected",
               )}
             >
-              <Crosshair size={13} />
+              <CrosshairIcon size={13} weight={pointing ? "fill" : "regular"} />
               <span className="hidden @[400px]:inline">Point</span>
             </button>
             <ThinkingPicker />
@@ -844,7 +842,7 @@ function Composer() {
                     onClick={submit}
                     className="flex size-9 items-center justify-center rounded-full bg-control text-fg-2 hover:bg-selected animate-fade-in"
                   >
-                    <ListPlus size={16} />
+                    <ListPlusIcon size={16} />
                   </button>
                 )}
                 <button
@@ -853,7 +851,7 @@ function Composer() {
                   onClick={stop}
                   className="flex size-9 items-center justify-center rounded-full bg-fg text-bg hover:bg-fg-2"
                 >
-                  <Square size={12} fill="currentColor" />
+                  <StopIcon size={12} weight="fill" />
                 </button>
               </>
             ) : (
@@ -865,7 +863,7 @@ function Composer() {
                 title={uploading ? "Adding your attachments…" : undefined}
                 className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-40"
               >
-                <ArrowUp size={16} strokeWidth={2.2} />
+                <ArrowUpIcon size={16} />
               </button>
             )}
           </div>
@@ -916,7 +914,7 @@ function Queue() {
             onClick={() => removeQueued(q.id)}
             className="shrink-0 rounded-md p-1 text-faint hover:bg-button hover:text-fg-2"
           >
-            <X size={13} />
+            <XIcon size={13} />
           </button>
         </div>
       ))}
@@ -939,13 +937,13 @@ function AttachmentChip({ a, onRemove }: { a: Attachment; onRemove: () => void }
         <video src={`${a.preview}#t=0.5`} muted preload="metadata" className="h-full w-auto max-w-[96px]" />
       ) : (
         <span className="flex max-w-[140px] items-center gap-1.5 px-2.5 text-xs text-fg-2">
-          {a.kind === "audio" ? <Music2 size={13} /> : <Film size={13} />}
+          {a.kind === "audio" ? <MusicNotesIcon size={13} /> : <FilmStripIcon size={13} />}
           <span className="truncate">{a.name}</span>
         </span>
       )}
       {a.status === "uploading" && (
         <span className="absolute inset-0 flex items-center justify-center bg-bg/60">
-          <Loader2 size={16} className="animate-spin text-fg" />
+          <CircleNotchIcon size={16} className="animate-spin text-fg" />
         </span>
       )}
       {a.status === "failed" && (
@@ -959,7 +957,7 @@ function AttachmentChip({ a, onRemove }: { a: Attachment; onRemove: () => void }
         onClick={onRemove}
         className="absolute top-0.5 right-0.5 rounded-full bg-black/70 p-0.5 text-white hover:bg-black"
       >
-        <X size={10} />
+        <XIcon size={10} />
       </button>
     </div>
   );

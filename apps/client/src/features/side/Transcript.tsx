@@ -3,9 +3,10 @@
  * pressing Delete cuts them out of the video, E emphasizes them in the captions, double-click fixes a
  * misheard word. The word being spoken lights up as it plays.
  */
+
+import { ScissorsIcon, SparkleIcon, TextTIcon } from "@phosphor-icons/react";
 import { cutWordsOps, type SpokenWord, spokenWords } from "@vedit/project";
 import { clsx } from "clsx";
-import { Scissors, Sparkles, Type } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 import { send, useChat } from "../../state/chat.ts";
 import { useJobs } from "../../state/jobs.ts";
@@ -113,7 +114,7 @@ export function Transcript() {
   if (!words.length) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <Type size={22} className="text-faint" strokeWidth={1.5} />
+        <TextTIcon size={22} className="text-faint" weight="light" />
         <span className="text-[13px] text-muted">
           {indexing
             ? "Transcribing your footage. Words appear here as soon as they're ready."
@@ -131,10 +132,10 @@ export function Transcript() {
         {selection ? (
           <div className="flex items-center gap-1 animate-fade-in">
             <ToolButton onClick={cut} title="Cut from the video (Delete)">
-              <Scissors size={13} /> Cut
+              <ScissorsIcon size={13} /> Cut
             </ToolButton>
             <ToolButton onClick={emphasize} title="Emphasize in captions (E)">
-              <Sparkles size={13} /> Emphasize
+              <SparkleIcon size={13} /> Emphasize
             </ToolButton>
             <ToolButton
               disabled={busy}

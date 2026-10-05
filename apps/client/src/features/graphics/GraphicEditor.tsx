@@ -6,6 +6,8 @@
  * the graphics collection, written to the file like any other edit; changes made to the file in another
  * editor (or by the agent) show up here too.
  */
+
+import { ArrowLeftIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import type { PlayerRef } from "@remotion/player";
 import {
   type Graphic,
@@ -18,7 +20,6 @@ import {
   validateGraphic,
 } from "@vedit/project";
 import { clsx } from "clsx";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Segmented } from "../../components/ui.tsx";
 import { send } from "../../state/chat.ts";
@@ -128,7 +129,7 @@ export function GraphicEditor() {
         </div>
         <div className="no-drag flex gap-2">
           <Button onClick={close}>
-            <ArrowLeft size={14} /> Back to editor
+            <ArrowLeftIcon size={14} /> Back to editor
           </Button>
           <Button variant="accent" disabled={!dirty || Boolean(problem)} onClick={save}>
             Save
@@ -147,7 +148,7 @@ export function GraphicEditor() {
               onClick={() => setCreating(true)}
               className="rounded p-1 text-muted hover:bg-button hover:text-fg"
             >
-              <Plus size={14} />
+              <PlusIcon size={14} />
             </button>
           </div>
           {creating && (
@@ -200,7 +201,7 @@ export function GraphicEditor() {
               onClick={remove}
               className="flex shrink-0 items-center gap-1 text-muted hover:text-bad"
             >
-              <Trash2 size={12} /> Delete
+              <TrashIcon size={12} /> Delete
             </button>
           </div>
         </section>

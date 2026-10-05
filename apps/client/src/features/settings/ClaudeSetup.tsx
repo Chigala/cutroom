@@ -3,8 +3,9 @@
  * who it's signed in as, with the one button that fixes what's missing: Install, Sign in or Update.
  * The login is the user's own Claude Code login, so signing in here signs in Claude Code too.
  */
+
+import { ArrowClockwiseIcon, CheckCircleIcon, CircleNotchIcon, WarningIcon } from "@phosphor-icons/react";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
-import { AlertTriangle, CheckCircle2, Loader2, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
@@ -43,7 +44,7 @@ export function ClaudeSetup() {
   if (!status) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-line px-3 py-2.5 text-[13px] text-muted">
-        <Loader2 size={14} className="animate-spin" /> Looking for Claude Code…
+        <CircleNotchIcon size={14} className="animate-spin" /> Looking for Claude Code…
       </div>
     );
   }
@@ -65,9 +66,9 @@ export function ClaudeSetup() {
     <div className="flex flex-col gap-2.5 rounded-lg border border-line px-3 py-2.5">
       <div className="flex items-start gap-2.5">
         {ok ? (
-          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-ok" />
+          <CheckCircleIcon size={16} className="mt-0.5 shrink-0 text-ok" />
         ) : (
-          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-accent" />
+          <WarningIcon size={16} className="mt-0.5 shrink-0 text-accent" />
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-[13px] text-fg">
@@ -110,7 +111,7 @@ export function ClaudeSetup() {
           onClick={() => void checkClaude(true)}
           className="shrink-0 rounded-md p-1 text-faint hover:bg-button hover:text-fg-2 disabled:opacity-40"
         >
-          <RotateCw size={13} className={checking ? "animate-spin" : ""} />
+          <ArrowClockwiseIcon size={13} className={checking ? "animate-spin" : ""} />
         </button>
       </div>
 
@@ -163,7 +164,7 @@ function TaskProgress({ task }: { task: ClaudeTask }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-xs text-fg-2">
-        <Loader2 size={13} className="shrink-0 animate-spin text-muted" />
+        <CircleNotchIcon size={13} className="shrink-0 animate-spin text-muted" />
         <span className="min-w-0 flex-1 truncate">{task.message ?? DOING[task.kind]}</span>
         <button
           type="button"

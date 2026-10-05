@@ -1,6 +1,6 @@
+import { UploadSimpleIcon } from "@phosphor-icons/react";
 import { sceneAt, splitSceneOps, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
-import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ChatPanel } from "./features/chat/ChatPanel.tsx";
 import { ExportDialog } from "./features/export/ExportDialog.tsx";
@@ -282,7 +282,7 @@ function DropTarget() {
   return (
     <div className="pointer-events-none fixed inset-3 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent bg-bg/80 backdrop-blur-sm animate-fade-in">
       <div className="flex flex-col items-center gap-3 text-fg">
-        <Upload size={28} className="text-accent" />
+        <UploadSimpleIcon size={28} className="text-accent" />
         <span className="text-[15px] font-semibold">Drop to add clips</span>
         <span className="text-[13px] text-muted">They join the end of the cut. Then ask for an edit.</span>
         <span className="text-[13px] text-muted">

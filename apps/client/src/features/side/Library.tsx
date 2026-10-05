@@ -4,21 +4,22 @@
  * (what a sound is, a track's tempo, what a meme shows) and the agent searches here before the web.
  * + puts one at the playhead; a click opens its name, notes, tags and roles.
  */
+
+import {
+  BookmarkSimpleIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  FolderOpenIcon,
+  MagnifyingGlassIcon,
+  MusicNoteIcon,
+  PauseIcon,
+  PlayIcon,
+  PlusIcon,
+  UploadSimpleIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { type AssetEntry, keepable, type Source } from "@vedit/project";
 import { clsx } from "clsx";
-import {
-  BookmarkPlus,
-  Check,
-  FolderOpen,
-  Loader2,
-  Music,
-  Pause,
-  Play,
-  Plus,
-  Search,
-  Upload,
-  X,
-} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { host, MEDIA_BASE } from "../../lib/host.ts";
 import { assetUrl, followLibrary, keepInLibrary, useLibrary } from "../../state/library.ts";
@@ -161,7 +162,7 @@ export function Library() {
 
       <div className="flex items-center gap-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-line bg-raised px-2 focus-within:border-edge">
-          <Search size={13} className="shrink-0 text-faint" />
+          <MagnifyingGlassIcon size={13} className="shrink-0 text-faint" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -180,7 +181,7 @@ export function Library() {
           }
           className="flex size-[28px] shrink-0 items-center justify-center rounded-lg bg-control text-fg-2 hover:bg-selected"
         >
-          <Plus size={14} />
+          <PlusIcon size={14} />
         </button>
         <button
           type="button"
@@ -189,7 +190,7 @@ export function Library() {
           onClick={() => void host.library.reveal(scope).catch((err: Error) => toast(err.message, "warn"))}
           className="flex size-[28px] shrink-0 items-center justify-center rounded-lg bg-control text-fg-2 hover:bg-selected"
         >
-          <FolderOpen size={14} />
+          <FolderOpenIcon size={14} />
         </button>
       </div>
 
@@ -219,7 +220,7 @@ export function Library() {
 
       {(state?.pending ?? 0) > 0 && (
         <div className="flex items-center gap-1.5 text-[11.5px] text-muted">
-          <Loader2 size={12} className="animate-spin" /> Cataloguing {state!.pending}{" "}
+          <CircleNotchIcon size={12} className="animate-spin" /> Cataloguing {state!.pending}{" "}
           {state!.pending === 1 ? "file" : "files"}…
         </div>
       )}
@@ -265,11 +266,11 @@ export function Library() {
                         className="flex size-7 shrink-0 items-center justify-center rounded-full bg-control text-fg-2 hover:bg-selected"
                       >
                         {playing === a.id ? (
-                          <Pause size={12} fill="currentColor" />
+                          <PauseIcon size={12} weight="fill" />
                         ) : a.kind === "music" ? (
-                          <Music size={12} />
+                          <MusicNoteIcon size={12} />
                         ) : (
-                          <Play size={12} fill="currentColor" className="ml-px" />
+                          <PlayIcon size={12} weight="fill" className="ml-px" />
                         )}
                       </button>
                       <button
@@ -360,7 +361,7 @@ export function Library() {
 
       {dropping && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-accent bg-bg/85 text-center">
-          <Upload size={22} className="text-accent" />
+          <UploadSimpleIcon size={22} className="text-accent" />
           <span className="text-[13px] font-semibold text-fg">
             {scope === "project" ? "Add to this project's assets" : "Add to your library"}
           </span>
@@ -431,9 +432,9 @@ function ProjectClips({
                   className="flex size-9 shrink-0 items-center justify-center rounded-md bg-control text-fg-2 hover:bg-selected"
                 >
                   {playing === s.id ? (
-                    <Pause size={12} fill="currentColor" />
+                    <PauseIcon size={12} weight="fill" />
                   ) : (
-                    <Play size={12} fill="currentColor" />
+                    <PlayIcon size={12} weight="fill" />
                   )}
                 </button>
               ) : s.kind === "image" ? (
@@ -469,7 +470,7 @@ function ProjectClips({
               {canKeep &&
                 (kept.has(s.id) ? (
                   <span className="flex shrink-0 items-center gap-1 text-[11px] text-ok">
-                    <Check size={12} /> Kept
+                    <CheckIcon size={12} /> Kept
                   </span>
                 ) : (
                   <button
@@ -481,7 +482,7 @@ function ProjectClips({
                     }}
                     className="flex shrink-0 items-center gap-1 rounded-md bg-control px-2 py-0.5 text-[11px] text-fg-2 opacity-0 group-hover:opacity-100 hover:bg-selected focus-visible:opacity-100"
                   >
-                    <BookmarkPlus size={12} /> Keep
+                    <BookmarkSimpleIcon size={12} /> Keep
                   </button>
                 ))}
             </li>
@@ -506,7 +507,7 @@ function AddButton({ asset, onAdd }: { asset: AssetEntry; onAdd: (a: AssetEntry)
       }}
       className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg opacity-0 shadow group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-60"
     >
-      {busy ? <Loader2 size={12} className="animate-spin" /> : <Plus size={13} strokeWidth={2.4} />}
+      {busy ? <CircleNotchIcon size={12} className="animate-spin" /> : <PlusIcon size={13} weight="bold" />}
     </button>
   );
 }
@@ -585,7 +586,7 @@ function Details({ asset }: { asset: AssetEntry }) {
               onClick={() => void host.library.setRole(r, null)}
               className="rounded px-0.5 hover:bg-accent/20"
             >
-              <X size={10} />
+              <XIcon size={10} />
             </button>
           </span>
         ))}
@@ -618,7 +619,7 @@ function Details({ asset }: { asset: AssetEntry }) {
 function Empty({ scope, dir }: { scope: Scope; dir: string | null | undefined }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line-strong px-5 py-8 text-center">
-      <Upload size={22} className="text-accent" />
+      <UploadSimpleIcon size={22} className="text-accent" />
       <div className="flex flex-col gap-1">
         <span className="text-[13px] font-semibold text-fg">
           {scope === "project" ? "No assets just for this project" : "Your library is empty"}
@@ -637,7 +638,7 @@ function Empty({ scope, dir }: { scope: Scope; dir: string | null | undefined })
           className="flex max-w-full items-center gap-1.5 rounded-md bg-button px-2.5 py-1 font-mono text-[11px] text-fg-2 hover:bg-chip"
           title={dir}
         >
-          <FolderOpen size={12} className="shrink-0" />
+          <FolderOpenIcon size={12} className="shrink-0" />
           <span className="truncate">{home(dir)}</span>
         </button>
       )}

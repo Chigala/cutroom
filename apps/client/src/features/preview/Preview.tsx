@@ -2,6 +2,8 @@
  * The video is the main surface. The player renders the real composition (the same component export
  * uses), and the overlay on top makes the frame a canvas: point at things, pin comments, see safe zones.
  */
+
+import { EyeIcon, EyeSlashIcon, PauseIcon, PlayIcon } from "@phosphor-icons/react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { safeZoneFor } from "@vedit/checks";
 import { CoverComposition, compositionMeta, VideoComposition } from "@vedit/composition";
@@ -19,7 +21,6 @@ import {
   timelineOf,
 } from "@vedit/project";
 import { clsx } from "clsx";
-import { Eye, EyeOff, Pause, Play } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "../../components/ui.tsx";
 import { MEDIA_BASE } from "../../lib/host.ts";
@@ -404,9 +405,9 @@ function Transport() {
         className="flex size-9 items-center justify-center rounded-full bg-fg text-bg hover:bg-fg-2"
       >
         {playing ? (
-          <Pause size={14} fill="currentColor" />
+          <PauseIcon size={14} weight="fill" />
         ) : (
-          <Play size={14} fill="currentColor" className="ml-0.5" />
+          <PlayIcon size={14} weight="fill" className="ml-0.5" />
         )}
       </button>
       <span ref={timeRef} className="w-[52px] text-right text-fg" />
@@ -415,7 +416,7 @@ function Transport() {
         label={safeZones ? "Hide safe zones (G)" : "Show safe zones (G)"}
         onClick={() => setUi((s) => ({ safeZones: !s.safeZones }))}
       >
-        {safeZones ? <Eye size={15} /> : <EyeOff size={15} />}
+        {safeZones ? <EyeIcon size={15} /> : <EyeSlashIcon size={15} />}
       </IconButton>
     </div>
   );

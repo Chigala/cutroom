@@ -3,6 +3,8 @@
  * playhead moves by transform outside React, and items the agent just touched are outlined so you can
  * see exactly what it changed.
  */
+
+import { IntersectIcon } from "@phosphor-icons/react";
 import {
   type Anchor,
   anchorAt,
@@ -21,7 +23,6 @@ import {
   trimSceneOps,
 } from "@vedit/project";
 import { clsx } from "clsx";
-import { Blend } from "lucide-react";
 import {
   createContext,
   memo,
@@ -581,7 +582,7 @@ const SceneBlock = memo(function SceneBlock({
           title={`${scene.transition.kind}, ${scene.transition.duration}s, from the shot before`}
           className="pointer-events-none absolute bottom-0.5 left-1 flex items-center gap-0.5 rounded bg-black/60 px-1 font-mono text-[9px] whitespace-nowrap text-accent"
         >
-          <Blend size={9} /> {scene.transition.kind}
+          <IntersectIcon size={9} /> {scene.transition.kind}
         </span>
       )}
       <span className="pointer-events-none absolute top-0.5 left-[5px] font-mono text-[10px] whitespace-nowrap text-[#e4e4e7] drop-shadow">

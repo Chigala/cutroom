@@ -1,6 +1,6 @@
+import { XIcon } from "@phosphor-icons/react";
 import { formatTime, resolveAnchor, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
-import { X } from "lucide-react";
 import { SectionLabel } from "../../components/ui.tsx";
 import { send, useChat } from "../../state/chat.ts";
 import { seekTime } from "../../state/playback.ts";
@@ -54,7 +54,7 @@ export function CommentsRail() {
                 }}
                 className="absolute top-2 right-2 hidden rounded p-0.5 text-faint hover:text-fg group-hover:block"
               >
-                <X size={12} />
+                <XIcon size={12} />
               </button>
             </div>
           );

@@ -3,10 +3,11 @@
  * (captions/looks/*.css) are both a file you can type into, watch through the real composition, scrub
  * frame by frame, or describe to Claude.
  */
+
+import { SparkleIcon } from "@phosphor-icons/react";
 import { Player, type PlayerRef, Thumbnail } from "@remotion/player";
 import { compositionMeta, VideoComposition } from "@vedit/composition";
 import type { ProjectDoc } from "@vedit/project";
-import { Sparkles } from "lucide-react";
 import { type RefObject, useMemo, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { MEDIA_BASE } from "../../lib/host.ts";
@@ -132,7 +133,7 @@ export function AskClaude({
   return (
     <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-line p-2.5">
       <span className="flex items-center gap-1.5 text-[12px] font-medium text-fg-2">
-        <Sparkles size={13} className="text-accent" /> Describe it to Claude
+        <SparkleIcon size={13} className="text-accent" /> Describe it to Claude
       </span>
       <textarea
         value={text}

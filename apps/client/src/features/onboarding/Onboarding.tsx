@@ -4,22 +4,23 @@
  * background while you move on. Shown until it's finished or skipped (settings.onboarded), and again
  * from Settings → Advanced.
  */
+
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ArrowSquareOutIcon,
+  CaretDownIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  FilmSlateIcon,
+  LockIcon,
+  SmileyIcon,
+  SparkleIcon,
+  TerminalWindowIcon,
+  WaveformIcon,
+} from "@phosphor-icons/react";
 import type { AgentStatus, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
-import {
-  ArrowLeft,
-  ArrowRight,
-  AudioLines,
-  Check,
-  ChevronDown,
-  Clapperboard,
-  ExternalLink,
-  Laugh,
-  Loader2,
-  Lock,
-  Sparkles,
-  TerminalSquare,
-} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { host } from "../../lib/host.ts";
 import { checkClaude, followClaude, useClaude } from "../../state/claude.ts";
@@ -97,7 +98,7 @@ export function Onboarding() {
               onClick={back}
               className="flex h-10 items-center gap-1.5 rounded-full px-4 text-[13px] text-fg-2 transition-colors hover:bg-button"
             >
-              <ArrowLeft size={15} /> Back
+              <ArrowLeftIcon size={15} /> Back
             </button>
           )}
           <button
@@ -106,7 +107,7 @@ export function Onboarding() {
             className="flex h-10 items-center gap-1.5 rounded-full bg-fg px-5 text-[13px] font-medium text-bg transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
             {step === "welcome" ? "Get started" : step === "ready" ? "Start editing" : "Continue"}
-            <ArrowRight size={15} />
+            <ArrowRightIcon size={15} />
           </button>
         </div>
       </div>
@@ -204,7 +205,7 @@ function Privacy() {
       <Stage>
         <div className="flex flex-col items-center gap-5">
           <div className="flex size-24 items-center justify-center rounded-[26px] bg-raised">
-            <Lock size={40} strokeWidth={1.5} className="text-fg-2" />
+            <LockIcon size={40} weight="light" className="text-fg-2" />
           </div>
           <div className="flex flex-col items-center gap-1.5 text-[13px] text-muted">
             <span>Footage · on this computer</span>
@@ -238,7 +239,7 @@ function ClaudeStep() {
           />
           {busy && (
             <span className="flex items-center gap-2 text-[13px] text-fg-2">
-              <Loader2 size={14} className="animate-spin text-muted" />
+              <CircleNotchIcon size={14} className="animate-spin text-muted" />
               {task?.message ?? "Working on it…"}
             </span>
           )}
@@ -266,7 +267,7 @@ function ClaudeStep() {
             <span className="size-2.5 rounded-full bg-line-strong" />
             <span className="size-2.5 rounded-full bg-line-strong" />
             <span className="size-2.5 rounded-full bg-line-strong" />
-            <TerminalSquare size={13} className="ml-2 text-faint" />
+            <TerminalWindowIcon size={13} className="ml-2 text-faint" />
           </div>
           <div className="flex flex-col gap-2 p-5 font-mono text-[12px] leading-relaxed">
             <span className="text-fg-2">
@@ -292,7 +293,7 @@ function StatusRow({ done, label }: { done: boolean; label: string }) {
           done ? "bg-ok text-bg" : "border border-line-strong",
         )}
       >
-        {done && <Check size={12} strokeWidth={3} />}
+        {done && <CheckIcon size={12} weight="bold" />}
       </span>
       <span className={done ? "text-fg" : "text-muted"}>{label}</span>
     </span>
@@ -524,7 +525,7 @@ interface Provider {
 const EXTRAS: readonly Extra[] = [
   {
     id: "stock",
-    icon: <Clapperboard size={18} strokeWidth={1.6} />,
+    icon: <FilmSlateIcon size={18} />,
     title: "Stock footage",
     why: "B-roll that shows what you're saying: the city you mention, the product, the moment.",
     demo: "stock",
@@ -565,7 +566,7 @@ const EXTRAS: readonly Extra[] = [
   },
   {
     id: "memes",
-    icon: <Laugh size={18} strokeWidth={1.6} />,
+    icon: <SmileyIcon size={18} />,
     title: "Memes and reactions",
     why: "The reaction GIF, the sticker, the meme that lands the joke, found by the agent at the right beat.",
     demo: "memes",
@@ -591,7 +592,7 @@ const EXTRAS: readonly Extra[] = [
   },
   {
     id: "sounds",
-    icon: <AudioLines size={18} strokeWidth={1.6} />,
+    icon: <WaveformIcon size={18} />,
     title: "Sound effects",
     why: "The whoosh on a transition, the boom on a reveal, the ding on a number: sound design that makes it feel finished.",
     demo: "sounds",
@@ -632,16 +633,16 @@ function Extras({ keys }: { keys: AgentStatus["keys"] }) {
                   <span className="flex-1 text-[14px] font-medium text-fg">{e.title}</span>
                   {e.included ? (
                     <span className="flex items-center gap-1 text-xs text-ok">
-                      <Check size={12} /> Included
+                      <CheckIcon size={12} /> Included
                     </span>
                   ) : added ? (
                     <span className="flex items-center gap-1 text-xs text-ok">
-                      <Check size={12} /> Added
+                      <CheckIcon size={12} /> Added
                     </span>
                   ) : (
                     <span className="text-xs text-faint">Optional</span>
                   )}
-                  <ChevronDown
+                  <CaretDownIcon
                     size={15}
                     className={clsx("text-faint transition-transform", open === e.id && "rotate-180")}
                   />
@@ -705,7 +706,7 @@ function ProviderSteps({ provider, source }: { provider: Provider; source: "save
           rel="noreferrer"
           className="flex items-center gap-1 text-xs text-accent hover:underline"
         >
-          {provider.siteLabel} <ExternalLink size={11} />
+          {provider.siteLabel} <ArrowSquareOutIcon size={11} />
         </a>
       </span>
       {provider.note && <span className="text-xs text-faint">{provider.note}</span>}
@@ -754,7 +755,7 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
   if (source && result === null)
     return (
       <span className="flex items-center gap-1.5 text-xs text-ok">
-        <Check size={12} /> Already added
+        <CheckIcon size={12} /> Already added
       </span>
     );
   return (
@@ -783,7 +784,7 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
           onClick={() => void check()}
           className="flex min-w-[72px] items-center justify-center rounded-xl bg-button px-3 text-xs font-medium text-fg-2 transition-colors hover:bg-control disabled:opacity-40"
         >
-          {checking ? <Loader2 size={13} className="animate-spin" /> : "Check"}
+          {checking ? <CircleNotchIcon size={13} className="animate-spin" /> : "Check"}
         </button>
       </div>
       {result && (
@@ -810,7 +811,7 @@ function Demo({ name, title }: { name: string; title: string }) {
       <div className="relative min-h-0 flex-1 bg-sunken">
         {missing ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-faint">
-            <Sparkles size={28} strokeWidth={1.4} />
+            <SparkleIcon size={28} weight="light" />
             <span className="text-xs">{title}</span>
           </div>
         ) : (

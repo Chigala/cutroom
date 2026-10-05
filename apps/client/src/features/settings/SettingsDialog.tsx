@@ -2,21 +2,10 @@
  * Settings: a section list on the left, the section's rows on the right (what it does on the left of each
  * row, its control on the right). Every change saves as it's made; keys save as they're typed or pasted.
  */
+
+import { CheckIcon, CopyIcon, EyeIcon, EyeSlashIcon, FolderOpenIcon } from "@phosphor-icons/react";
 import type { AgentStatus, Diagnostics, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
-import {
-  AudioLines,
-  Bot,
-  Check,
-  Copy,
-  Eye,
-  EyeOff,
-  FolderOpen,
-  ImagePlay,
-  Scissors,
-  SlidersHorizontal,
-  Stethoscope,
-} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Dialog } from "../../components/Dialog.tsx";
 import { Button, Segmented } from "../../components/ui.tsx";
@@ -30,13 +19,14 @@ import { EffortSlider } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
 
+/** Words alone: six short, plain names say it better than icons would. */
 const SECTIONS = [
-  { id: "claude", label: "Claude", icon: Bot },
-  { id: "editing", label: "Editing", icon: Scissors },
-  { id: "transcription", label: "Transcription", icon: AudioLines },
-  { id: "media", label: "Media sources", icon: ImagePlay },
-  { id: "advanced", label: "Advanced", icon: SlidersHorizontal },
-  { id: "diagnostics", label: "Diagnostics", icon: Stethoscope },
+  { id: "claude", label: "Claude" },
+  { id: "editing", label: "Editing" },
+  { id: "transcription", label: "Transcription" },
+  { id: "media", label: "Media sources" },
+  { id: "advanced", label: "Advanced" },
+  { id: "diagnostics", label: "Diagnostics" },
 ] as const;
 type Section = (typeof SECTIONS)[number]["id"];
 
@@ -134,18 +124,17 @@ export function SettingsDialog() {
     <Dialog title="Settings" onClose={close} width={800}>
       <div className="-m-5 flex h-[min(600px,calc(100vh-130px))]">
         <nav className="flex w-[188px] shrink-0 flex-col gap-0.5 border-r border-line bg-sunken/40 p-2">
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
+          {SECTIONS.map(({ id, label }) => (
             <button
               key={id}
               type="button"
               onClick={() => setSection(id)}
               aria-current={section === id ? "page" : undefined}
               className={clsx(
-                "flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] transition-colors",
+                "rounded-lg px-3 py-[7px] text-left text-[13px] transition-colors",
                 section === id ? "bg-selected text-fg" : "text-muted hover:bg-button hover:text-fg-2",
               )}
             >
-              <Icon size={15} strokeWidth={1.8} className="shrink-0" />
               {label}
             </button>
           ))}
@@ -584,7 +573,7 @@ function KeyRow({
         {source === "saved" ? (
           <span className="flex shrink-0 items-center gap-2 text-xs">
             <span className="flex items-center gap-1 text-ok">
-              <Check size={12} /> Saved
+              <CheckIcon size={12} /> Saved
             </span>
             <button
               type="button"
@@ -632,7 +621,7 @@ function KeyRow({
             onClick={() => setShown(!shown)}
             className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1 text-faint hover:bg-button hover:text-fg-2"
           >
-            {shown ? <EyeOff size={14} /> : <Eye size={14} />}
+            {shown ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
           </button>
         </div>
         <Button size="sm" disabled={!typed.trim() || checking} onClick={() => void check()}>
@@ -674,7 +663,7 @@ function LibraryRow() {
       </span>
       <div className="flex gap-1.5">
         <Button size="sm" onClick={() => void host.library.reveal("library")}>
-          <FolderOpen size={13} /> Show in Finder
+          <FolderOpenIcon size={13} /> Show in Finder
         </Button>
         <Button size="sm" variant="ghost" onClick={() => void host.library.pickDir()}>
           Change…
@@ -726,7 +715,7 @@ function DiagnosticsPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={() => void host.app.openLogs()}>
-          <FolderOpen size={13} /> Open logs folder
+          <FolderOpenIcon size={13} /> Open logs folder
         </Button>
         <Button
           size="sm"
@@ -738,7 +727,7 @@ function DiagnosticsPage() {
             )
           }
         >
-          <Copy size={13} /> Copy a report
+          <CopyIcon size={13} /> Copy a report
         </Button>
       </div>
       <Row
@@ -794,7 +783,7 @@ function SaveNote({ saved }: { saved: { ok: boolean; at: number } | null }) {
         "Not saved"
       ) : (
         <>
-          <Check size={12} className="text-ok" /> Saved
+          <CheckIcon size={12} className="text-ok" /> Saved
         </>
       )}
     </div>

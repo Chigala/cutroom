@@ -2,9 +2,10 @@
  * Every project you've opened, newest first, with search: the place to find one when the header's
  * menu (a handful of recents) isn't enough. Type to filter by name or folder; ↑↓ and Enter open one.
  */
+
+import { FilmStripIcon, FolderOpenIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import type { RecentProject } from "@vedit/bridge";
 import { clsx } from "clsx";
-import { Film, FolderOpen, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "../../components/Dialog.tsx";
 import { host } from "../../lib/host.ts";
@@ -64,7 +65,7 @@ export function ProjectsDialog() {
     <Dialog title={`Projects${list ? ` · ${list.length}` : ""}`} onClose={close} width={620}>
       <div className="-m-5 flex flex-col">
         <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-          <Search size={15} className="shrink-0 text-faint" />
+          <MagnifyingGlassIcon size={15} className="shrink-0 text-faint" />
           <input
             autoFocus
             value={query}
@@ -94,7 +95,7 @@ export function ProjectsDialog() {
             }}
             className="flex shrink-0 items-center gap-1.5 rounded-md bg-button px-2.5 py-1 text-xs text-fg-2 hover:bg-chip"
           >
-            <FolderOpen size={13} /> Open folder…
+            <FolderOpenIcon size={13} /> Open folder…
           </button>
         </div>
         <div ref={listRef} className="flex max-h-[min(60vh,520px)] flex-col overflow-y-auto p-1.5">
@@ -110,7 +111,10 @@ export function ProjectsDialog() {
                 i === at ? "bg-raised" : "hover:bg-raised",
               )}
             >
-              <Film size={15} className={clsx("shrink-0", r.dir === dir ? "text-accent" : "text-muted")} />
+              <FilmStripIcon
+                size={15}
+                className={clsx("shrink-0", r.dir === dir ? "text-accent" : "text-muted")}
+              />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[13px] text-fg">
                   {r.name}

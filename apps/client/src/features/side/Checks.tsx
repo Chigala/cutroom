@@ -1,6 +1,6 @@
+import { CaretRightIcon, CheckIcon, WarningIcon, XCircleIcon } from "@phosphor-icons/react";
 import { checksSummary, runChecks } from "@vedit/checks";
 import { clsx } from "clsx";
-import { Check, ChevronRight, CircleX, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 import { edit, useDoc } from "../../state/project.ts";
 
@@ -30,12 +30,12 @@ export function Checks() {
         title={all ? "Show only what needs attention" : "Show every check"}
         className="flex items-center gap-1.5 rounded text-left hover:text-fg"
       >
-        <ChevronRight
+        <CaretRightIcon
           size={13}
           className={clsx("shrink-0 text-faint transition-transform", all && "rotate-90")}
         />
         <span className="text-[13px] font-semibold">Checks</span>
-        {!problems.length && <Check size={14} className="text-ok" strokeWidth={2} />}
+        {!problems.length && <CheckIcon size={14} className="text-ok" />}
         <span
           className={clsx(
             "ml-auto font-mono text-xs tabular",
@@ -48,11 +48,11 @@ export function Checks() {
       {shown.map((r) => (
         <div key={r.id} className="flex items-center gap-2 text-[12.5px] text-fg-2" title={r.detail}>
           {r.status === "pass" ? (
-            <Check size={15} className="shrink-0 text-ok" strokeWidth={1.8} />
+            <CheckIcon size={15} className="shrink-0 text-ok" />
           ) : r.status === "warn" ? (
-            <TriangleAlert size={15} className="shrink-0 text-accent" strokeWidth={1.6} />
+            <WarningIcon size={15} className="shrink-0 text-accent" />
           ) : (
-            <CircleX size={15} className="shrink-0 text-bad" strokeWidth={1.6} />
+            <XCircleIcon size={15} className="shrink-0 text-bad" />
           )}
           <span className="min-w-0 flex-1 truncate">
             {r.status === "pass" ? r.title : (r.detail ?? r.title)}

@@ -16,20 +16,14 @@ import {
 } from "./schema.ts";
 import { STARTER_GRAPHICS } from "./starter-graphics.ts";
 import { STARTER_VERSION } from "./starters.ts";
+import { STYLE_PRESETS } from "./style-presets.ts";
 import { STARTER_EFFECTS, STARTER_GRADES, STARTER_TRANSITIONS } from "./styles.ts";
 
-export const DEFAULT_STYLE = `# Style
+/** STYLE.md for a new project when the user didn't choose one: the talking-to-camera starting point. */
+export const DEFAULT_STYLE = STYLE_PRESETS[0]!.text;
 
-How I like my videos. The agent reads this before every edit, and you can change it any time.
-
-- Hook on screen in the first second. Short, plain words.
-- Cut every retake, stumble and long pause. Keep the asides that sound like me.
-- Fast cuts, nothing over 4 seconds unless someone is talking.
-- Cuts land on the beat when there is music.
-- Warm colors. No emojis in captions.
-`;
-
-export function emptyProject(name: string): ProjectDoc {
+/** A new project. `style`: the user's STYLE.md for new projects (Settings), else the default. */
+export function emptyProject(name: string, style = DEFAULT_STYLE): ProjectDoc {
   return {
     meta: {
       schema: 1,
@@ -39,7 +33,7 @@ export function emptyProject(name: string): ProjectDoc {
       createdAt: new Date().toISOString(),
       starters: STARTER_VERSION,
     },
-    style: DEFAULT_STYLE,
+    style: style.trim() ? style : DEFAULT_STYLE,
     look: Look.parse({}),
     sources: [],
     transcripts: [],

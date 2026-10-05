@@ -16,6 +16,7 @@ export * from "./sound.ts";
 export * from "./speech.ts";
 export * from "./starter-graphics.ts";
 export * from "./starters.ts";
+export * from "./style-presets.ts";
 export * from "./styles.ts";
 export * from "./summary.ts";
 export * from "./templates.ts";

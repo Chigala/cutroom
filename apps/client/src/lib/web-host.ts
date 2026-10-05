@@ -41,6 +41,7 @@ export function createWebHost(): EditorApi {
     klipyKey: "",
     klipyUser: "",
     kit: "",
+    style: "",
     showThinking: true,
     claudePath: "",
     libraryDir: "",

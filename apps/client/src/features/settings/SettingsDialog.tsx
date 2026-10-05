@@ -27,6 +27,7 @@ import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 import { EffortSlider } from "../chat/EffortSlider.tsx";
+import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
 
 const SECTIONS = [
@@ -207,6 +208,7 @@ export function SettingsDialog() {
                   label="Describe what's shown"
                 />
               </Row>
+              <NewProjectStyle saved={settings.style} />
             </Page>
           )}
 
@@ -344,6 +346,26 @@ export function SettingsDialog() {
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** The STYLE.md new projects start with; each project's own is in its Style tab. */
+function NewProjectStyle({ saved }: { saved: string }) {
+  const { text, setText } = useStyleDraft(saved);
+  return (
+    <div className="flex flex-col gap-3 border-t border-line pt-5">
+      <div className="flex flex-col gap-1">
+        <span className="text-[13px] font-medium text-fg">Style for new projects</span>
+        <span className="text-xs leading-relaxed text-muted">
+          The STYLE.md every new project starts with: your taste in words, read before every edit. A project's
+          own is in its Style tab.
+        </span>
+      </div>
+      <PresetGrid text={text} onPick={setText} compact />
+      <div className="rounded-xl border border-line-strong bg-raised px-4 py-3">
+        <StyleText text={text} onChange={setText} className="h-[220px]" />
+      </div>
+    </div>
   );
 }
 

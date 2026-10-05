@@ -397,9 +397,10 @@ export class ProjectService {
     return this.switchTo(await ProjectStore.create(dir, await this.fresh(dir), this.events()));
   }
 
-  /** A new project's doc: empty, with the brand kit new projects start with (settings.kit). */
+  /** A new project's doc: empty, with the user's style and the brand kit new projects start with. */
   private async fresh(dir: string): Promise<ProjectDoc> {
-    return withKit(emptyProject(path.basename(dir)), (await getSettings()).kit, dir);
+    const settings = await getSettings();
+    return withKit(emptyProject(path.basename(dir), settings.style), settings.kit, dir);
   }
 
   // --- Brand kits ---------------------------------------------------------------------------------

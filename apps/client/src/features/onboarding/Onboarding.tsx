@@ -25,8 +25,9 @@ import { host } from "../../lib/host.ts";
 import { checkClaude, followClaude, useClaude } from "../../state/claude.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { saveSettings, useSettings } from "../../state/settings.ts";
+import { PresetGrid, StyleText, useStyleDraft } from "./StylePicker.tsx";
 
-const STEPS = ["welcome", "privacy", "claude", "captions", "extras", "ready"] as const;
+const STEPS = ["welcome", "privacy", "claude", "style", "captions", "extras", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
 export function Onboarding() {
@@ -75,6 +76,7 @@ export function Onboarding() {
           {step === "welcome" && <Welcome />}
           {step === "privacy" && <Privacy />}
           {step === "claude" && <ClaudeStep />}
+          {step === "style" && <StyleStep settings={settings} />}
           {step === "captions" && <Captions settings={settings} keys={keys} />}
           {step === "extras" && <Extras keys={keys} />}
           {step === "ready" && <Ready settings={settings} />}
@@ -306,6 +308,34 @@ function Pill({ children, onClick }: { children: ReactNode; onClick: () => void 
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * What they make, as the STYLE.md every new project starts with: the closest kind of video, made their
+ * own, or their own words. Skipped, new projects get the default.
+ */
+function StyleStep({ settings }: { settings: Settings }) {
+  const { text, setText } = useStyleDraft(settings.style);
+  return (
+    <>
+      <Copy eyebrow="Your style" title="What do you make?">
+        <Lead>
+          Pick the closest, then make it yours. It's how the agent knows your taste: it reads it before every
+          edit, and keeps it up to date as you correct it.
+        </Lead>
+        <PresetGrid text={text} onPick={setText} />
+      </Copy>
+      <Stage tall>
+        <div className="flex h-full w-full flex-col">
+          <div className="flex items-center justify-between border-b border-line px-6 py-4">
+            <span className="font-mono text-[13px] text-fg">STYLE.md</span>
+            <span className="text-xs text-faint">every new project starts with this</span>
+          </div>
+          <StyleText text={text} onChange={setText} className="min-h-0 flex-1 px-6 py-5" />
+        </div>
+      </Stage>
+    </>
   );
 }
 

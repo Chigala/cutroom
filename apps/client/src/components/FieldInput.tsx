@@ -6,7 +6,7 @@ import { captionLookMeta, styleMeta } from "@vedit/project";
 import { clsx } from "clsx";
 import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Field, RefColl } from "../lib/fields.ts";
+import { type Field, type RefColl, withDefaults } from "../lib/fields.ts";
 import { useDoc } from "../state/project.ts";
 import { setUi } from "../state/ui.ts";
 
@@ -169,7 +169,23 @@ export function FieldInput({
         </div>
       );
     }
+    case "object":
+      return <ObjectFields field={field} value={value} onCommit={onCommit} onPreview={onPreview} />;
     default:
+      // Anything without a control of its own: text, or JSON for a value that isn't (never "[object Object]").
+      if (value !== null && typeof value === "object")
+        return (
+          <TextBox
+            multiline
+            mono
+            value={JSON.stringify(value, null, 2)}
+            onCommit={(v) => {
+              try {
+                onCommit(JSON.parse(v));
+              } catch {}
+            }}
+          />
+        );
       return (
         <TextBox
           value={value === null || value === undefined ? "" : String(value)}
@@ -177,6 +193,62 @@ export function FieldInput({
         />
       );
   }
+}
+
+/**
+ * A group of settings (checks.json's motion, a cover's moment): each of its fields, with what the schema
+ * fills in for the ones not set. A change writes the whole group, so the others keep their values. One
+ * that can be left empty (null) shows as off, with a way to set it.
+ */
+function ObjectFields({
+  field,
+  value,
+  onCommit,
+  onPreview,
+}: {
+  field: Field;
+  value: unknown;
+  onCommit: (value: unknown) => void;
+  onPreview?: ((value: unknown) => void) | undefined;
+}) {
+  const off = value === null || (value === undefined && field.nullable);
+  const current = withDefaults(field, off ? undefined : (value as Record<string, unknown> | undefined));
+  if (off)
+    return (
+      <div className="flex items-center gap-2 text-[12px] text-faint">
+        None
+        <button
+          type="button"
+          onClick={() => onCommit(current)}
+          className="rounded-md px-1.5 py-0.5 text-accent hover:bg-button"
+        >
+          Set it
+        </button>
+      </div>
+    );
+  return (
+    <div className="flex flex-col gap-3 border-l border-line-strong pl-3">
+      {(field.children ?? []).map((c) => (
+        <FieldRow key={c.key} field={c}>
+          <FieldInput
+            field={c}
+            value={current[c.key]}
+            onCommit={(v) => onCommit({ ...current, [c.key]: v })}
+            {...(onPreview && { onPreview: (v: unknown) => onPreview({ ...current, [c.key]: v }) })}
+          />
+        </FieldRow>
+      ))}
+      {field.nullable && (
+        <button
+          type="button"
+          onClick={() => onCommit(null)}
+          className="self-start rounded-md px-1.5 py-0.5 text-[11px] text-muted hover:bg-button hover:text-fg"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** Text that commits on blur or Enter (Shift+Enter for a new line in multiline fields). */

@@ -221,6 +221,8 @@ export const Settings = z.object({
   klipyUser: z.string().max(64).default(""),
   /** The brand kit new projects start with (its id), or none. */
   kit: z.string().max(64).default(""),
+  /** STYLE.md new projects start with (chosen at onboarding, or in Settings → Editing). Empty: the default. */
+  style: z.string().max(20_000).default(""),
   /** Show the agent's thinking (a summary of it) in the chat as it works. */
   showThinking: z.boolean().default(true),
   /** Claude Code to run the agent with. Empty: the one installed on this computer, else the app's own. */

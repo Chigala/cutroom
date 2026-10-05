@@ -32,13 +32,12 @@ fetch "$TALK" "$work/talk.mp4"
 fetch "$LAUGH" "$work/laugh.mp4"
 fetch "$BROLL" "$work/broll.mp4"
 
-# Sounds of the kinds YouTube edits use, CC0 on Freesound (Freesound's own previews).
+# The sounds, picked by ear: CC0 on Freesound (Freesound's own previews).
 sound() { curl -fsSL -o "$work/$1.mp3" "https://cdn.freesound.org/previews/$2"; }
-sound laugh 481/481735_2524442-hq.mp3     # craigsmith, "Man Laughing Heartily"
-sound airhorn 547/547020_7295304-hq.mp3   # neopolitansixth, "DJ Airhorn"
-sound scratch 431/431777_817038-hq.mp3    # musicvision31, "Record Scratch #4"
-sound boom 512/512389_3997858-hq.mp3      # Kievinay, "Bass Impact - Ki_01"
-sound whoosh 60/60026_71257-hq.mp3        # qubodup, "Swosh swoosh whoosh"
+sound laugh 17/17121_57789-hq.mp3     # cognito perceptum, "small audience laughter"
+sound whoosh 179/179780_985466-hq.mp3 # Sclolex, "wipe1"
+sound pop 437/437122_5435812-hq.mp3   # 4udiopony, "Pop Sound"
+sound hit 81/81148_704648-hq.mp3      # uzerx, "SUB OCEANO D"
 
 # 4:5 at 540x676 (even sizes, for H.264), 30 fps; the frame starts just above his head.
 W=540
@@ -72,11 +71,11 @@ ffmpeg -v error -y -i "$work/talk.mp4" -i "$work/laugh.mp4" -i "$work/laugh.mp3"
     drawtext=fontfile='$IMPACT':text='LMAO':fontsize=86:fontcolor=white:borderw=5:bordercolor=black:x=(w-tw)/2:y=h*0.72,setsar=1[b];
   $(talk 4.8 7)[c];
   [a][b][c]concat=n=3:v=1:a=0[v];
-  [2:a]atrim=0.7:2.3,asetpts=PTS-STARTPTS,volume=1.8,afade=t=out:st=1.35:d=0.25,adelay=2200|2200,apad,atrim=0:6,alimiter=limit=0.9[aud]" \
+  [2:a]atrim=0:2.1,asetpts=PTS-STARTPTS,volume=0.8,afade=t=out:st=1.6:d=0.5,adelay=2200|2200,apad,atrim=0:6,alimiter=limit=0.9[aud]" \
   -map "[v]" -map "[aud]" "${ENC[@]}" "${AUDIO[@]}" "$out/memes-with.mp4"
 
-# Sound effects: a punch-in edit, silent, then with a whoosh, a record scratch, and an airhorn on a
-# bass hit for the last, tightest punch-in.
+# Sound effects: a punch-in edit, silent, then with a whoosh into the first punch-in, a pop on the way
+# back out, and a deep hit under the last, tightest one. Each timed so its peak lands on the cut.
 ffmpeg -v error -y -i "$work/talk.mp4" -filter_complex "
   $(talk 1 2.7)[a];
   [0:v]trim=2.7:4.3,setpts=PTS-STARTPTS,fps=30,crop=443:554:48:0,scale=$W:$H,setsar=1[b];
@@ -84,13 +83,12 @@ ffmpeg -v error -y -i "$work/talk.mp4" -filter_complex "
   [0:v]trim=5.7:7,setpts=PTS-STARTPTS,fps=30,crop=386:483:77:0,scale=$W:$H,setsar=1[d];
   [a][b][c][d]concat=n=4:v=1:a=0[v]" -map "[v]" "${ENC[@]}" "$work/punch.mp4"
 cp "$work/punch.mp4" "$out/sounds-without.mp4"
-ffmpeg -v error -y -i "$work/punch.mp4" -i "$work/whoosh.mp3" -i "$work/scratch.mp3" -i "$work/airhorn.mp3" -i "$work/boom.mp3" \
+ffmpeg -v error -y -i "$work/punch.mp4" -i "$work/whoosh.mp3" -i "$work/pop.mp3" -i "$work/hit.mp3" \
   -filter_complex "
-  [1:a]volume=1.0,adelay=1620|1620[w];
-  [2:a]volume=0.45,adelay=2530|2530[s];
-  [3:a]atrim=0:1.4,afade=t=out:st=1.1:d=0.3,volume=1.6,adelay=4700|4700[h];
-  [4:a]volume=0.5,adelay=4650|4650[b];
-  [w][s][h][b]amix=inputs=4:duration=longest:normalize=0,apad,atrim=0:6,alimiter=limit=0.9[mix]" \
+  [1:a]volume=0.6,adelay=1330|1330[w];
+  [2:a]volume=1.0,adelay=2990|2990[p];
+  [3:a]volume=0.6,afade=t=out:st=1.2:d=0.6,adelay=4670|4670[h];
+  [w][p][h]amix=inputs=3:duration=longest:normalize=0,apad,atrim=0:6,alimiter=limit=0.9[mix]" \
   -map 0:v -map "[mix]" -c:v copy "${AUDIO[@]}" -shortest -movflags +faststart "$out/sounds-with.mp4"
 
 cat >"$out/CREDITS.txt" <<EOF
@@ -102,10 +100,9 @@ Reaction: https://www.pexels.com/video/$LAUGH/ (Tima Miroshnichenko)
 B-roll: https://www.pexels.com/video/$BROLL/ (Ammad Rasool)
 
 Sounds, from Freesound, CC0 (public domain):
-Laugh: "Man Laughing Heartily" by craigsmith, https://freesound.org/people/craigsmith/sounds/481735/
-Airhorn: "DJ Airhorn" by neopolitansixth, https://freesound.org/people/neopolitansixth/sounds/547020/
-Record scratch: "Record Scratch #4" by musicvision31, https://freesound.org/people/musicvision31/sounds/431777/
-Bass hit: "Bass Impact - Ki_01" by Kievinay, https://freesound.org/people/Kievinay/sounds/512389/
-Whoosh: "Swosh swoosh whoosh" by qubodup, https://freesound.org/people/qubodup/sounds/60026/
+Laughter: "small audience laughter" by cognito perceptum, https://freesound.org/people/cognito%20perceptu/sounds/17121/
+Whoosh: "wipe1" by Sclolex, https://freesound.org/people/Sclolex/sounds/179780/
+Pop: "Pop Sound" by 4udiopony, https://freesound.org/people/4udiopony/sounds/437122/
+Hit: "SUB OCEANO D" by uzerx, https://freesound.org/people/uzerx/sounds/81148/
 EOF
 ls -la "$out"

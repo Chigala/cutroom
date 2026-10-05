@@ -42,7 +42,12 @@ const RECOMMENDED = (() => {
 /** The app's own copy: beside the archive once packaged, the SDK's platform package in development. */
 function bundled(): string | null {
   if (app.isPackaged) {
-    const file = path.join(process.resourcesPath, "native", "claude-agent-sdk", "claude");
+    const file = path.join(
+      process.resourcesPath,
+      "native",
+      "claude-agent-sdk",
+      process.platform === "win32" ? "claude.exe" : "claude",
+    );
     return existsSync(file) ? file : null;
   }
   if (!sdkDir) return null;
@@ -74,7 +79,7 @@ let shellPath: Promise<string> | null = null;
 function userPath(): Promise<string> {
   shellPath ??= new Promise((resolve) => {
     if (process.platform === "win32") return resolve(process.env.PATH ?? "");
-    const shellBin = process.env.SHELL || "/bin/zsh";
+    const shellBin = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
     execFile(
       shellBin,
       ["-ilc", 'printf "__VEDIT_PATH__%s__VEDIT_PATH__" "$PATH"'],
@@ -89,12 +94,19 @@ function userPath(): Promise<string> {
 }
 
 /** Where installers put it, in case the shell didn't say. */
-const KNOWN = () => [
-  path.join(homedir(), ".local", "bin", "claude"),
-  path.join(homedir(), ".claude", "local", "claude"),
-  "/opt/homebrew/bin/claude",
-  "/usr/local/bin/claude",
-];
+const KNOWN = () =>
+  process.platform === "win32"
+    ? [
+        // The native installer (install.ps1), and the older local install.
+        path.join(homedir(), ".local", "bin", "claude.exe"),
+        path.join(homedir(), ".claude", "local", "claude.exe"),
+      ]
+    : [
+        path.join(homedir(), ".local", "bin", "claude"),
+        path.join(homedir(), ".claude", "local", "claude"),
+        "/opt/homebrew/bin/claude",
+        "/usr/local/bin/claude",
+      ];
 
 /** The user's own Claude Code: the first `claude` on their PATH, else one where installers put it. */
 async function installed(): Promise<string | null> {

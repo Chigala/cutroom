@@ -13,7 +13,7 @@ import {
 } from "@remotion/renderer";
 import type { CompositionProps } from "@vedit/composition";
 import type { ProjectDoc } from "@vedit/project";
-import { readyBrowser, remotionBinaries } from "./binaries.ts";
+import { chromiumOptions, readyBrowser, remotionBinaries } from "./binaries.ts";
 import { type ExportOptions, serveUrl } from "./export.ts";
 import { startMediaServer } from "./server.ts";
 
@@ -41,7 +41,7 @@ export interface Stills {
   readonly errors: readonly string[];
 }
 
-const GL: ChromiumOptions = { gl: "angle" };
+const GL: ChromiumOptions = chromiumOptions();
 let browser: Promise<HeadlessBrowser> | null = null;
 let idle: ReturnType<typeof setTimeout> | undefined;
 

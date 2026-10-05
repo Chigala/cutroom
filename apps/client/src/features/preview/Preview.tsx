@@ -23,6 +23,7 @@ import { Eye, EyeOff, Pause, Play } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "../../components/ui.tsx";
 import { MEDIA_BASE } from "../../lib/host.ts";
+import { mod } from "../../lib/keys.ts";
 import { AUDIO_TAGS } from "../../lib/player.ts";
 import { send } from "../../state/chat.ts";
 import {
@@ -371,7 +372,7 @@ function PointPopover() {
               type="button"
               onClick={instruct}
               disabled={empty}
-              title={empty ? "Type what should happen first" : "Ask the agent to do it here (⌘↵)"}
+              title={empty ? "Type what should happen first" : `Ask the agent to do it here (${mod}↵)`}
               className="h-6 rounded-md bg-accent px-2 text-[11px] font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-40"
             >
               Do it

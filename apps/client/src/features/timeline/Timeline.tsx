@@ -33,6 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { isMac } from "../../lib/keys.ts";
 import { peaksOf } from "../../state/jobs.ts";
 import { pause, playback, seekTime, useFrameEffect } from "../../state/playback.ts";
 import { edit, useDoc, useProject } from "../../state/project.ts";
@@ -188,7 +189,7 @@ function ZoomControls({ zoom }: { zoom: number }) {
       <button
         type="button"
         aria-label="Zoom in"
-        title="Zoom in (+, or pinch / ⌘-scroll)"
+        title={`Zoom in (+, or pinch / ${isMac ? "⌘" : "Ctrl"}-scroll)`}
         onClick={() => zoomBy(1.6, at())}
         className={btn}
       >
@@ -264,7 +265,7 @@ const WordsTrack = memo(function WordsTrack({
         className="absolute top-0 truncate text-[10px] leading-4 text-faint"
         style={{ left: offset + 2, width }}
       >
-        Zoom in to read the words (pinch, ⌘-scroll or +)
+        Zoom in to read the words (pinch, {isMac ? "⌘" : "Ctrl"}-scroll or +)
       </span>
     );
   const end = start + width / pps;

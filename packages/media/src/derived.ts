@@ -142,6 +142,13 @@ function run(argv) {
  * The person in `video` over [from, to), alone on transparency (VP9 with alpha), at `fps`. Frames with
  * nobody in them come out empty. macOS only; elsewhere it throws.
  */
+/**
+ * Whether this machine can cut people out: it uses Apple's person segmentation, so macOS only for now.
+ * Elsewhere the video plays and exports without the subject layer (what's "behind" the person shows
+ * over them, and backgrounds stay as filmed), the same as before a cutout is made.
+ */
+export const cutoutsAvailable = () => process.platform === "darwin";
+
 export async function makeCutout(
   video: string,
   from: number,
@@ -342,6 +349,8 @@ export async function resolveDerived(
   if (d.kind === "cover") {
     const src = doc.sources.find((s) => s.id === d.source);
     if (!src) return null;
+    // The person alone (and the background without them) needs a cutout.
+    if (d.part !== "frame" && !cutoutsAvailable()) return null;
     const file = paths.cover(d.source, d.t, d.part === "blur" ? `blur${d.amount}` : d.part);
     if (existsSync(file)) return file;
     const input = await derivationInput(projectDir, src);

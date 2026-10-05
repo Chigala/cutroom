@@ -31,6 +31,7 @@ import { AgentRequest, CommitRequestSchema } from "@vedit/bridge";
 import { clearArea } from "@vedit/checks";
 import {
   alignText,
+  cutoutsAvailable,
   downloadMeme,
   downloadSound,
   downloadStock,
@@ -92,6 +93,7 @@ import { Exporter, entry as renderEntry } from "./exporter.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
+import { onWindowsDrive } from "./platform.ts";
 import { getSettings, paths, setSettings } from "./settings.ts";
 import { Versions } from "./versions.ts";
 
@@ -279,6 +281,16 @@ export class ProjectService {
     await this.remember(next.dir, next.doc.meta.name);
     this.indexer.resume();
     void this.library.setProject(next.dir);
+    if (onWindowsDrive(next.dir))
+      // Once the window has the project (its warning toasts are listening by then).
+      setTimeout(
+        () =>
+          this.emit("error", {
+            message:
+              "This project is on a Windows drive (/mnt/...). From WSL that's slow and changes made outside the app aren't seen: keep projects in your Linux home folder.",
+          }),
+        1500,
+      );
     return this.snapshot();
   }
 
@@ -978,10 +990,10 @@ export class ProjectService {
         },
         remember: (id, note) => rememberInKit(id, note),
       },
-      cutouts: async (doc) => {
-        const store = this.requireStore();
-        return makeNeededCutouts(store.dir, doc);
-      },
+      // Off macOS the agent's cutout tool says they aren't available here.
+      ...(cutoutsAvailable() && {
+        cutouts: async (doc: ProjectDoc) => makeNeededCutouts(this.requireStore().dir, doc),
+      }),
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
         const keys = {
@@ -1308,12 +1320,16 @@ async function freeDir(dir: string): Promise<string> {
 }
 
 /**
- * macOS hands over screenshots (and some drags) from temporary folders it empties later. Clips are
- * used where they are, so anything in one is copied into the project first.
+ * Screenshots and some drags arrive from temporary folders the system empties later (macOS's, and
+ * Windows' %TEMP%). Clips are used where they are, so anything in one is copied into the project first.
  */
 const TEMP_ROOTS = [tmpdir(), "/private/var/folders", "/var/folders", "/private/tmp", "/tmp"];
+const inside = (root: string, file: string) => {
+  const rel = path.relative(root, file);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+};
 const isTemporary = (file: string) =>
-  file.includes("/TemporaryItems/") || TEMP_ROOTS.some((r) => file.startsWith(`${r.replace(/\/$/, "")}/`));
+  file.split(/[\\/]/).includes("TemporaryItems") || TEMP_ROOTS.some((r) => inside(r, file));
 
 async function keepCopy(file: string, projectDir: string): Promise<string> {
   if (!isTemporary(file)) return file;

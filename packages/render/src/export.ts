@@ -25,6 +25,7 @@ import {
   buildVoiceTrack,
   CancelledError,
   cleanVoice,
+  cutoutsAvailable,
   derivationInput,
   derivedPaths,
   makeCutout,
@@ -55,7 +56,7 @@ import {
   sourceTime,
   timelineOf,
 } from "@vedit/project";
-import { readyBrowser, remotionBinaries } from "./binaries.ts";
+import { chromiumOptions, readyBrowser, remotionBinaries } from "./binaries.ts";
 import { startMediaServer } from "./server.ts";
 
 export interface ExportProgress {
@@ -285,7 +286,8 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
   const starts = new Map(
     tlNow.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]),
   );
-  for (const scene of scenesNeedingCutout(doc, starts)) {
+  // Off macOS there are no cutouts: the export goes ahead without the subject layer, like the preview.
+  for (const scene of cutoutsAvailable() ? scenesNeedingCutout(doc, starts) : []) {
     const c = cutoutCovering(
       doc.analyses.find((a) => a.id === scene.source),
       scene.in,
@@ -329,7 +331,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
   try {
     await readyBrowser();
     const url = await serveUrl(o.entry);
-    browser = await openBrowser("chrome", { chromiumOptions: { gl: "angle" } });
+    browser = await openBrowser("chrome", { chromiumOptions: chromiumOptions() });
     const puppeteerInstance = browser;
     for (const [i, shape] of shapes.entries()) {
       check();
@@ -382,7 +384,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
           cancelSignal: cancel.cancelSignal,
           enforceAudioTrack: true,
           // Scripted graphics may draw with WebGL (three.js).
-          chromiumOptions: { gl: "angle" },
+          chromiumOptions: chromiumOptions(),
           onProgress: ({ progress }) => report("picture", `Rendering${tag}`, at + progress * share * 0.9),
         });
       } catch (err) {
@@ -428,7 +430,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
           frame: 0,
           imageFormat: "png",
           output: path.join(dir, `${name}-cover${shape ? `-${shape.replace(":", "x")}` : ""}.png`),
-          chromiumOptions: { gl: "angle" },
+          chromiumOptions: chromiumOptions(),
         }).catch((err: unknown) => console.warn("[export] cover skipped:", (err as Error).message));
       }
     }

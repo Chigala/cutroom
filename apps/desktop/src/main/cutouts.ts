@@ -4,7 +4,14 @@
  * cached, and recorded in the clip's analysis, which is what switches the subject layer on.
  */
 import { existsSync } from "node:fs";
-import { derivationInput, derivedPaths, makeBlurPlate, makeCutout, once } from "@vedit/media";
+import {
+  cutoutsAvailable,
+  derivationInput,
+  derivedPaths,
+  makeBlurPlate,
+  makeCutout,
+  once,
+} from "@vedit/media";
 import {
   cutoutCovering,
   cutoutRange,
@@ -26,6 +33,7 @@ export async function makeNeededCutouts(
     onProgress,
   }: { signal?: AbortSignal; onProgress?: (source: string, fraction: number) => void } = {},
 ): Promise<Op[]> {
+  if (!cutoutsAvailable()) return [];
   const tl = timelineOf(doc);
   const starts = new Map(tl.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]));
   const paths = derivedPaths(projectDir);

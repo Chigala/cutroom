@@ -24,6 +24,7 @@ import { Markdown } from "../../components/Markdown.tsx";
 import { ChangeChip } from "../../components/ui.tsx";
 import { type Attachment, pending, upload } from "../../lib/attach.ts";
 import { MEDIA_BASE } from "../../lib/host.ts";
+import { mod } from "../../lib/keys.ts";
 import {
   type AgentRun,
   type ChangeNote,
@@ -265,7 +266,7 @@ function CopyButton({ text }: { text: string }) {
             setDone(true);
             setTimeout(() => setDone(false), 1400);
           },
-          () => toast("Couldn't copy. Select the text and press ⌘C instead.", "warn"),
+          () => toast(`Couldn't copy. Select the text and press ${mod}C instead.`, "warn"),
         );
       }}
       className="flex items-center gap-1 self-start rounded-md px-1.5 py-0.5 text-[11px] text-faint opacity-0 group-hover/reply:opacity-100 hover:bg-button hover:text-fg-2 focus-visible:opacity-100"

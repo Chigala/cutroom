@@ -80,7 +80,8 @@ inside the distro, and:
 The macOS-only features use Apple's frameworks. Cross-platform versions are planned.
 
 \* Windows and Linux support is new and still being tested: expect rough edges, and please report them.
-Known issue: exporting a project that uses cutouts fails off macOS.
+Off macOS, shots that use cutouts play and export without them (text meant to go behind the person
+shows in front, and backgrounds stay as filmed).
 
 ## Claude
 

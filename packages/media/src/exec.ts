@@ -21,7 +21,9 @@ export function bundledTool(...parts: string[]): string | null {
   const dir = process.env.VEDIT_TOOLS;
   if (!dir) return null;
   const file = path.join(dir, ...parts);
-  return existsSync(file) ? file : null;
+  if (existsSync(file)) return file;
+  // Windows binaries carry .exe; callers name tools without it.
+  return process.platform === "win32" && existsSync(`${file}.exe`) ? `${file}.exe` : null;
 }
 
 const found = new Map<string, Promise<string>>();

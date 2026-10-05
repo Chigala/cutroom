@@ -19,12 +19,11 @@ import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
 import { importClips } from "../../lib/import.ts";
+import { isMac } from "../../lib/keys.ts";
 import { useJobs } from "../../state/jobs.ts";
 import { edit, redo, undo, useDoc, useProject } from "../../state/project.ts";
 import { setUi } from "../../state/ui.ts";
 import { ago, matching, openProject } from "../projects/ProjectsDialog.tsx";
-
-const isMac = navigator.userAgent.includes("Mac");
 
 export function Header() {
   const format = useDoc((d) => d.meta.format);

@@ -20,7 +20,7 @@ import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/rend
 import type { CompositionProps } from "@vedit/composition";
 import { findBinary, trackRange } from "@vedit/media";
 import { musicBeats, type ProjectDoc, resolveAnchor, timelineOf } from "@vedit/project";
-import { remotionBinaries } from "./binaries.ts";
+import { chromiumOptions, remotionBinaries } from "./binaries.ts";
 import { type ExportOptions, serveUrl } from "./export.ts";
 import { startMediaServer } from "./server.ts";
 
@@ -144,7 +144,7 @@ export async function senseMotion(o: SenseOptions): Promise<MotionReport> {
         scale,
         muted: true,
         cancelSignal: cancel.cancelSignal,
-        chromiumOptions: { gl: "angle" },
+        chromiumOptions: chromiumOptions(),
         concurrency: 4,
         ...(layers === "overlay"
           ? {

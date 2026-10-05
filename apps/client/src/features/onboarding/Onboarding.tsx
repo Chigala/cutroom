@@ -798,7 +798,8 @@ function Demo({ name, title }: { name: string; title: string }) {
             src={src}
             autoPlay
             loop
-            muted={name !== "sounds"}
+            // The meme and the sound effects are heard: their sound is the point.
+            muted={name === "stock"}
             playsInline
             onError={() => setMissing(true)}
             className="h-full w-full object-cover"

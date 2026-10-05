@@ -1,8 +1,13 @@
 Onboarding demo footage, from Pexels (https://www.pexels.com/license/): free to use and edit.
 The people shown don't endorse Cutroom.
 
-Talking: https://www.pexels.com/video/36931662/
-Reaction: https://www.pexels.com/video/9032413/ (Alena Darmel)
+Talking: https://www.pexels.com/video/8136210/ (ANTONI SHKRABA production)
+Reaction: https://www.pexels.com/video/4994316/ (Tima Miroshnichenko)
 B-roll: https://www.pexels.com/video/28889095/ (Ammad Rasool)
 
-Sound effects: synthesized by Cutroom (packages/media/src/sfx.ts).
+Sounds, from Freesound, CC0 (public domain):
+Laugh: "Man Laughing Heartily" by craigsmith, https://freesound.org/people/craigsmith/sounds/481735/
+Airhorn: "DJ Airhorn" by neopolitansixth, https://freesound.org/people/neopolitansixth/sounds/547020/
+Record scratch: "Record Scratch #4" by musicvision31, https://freesound.org/people/musicvision31/sounds/431777/
+Bass hit: "Bass Impact - Ki_01" by Kievinay, https://freesound.org/people/Kievinay/sounds/512389/
+Whoosh: "Swosh swoosh whoosh" by qubodup, https://freesound.org/people/qubodup/sounds/60026/

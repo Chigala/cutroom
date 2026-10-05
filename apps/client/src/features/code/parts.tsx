@@ -56,6 +56,7 @@ export function PreviewPlayer({
         style={{ aspectRatio: `${meta.width}/${meta.height}` }}
       >
         <Player
+          acknowledgeRemotionLicense
           ref={player}
           component={VideoComposition}
           numberOfSharedAudioTags={AUDIO_TAGS}

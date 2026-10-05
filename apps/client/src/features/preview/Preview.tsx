@@ -130,6 +130,7 @@ const Stage = memo(function Stage() {
     >
       {stage === "cover" ? (
         <Player
+          acknowledgeRemotionLicense
           component={CoverComposition}
           inputProps={inputProps}
           durationInFrames={1}
@@ -143,6 +144,7 @@ const Stage = memo(function Stage() {
         />
       ) : null}
       <Player
+        acknowledgeRemotionLicense
         ref={ref}
         component={VideoComposition}
         numberOfSharedAudioTags={AUDIO_TAGS}

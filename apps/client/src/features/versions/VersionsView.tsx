@@ -417,6 +417,7 @@ function VersionCard({
       >
         {props && meta && (
           <Player
+            acknowledgeRemotionLicense
             component={VideoComposition}
             numberOfSharedAudioTags={AUDIO_TAGS}
             inputProps={props}

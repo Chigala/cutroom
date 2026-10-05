@@ -1,6 +1,8 @@
 /** Facts about the machine the app runs on that change how it behaves. */
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 /** Linux inside Windows (WSL): its own file system is fast, the Windows drives under /mnt are not. */
@@ -57,13 +59,16 @@ export async function openTerminal(file: string, args: readonly string[]): Promi
       child.on("exit", (code) => resolve(code === 0));
     });
   if (process.platform === "darwin") {
-    const line = posix([file, ...args])
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"');
-    return exit("/usr/bin/osascript", [
-      "-e",
-      `tell application "Terminal"\nactivate\ndo script "${line}"\nend tell`,
-    ]);
+    // A .command file opened in Terminal runs in a new window. No AppleScript: scripting Terminal needs
+    // an Automation permission that macOS refuses, without asking, to an app that doesn't declare it.
+    const dir = await mkdtemp(path.join(tmpdir(), "cutroom-"));
+    const script = path.join(dir, "Sign in to Claude.command");
+    await writeFile(
+      script,
+      `#!/bin/bash\nclear\n${posix([file, ...args])}\necho\necho "Done. You can close this window and go back to Cutroom."\n`,
+    );
+    await chmod(script, 0o755);
+    return exit("/usr/bin/open", ["-a", "Terminal", script]);
   }
   if (process.platform === "win32") {
     // cmd /k keeps the window open afterwards, so a message at the end can still be read.

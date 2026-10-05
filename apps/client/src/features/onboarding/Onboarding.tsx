@@ -22,11 +22,16 @@ import {
 import type { AgentStatus, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
 import { type ReactNode, useEffect, useState } from "react";
+import { create } from "zustand";
 import { host } from "../../lib/host.ts";
-import { checkClaude, followClaude, useClaude } from "../../state/claude.ts";
+import { checkClaude, followClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { saveSettings, useSettings } from "../../state/settings.ts";
 import { PresetGrid, StyleText, useStyleDraft } from "./StylePicker.tsx";
+
+/** Which keys are saved: read when onboarding opens and again after each one is saved. */
+const useSavedKeys = create<{ keys: AgentStatus["keys"] }>()(() => ({ keys: undefined }));
+const reloadKeys = async () => useSavedKeys.setState({ keys: (await host.agent.status()).keys });
 
 const STEPS = ["welcome", "privacy", "claude", "style", "captions", "extras", "ready"] as const;
 type Step = (typeof STEPS)[number];
@@ -34,12 +39,12 @@ type Step = (typeof STEPS)[number];
 export function Onboarding() {
   const settings = useSettings((s) => s.settings);
   const [at, setAt] = useState(0);
-  const [keys, setKeys] = useState<AgentStatus["keys"]>();
+  const keys = useSavedKeys((s) => s.keys);
   useEffect(() => {
     followClaude();
     followDownloads();
     void checkClaude(true);
-    void host.agent.status().then((s) => setKeys(s.keys));
+    void reloadKeys();
   }, []);
   if (!settings) return null;
   const step: Step = STEPS[at]!;
@@ -218,6 +223,7 @@ function Privacy() {
 }
 
 function ClaudeStep() {
+  useClaudeWatch();
   const status = useClaude((s) => s.status);
   const task = useClaude((s) => s.task);
   const installed = status ? status.source !== "missing" : null;
@@ -744,13 +750,19 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
   const [typed, setTyped] = useState("");
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<KeyCheck | null>(null);
-  const check = async () => {
-    if (!typed.trim()) return;
+  // Checked and saved as soon as it's pasted (or the box is left), not only on Check: a key pasted and
+  // left behind when the section closes is still saved. Then every section knows it's there.
+  const check = async (value = typed) => {
+    const key = value.trim();
+    if (!key || checking) return;
     setChecking(true);
-    const r = await host.settings.checkKey(provider, typed.trim());
+    const r = await host.settings.checkKey(provider, key).catch((): KeyCheck => "offline");
     setChecking(false);
     setResult(r);
-    if (r !== "invalid") await saveSettings({ [KEY_FIELD[provider]]: typed.trim() } as Partial<Settings>);
+    if (r !== "invalid") {
+      await saveSettings({ [KEY_FIELD[provider]]: key } as Partial<Settings>);
+      await reloadKeys();
+    }
   };
   if (source && result === null)
     return (
@@ -766,6 +778,13 @@ function KeyPanel({ provider, source }: { provider: KeyProvider; source: "saved"
           onChange={(e) => {
             setTyped(e.target.value);
             setResult(null);
+          }}
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData("text");
+            if (pasted.trim()) setTimeout(() => void check(pasted), 0);
+          }}
+          onBlur={() => {
+            if (typed.trim() && result === null) void check();
           }}
           onKeyDown={(e) => {
             e.stopPropagation();

@@ -856,9 +856,10 @@ export class ProjectService {
 
   async agentSettings(): Promise<AgentSettings> {
     const s = await getSettings();
-    // Which Claude Code to run (found once at startup; this waits for it). Always the subscription for
-    // now: the API-key backend is switched off (defaultBackend).
-    await claudeStatus();
+    // Which Claude Code to run (found at startup; this waits for it), looked at again when it wasn't
+    // signed in then: someone may have signed in since, in their own terminal. Always the subscription
+    // for now: the API-key backend is switched off (defaultBackend).
+    if ((await claudeStatus()).signedIn !== true) await claudeStatus(true);
     return {
       backend: defaultBackend(),
       model: s.model,

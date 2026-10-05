@@ -6,10 +6,10 @@
 
 import { ArrowClockwiseIcon, CheckCircleIcon, CircleNotchIcon, WarningIcon } from "@phosphor-icons/react";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
-import { checkClaude, followClaude, useClaude } from "../../state/claude.ts";
+import { checkClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
 import { toast } from "../../state/toast.ts";
 
 const home = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
@@ -35,10 +35,7 @@ const act = (fn: () => Promise<void>) => () =>
 
 export function ClaudeSetup() {
   const { status, task, checking } = useClaude();
-  useEffect(() => {
-    followClaude();
-    void checkClaude();
-  }, []);
+  useClaudeWatch();
   const running = task?.state === "running";
 
   if (!status) {

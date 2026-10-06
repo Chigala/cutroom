@@ -3,7 +3,20 @@ import type { Source } from "@vedit/project";
 import { run } from "./exec.ts";
 
 const VIDEO = new Set([".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".mts"]);
-const IMAGE = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".tif", ".tiff"]);
+const IMAGE = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".avif",
+  ".bmp",
+  ".heic",
+  ".heif",
+  ".hif",
+  ".tif",
+  ".tiff",
+]);
 const AUDIO = new Set([".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".aif", ".aiff"]);
 
 export function mediaKind(file: string): Source["kind"] | null {

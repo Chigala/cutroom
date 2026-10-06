@@ -1,16 +1,18 @@
 /**
  * A packaged-app self-test: VEDIT_SMOKE=<clip> imports the clip into a fresh project, indexes it
  * (preview copy, audio, transcript), reads its picture (the words on screen: Apple's Vision on a Mac,
- * the open models elsewhere), exports it and prints what happened as one JSON line (also written to
+ * the open models elsewhere), converts a photo as an iPhone takes it (HEIC, smoke-photo.heic beside the
+ * clip) to one the app can show, exports it and prints what happened as one JSON line (also written to
  * VEDIT_SMOKE_REPORT, when set), then quits. It runs with its own data folder, so it never touches the
  * user's projects or settings. No agent call. It also opens the editor's window, hidden, and checks it
  * shows the project. VEDIT_SMOKE_WHISPER picks a smaller speech model (a build machine's test).
  */
+import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ExportEvent } from "@vedit/bridge";
-import { findBinary, run, seeClip } from "@vedit/media";
+import { findBinary, playableCopy, probe, run, seeClip } from "@vedit/media";
 import type { ProjectService } from "./project-service.ts";
 
 /**
@@ -59,6 +61,12 @@ export async function runSmoke(
     const seen = await seeClip(clip);
     report.seen = seen && { text: seen.text.map((t) => t.text), salient: seen.salient.length };
     report.readWords = (seen?.text ?? []).some((t) => /smoke|test|123/i.test(t.text));
+    // A photo as an iPhone takes it (HEIC, in tiles): converted to one the app can show, and whole.
+    const heic = path.join(path.dirname(clip), "smoke-photo.heic");
+    if (existsSync(heic)) {
+      const p = await probe(await playableCopy(heic, path.join(dir, "media", "converted")));
+      report.photo = `${p.width}x${p.height}`;
+    }
     // The scripted graphic, over the first shot from 0.5s to 3.5s.
     const scene = doc?.scenes[0];
     if (scene) {
@@ -123,7 +131,8 @@ export async function runSmoke(
       end.type === "done" &&
       Number(report.words) > 0 &&
       report.graphicDrew === true &&
-      report.readWords === true;
+      report.readWords === true &&
+      report.photo === "1600x1200";
   } catch (err) {
     report.ok = false;
     report.error = (err as Error).stack ?? String(err);

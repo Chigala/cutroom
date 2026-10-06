@@ -18,6 +18,7 @@ export {
   useOpenModels,
 } from "./models.ts";
 export * from "./music.ts";
+export * from "./playable.ts";
 export * from "./probe.ts";
 export * from "./profile.ts";
 export * from "./see.ts";

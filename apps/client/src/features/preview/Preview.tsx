@@ -150,6 +150,39 @@ function StageBar() {
   );
 }
 
+/** Inside the player when it stops: it only reports the error (the message is drawn over the stage). */
+function StageCrashed({ error, onCrash }: { error: Error; onCrash: (error: Error) => void }) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when it's shown
+  useEffect(() => {
+    console.error("[preview] stopped:", error);
+    onCrash(error);
+  }, []);
+  return <div className="h-full bg-black" />;
+}
+
+/**
+ * The preview stopped on an error: said plainly at the stage's own size (not inside the scaled video),
+ * with the way back. It also retries on the next change.
+ */
+function StageError({ error, onReload }: { error: Error; onReload: () => void }) {
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-sunken/95 p-8 text-center animate-fade-in">
+      <span className="text-[15px] font-medium text-fg">The preview hit a snag</span>
+      <span className="max-w-[300px] text-[13px] leading-relaxed text-muted">
+        Something in this edit couldn't be drawn. It comes back by itself when the edit changes, or now:
+      </span>
+      <button
+        type="button"
+        onClick={onReload}
+        className="mt-1 h-9 rounded-lg bg-control px-4 text-[13px] text-fg transition-colors hover:bg-selected"
+      >
+        Reload preview
+      </button>
+      <span className="mt-2 max-w-[300px] font-mono text-[11px] break-words text-faint">{error.message}</span>
+    </div>
+  );
+}
+
 const Stage = memo(function Stage() {
   const project = useViewedDoc();
   const stage = useUi((s) => s.stage);
@@ -173,7 +206,27 @@ const Stage = memo(function Stage() {
   // The doc is immutable, so this identity only changes when the project does.
   const inputProps = useMemo(() => ({ doc, mediaBase: MEDIA_BASE }), [doc]);
 
-  useEffect(() => attachPlayer(ref.current), []);
+  /*
+   * The player stops for good when a frame throws (a bad value in an edit). It comes back on its own as
+   * soon as the edit changes (the undo, the next request, a fixed value), or from its Reload button,
+   * remounted where it was.
+   */
+  const [attempt, setAttempt] = useState(0);
+  const [crashedOn, setCrashedOn] = useState<ProjectDoc | null>(null);
+  const [crash, setCrash] = useState<Error | null>(null);
+  const reload = () => {
+    setCrashedOn(null);
+    setCrash(null);
+    setAttempt((a) => a + 1);
+  };
+  if (crashedOn && crashedOn !== doc) reload();
+
+  useEffect(() => {
+    const detach = attachPlayer(ref.current);
+    // Back where it was before it was reloaded.
+    if (attempt > 0) ref.current?.seekTo(playback.getState().frame);
+    return detach;
+  }, [attempt]);
   useEffect(() => {
     playback.setState({ fps: meta.fps, durationInFrames: meta.durationInFrames });
   }, [meta.fps, meta.durationInFrames]);
@@ -214,6 +267,7 @@ const Stage = memo(function Stage() {
         />
       ) : null}
       <Player
+        key={attempt}
         acknowledgeRemotionLicense
         ref={ref}
         component={VideoComposition}
@@ -238,12 +292,17 @@ const Stage = memo(function Stage() {
         moveToBeginningWhenEnded
         bufferStateDelayInMilliseconds={300}
         errorFallback={({ error }) => (
-          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-fg-2">
-            {error.message}
-          </div>
+          <StageCrashed
+            error={error}
+            onCrash={(e) => {
+              setCrashedOn(doc);
+              setCrash(e);
+            }}
+          />
         )}
       />
       <Overlay />
+      {crash && <StageError error={crash} onReload={reload} />}
     </div>
   );
 });

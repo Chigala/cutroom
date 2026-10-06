@@ -3,6 +3,23 @@ import { type Span, spanOf, type Timeline } from "@vedit/project";
 /** Frame where output time `t` starts. Rounded once, here, so adjacent items never gap or overlap. */
 export const toFrame = (t: number, fps: number) => Math.round(t * fps);
 
+/**
+ * Where in a clip or song to start playing, in frames: never before its first frame. A start a moment
+ * before 0 (a J-cut's sound leading in, a transition's borrowed frames, an offset nudged too far) would
+ * otherwise make Remotion throw and stop the whole preview.
+ */
+export const trimFrom = (t: number, fps: number): number => {
+  const f = toFrame(t, fps);
+  return Number.isFinite(f) && f > 0 ? f : 0;
+};
+
+/** Where to stop playing it: always at least a frame after where it starts. */
+export const trimTo = (t: number, fps: number, from: number): number => {
+  const f = toFrame(t, fps);
+  const start = trimFrom(from, fps);
+  return Number.isFinite(f) && f > start ? f : start + 1;
+};
+
 export interface FrameSpan {
   readonly from: number;
   readonly durationInFrames: number;

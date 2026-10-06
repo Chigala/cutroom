@@ -89,7 +89,17 @@ import {
 } from "remotion";
 import { CaptionView } from "./CaptionView.tsx";
 import { ProjectFontsContext, projectFontSources, useFonts } from "./fonts.ts";
-import { type FrameSpan, frameSpan, isActive, lockToBeats, placeAll, type Timed, toFrame } from "./frames.ts";
+import {
+  type FrameSpan,
+  frameSpan,
+  isActive,
+  lockToBeats,
+  placeAll,
+  type Timed,
+  toFrame,
+  trimFrom,
+  trimTo,
+} from "./frames.ts";
 import { GraphicView } from "./GraphicView.tsx";
 import { StyleLayer } from "./StyleLayer.tsx";
 
@@ -1642,8 +1652,8 @@ function ClipMedia({
         {source.kind === "video" ? (
           <Video
             src={src}
-            trimBefore={toFrame(from, fps)}
-            {...(to !== undefined && { trimAfter: toFrame(to, fps) })}
+            trimBefore={trimFrom(from, fps)}
+            {...(to !== undefined && { trimAfter: trimTo(to, fps, from) })}
             playbackRate={speed}
             volume={0}
             muted
@@ -1664,8 +1674,8 @@ function ClipMedia({
         {behind}
         <Video
           src={src}
-          trimBefore={toFrame(from, fps)}
-          {...(to !== undefined && { trimAfter: toFrame(to, fps) })}
+          trimBefore={trimFrom(from, fps)}
+          {...(to !== undefined && { trimAfter: trimTo(to, fps, from) })}
           playbackRate={speed}
           volume={apart ? 0 : volume}
           muted={apart || muted}
@@ -1675,8 +1685,8 @@ function ClipMedia({
         {apart && (
           <Sound
             src={src}
-            trimBefore={toFrame(from, fps)}
-            {...(to !== undefined && { trimAfter: toFrame(to, fps) })}
+            trimBefore={trimFrom(from, fps)}
+            {...(to !== undefined && { trimAfter: trimTo(to, fps, from) })}
             {...(speed !== undefined && { playbackRate: speed })}
             volume={volume}
           />
@@ -2370,8 +2380,8 @@ function SoundEffect({ sfx, mediaBase, level }: { sfx: Timed<Sfx>; mediaBase: st
   return s.source ? (
     <Sound
       src={`${mediaBase}${encodeURIComponent(s.source)}`}
-      trimBefore={toFrame(s.offset ?? 0, fps)}
-      trimAfter={toFrame(s.offset ?? 0, fps) + n}
+      trimBefore={trimFrom(s.offset ?? 0, fps)}
+      trimAfter={trimFrom(s.offset ?? 0, fps) + Math.max(1, n)}
       volume={volume}
     />
   ) : (
@@ -2411,7 +2421,7 @@ function MusicClipAudio({
   return (
     <Sound
       src={`${mediaBase}${encodeURIComponent(m.source)}`}
-      trimBefore={toFrame(m.offset, fps)}
+      trimBefore={trimFrom(m.offset, fps)}
       loop={m.loop}
       volume={(f) =>
         level *
@@ -2475,8 +2485,8 @@ function Music({
   return (
     <Sound
       src={`${mediaBase}${encodeURIComponent(source!)}`}
-      trimBefore={toFrame(section ? section.start : offset, fps)}
-      {...(section && section.end > section.start && { trimAfter: toFrame(section.end, fps) })}
+      trimBefore={trimFrom(section ? section.start : offset, fps)}
+      {...(section && section.end > section.start && { trimAfter: trimTo(section.end, fps, section.start) })}
       loop={doc.music.loop}
       volume={(f) => doc.mix.musicLevel * ducked(f) * fades(f) * cueGain(f)}
     />

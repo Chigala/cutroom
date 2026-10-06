@@ -1,7 +1,8 @@
 import { UploadSimpleIcon } from "@phosphor-icons/react";
 import { sceneAt, splitSceneOps, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { Boundary } from "./components/Boundary.tsx";
 import { ChatPanel } from "./features/chat/ChatPanel.tsx";
 import { ExportDialog } from "./features/export/ExportDialog.tsx";
 import { GraphicEditor } from "./features/graphics/GraphicEditor.tsx";
@@ -28,6 +29,22 @@ import { loadSettings, useSettings } from "./state/settings.ts";
 import { fitTimeline, setRange, zoomBy } from "./state/timeline.ts";
 import { dismissToast, toast, useToasts } from "./state/toast.ts";
 import { composerRef, setUi, toggleRail, toggleSide, useUi } from "./state/ui.ts";
+
+/** A panel that fails alone (see Boundary), trying again whenever the project changes. */
+function Guard({ name, className, children }: { name: string; className?: string; children: ReactNode }) {
+  const doc = useProject((s) => s.doc);
+  return (
+    <Boundary
+      name={name}
+      resetKey={doc}
+      {...(className && {
+        className: `${className} flex min-h-0 flex-col items-center justify-center gap-3 bg-sunken p-6 text-center`,
+      })}
+    >
+      {children}
+    </Boundary>
+  );
+}
 
 /** In development, ?onboarding shows the first-launch screens in the browser too, to work on them. */
 const PREVIEW_ONBOARDING = import.meta.env.DEV && new URLSearchParams(location.search).has("onboarding");
@@ -69,11 +86,20 @@ export function App() {
             <ProjectRail />
             <div className="relative flex min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1">
-                <ChatPanel />
-                <Preview />
-                <SidePanel />
+                {/* Each panel fails alone: the rest keeps working, and it retries on the next change. */}
+                <Guard name="chat" className="w-[380px] shrink-0 border-r border-line">
+                  <ChatPanel />
+                </Guard>
+                <Guard name="preview">
+                  <Preview />
+                </Guard>
+                <Guard name="side panel" className="w-[320px] shrink-0 border-l border-line">
+                  <SidePanel />
+                </Guard>
               </div>
-              <Timeline />
+              <Guard name="timeline" className="h-[264px] shrink-0 border-t border-line">
+                <Timeline />
+              </Guard>
               {view === "inspirations" && <InspirationsView />}
             </div>
           </div>

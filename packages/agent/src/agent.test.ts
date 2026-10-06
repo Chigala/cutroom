@@ -323,6 +323,14 @@ describe("agent tools", () => {
     expect(fourth.isError).toBe(true);
     expect(fourth.text).toContain("Not applied: you've changed sc1 3 times");
     expect(c.scratch.doc.scenes[0]!.volume).toBe(0.6);
+    // Its own changes can still be taken back, exactly, newest first.
+    const undone = await runTool("undo", { count: 2 }, c);
+    expect(undone.isError).toBeFalsy();
+    expect(undone.text).toContain('Took back "Volume", "Volume"');
+    expect(c.scratch.doc.scenes[0]!.volume).toBe(0.8);
+    await runTool("undo", { count: 9 }, c);
+    expect(c.scratch.doc.scenes[0]!.volume).toBe(talking().scenes[0]!.volume);
+    expect((await runTool("undo", {}, c)).isError).toBe(true);
   });
 });
 

@@ -274,7 +274,7 @@ export function scenesNeedingCutout(
   return doc.scenes.filter((s) => {
     if (s.ramp?.length) return false;
     const src = doc.sources.find((x) => x.id === s.source);
-    if (src?.kind !== "video") return false;
+    if (src?.kind !== "video" && src?.kind !== "image") return false;
     if (s.background || s.subject) return true;
     const at = starts.get(s.id);
     return !!at && behind.some((b) => b.start < at.end && b.end > at.start);

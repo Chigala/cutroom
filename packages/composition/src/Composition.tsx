@@ -1655,7 +1655,8 @@ function ClipMedia({
         ) : null}
       </AbsoluteFill>
     ) : null;
-  if (source.kind === "video") {
+  // A photo's cutout plays like a clip's (held still).
+  if (source.kind === "video" || (source.kind === "image" && mediaKey)) {
     // In the live preview the picture and the sound play apart: the sound through <audio> (see Sound).
     const apart = live && source.hasAudio && !muted;
     return (

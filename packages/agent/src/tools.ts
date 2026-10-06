@@ -207,6 +207,8 @@ export interface Scratch {
   /** Looks taken this request, and how often each item was changed again after a look (the loop guard). */
   looks?: number;
   revisions?: Map<string, { count: number; looks: number }>;
+  /** This request's changes that undo can take back, newest last: each one's label and the ops that undo it. */
+  undoable?: { label: string; inverse: Op[] }[];
 }
 
 export interface ToolContext {
@@ -384,10 +386,13 @@ function noteErrors(ctx: ToolContext, errors: readonly string[]): void {
 }
 
 /** Applies ops to the scratch doc as one change group. */
-function commit(ctx: ToolContext, label: string, ops: readonly Op[]): ToolResult {
+function commit(ctx: ToolContext, label: string, ops: readonly Op[], undoable = true): ToolResult {
   if (!ops.length) return { text: "Nothing to change." };
   try {
-    ctx.scratch.doc = applyOps(ctx.scratch.doc, ops).doc;
+    const applied = applyOps(ctx.scratch.doc, ops);
+    ctx.scratch.doc = applied.doc;
+    if (undoable)
+      ctx.scratch.undoable = [...(ctx.scratch.undoable ?? []), { label, inverse: applied.inverse }];
   } catch (err) {
     if (err instanceof OpError) return { text: `Not applied: ${err.message}`, isError: true };
     throw err;
@@ -662,7 +667,7 @@ export const TOOLS: readonly AgentTool[] = [
       if (stuck.length)
         return {
           stuck: true,
-          text: `Not applied: you've changed ${stuck.map(itemName).join(", ")} ${MAX_REVISIONS} times after looking at it this request, and it still isn't right. Stop changing it: ${STOP_AND_ASK}`,
+          text: `Not applied: you've changed ${stuck.map(itemName).join(", ")} ${MAX_REVISIONS} times after looking at it this request, and it still isn't right. Stop changing it (undo can still take back your changes): ${STOP_AND_ASK}`,
           isError: true,
         };
       const result = commit(ctx, label, ops);
@@ -1653,6 +1658,33 @@ export const TOOLS: readonly AgentTool[] = [
       return {
         text: `Captured "${got.title}" as ${got.id}.${find ? (got.found ? " The quoted text is highlighted." : " The quoted text wasn't found on the page; it shows the top.") : ""}`,
         images: [{ data: got.image.toString("base64"), mediaType: "image/jpeg" }],
+      };
+    },
+  }),
+  tool({
+    name: "undo",
+    description:
+      "Take back your own last changes from this request, newest first, exactly as they were before: a test you tried, or an approach that didn't work. Use it instead of rebuilding the old values by hand. It works even on items you've stopped changing.",
+    input: z.object({
+      count: z.number().int().min(1).max(50).default(1).describe("How many of your changes to take back"),
+    }),
+    async run({ count }, ctx) {
+      const stack = ctx.scratch.undoable ?? [];
+      if (!stack.length) return { text: "Nothing of yours to undo in this request.", isError: true };
+      const taken = stack.splice(-Math.min(count, stack.length)).toReversed();
+      const label = `Undo: ${taken.map((t) => t.label).join(", ")}`;
+      const result = commit(
+        ctx,
+        label.length > 80 ? `Undo ${taken.length} changes` : label,
+        taken.flatMap((t) => t.inverse),
+        false,
+      );
+      if (result.isError) {
+        stack.push(...taken.toReversed());
+        return result;
+      }
+      return {
+        text: `Took back ${taken.map((t) => `"${t.label}"`).join(", ")}. Project now:\n${projectView(ctx.scratch.doc)}`,
       };
     },
   }),

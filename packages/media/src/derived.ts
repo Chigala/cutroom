@@ -364,6 +364,132 @@ export async function makeCutout(
   }
 }
 
+/**
+ * A photo's cutout, held for `to - from` seconds (the same kind of file as a clip's, so a photo shot plays it
+ * like one): a few copies of the photo cut out together (the open matting model settles over a few frames),
+ * the last one kept. Points on the photo work at any moment.
+ */
+export async function makeStillCutout(
+  image: string,
+  from: number,
+  to: number,
+  out: string,
+  {
+    fps = 30,
+    keep,
+    person,
+    signal,
+    onProgress,
+  }: {
+    fps?: number;
+    keep?: Keep | undefined;
+    person?: ClipPoints | undefined;
+    signal?: AbortSignal;
+    onProgress?: (fraction: number) => void;
+  } = {},
+): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "vedit-still-"));
+  const COPIES = 8;
+  const span = COPIES / fps;
+  const atStart = (points: ClipPoints) => points.map((p) => ({ ...p, at: 0 }));
+  try {
+    // The photo as a short lossless clip (odd sizes and alpha are fine in FFV1).
+    const clip = path.join(dir, "still.mkv");
+    await run(
+      "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-y",
+        "-loop",
+        "1",
+        "-framerate",
+        String(fps),
+        "-i",
+        image,
+        "-frames:v",
+        String(COPIES),
+        "-c:v",
+        "ffv1",
+        "-pix_fmt",
+        "bgr0",
+        clip,
+      ],
+      opts(signal),
+    );
+    const cut = path.join(dir, "cut.webm");
+    await makeCutout(clip, 0, span, cut, {
+      fps,
+      ...(keep && { keep: keep === "subject" ? keep : atStart(keep) }),
+      ...(person && { person: atStart(person) }),
+      ...(signal && { signal }),
+      ...(onProgress && { onProgress: (f) => onProgress(0.9 * f) }),
+    });
+    const last = path.join(dir, "cut.png");
+    await run(
+      "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-y",
+        "-c:v",
+        "libvpx-vp9",
+        "-i",
+        cut,
+        "-vf",
+        `select=eq(n\\,${COPIES - 1})`,
+        "-frames:v",
+        "1",
+        "-pix_fmt",
+        "rgba",
+        last,
+      ],
+      opts(signal),
+    );
+    await mkdir(path.dirname(out), { recursive: true });
+    const part = `${out}.part.webm`;
+    await run(
+      "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-y",
+        "-loop",
+        "1",
+        "-framerate",
+        String(fps),
+        "-t",
+        (to - from).toFixed(3),
+        "-i",
+        last,
+        "-c:v",
+        "libvpx-vp9",
+        "-pix_fmt",
+        "yuva420p",
+        "-b:v",
+        "0",
+        "-crf",
+        "24",
+        "-deadline",
+        "realtime",
+        "-cpu-used",
+        "8",
+        "-row-mt",
+        "1",
+        "-auto-alt-ref",
+        "0",
+        part,
+      ],
+      opts(signal),
+    );
+    await rename(part, out);
+    onProgress?.(1);
+    return out;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /** Where a project's derived footage lives (in its cache: safe to delete, remade when needed). */
 export const derivedPaths = (projectDir: string) => ({
   /** `keep`: what it keeps with the person (keepTag; "" for the person alone). */

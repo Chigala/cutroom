@@ -1,3 +1,4 @@
+import { Analysis } from "@vedit/project";
 import { describe, expect, it } from "vitest";
 import { type FrameSeen, summarize } from "./see.ts";
 
@@ -29,5 +30,22 @@ describe("what a clip's picture holds", () => {
     expect(seen.salient[0]).toEqual({ t: 0, x: 0.2, y: 0.2, w: 0.3, h: 0.4 });
     expect(seen.quality[0]).toEqual({ t: 0, face: 0.6 });
     expect(seen.quality[4]).toEqual({ t: 6, look: 0.4 });
+  });
+
+  it("keeps boxes at the edge inside the frame, so the clip's analysis takes them", () => {
+    const seen = summarize(
+      [
+        {
+          t: 0,
+          text: [{ s: "EDGE", box: [-0.02, 0.95, 0.3, 0.08] }],
+          salient: [[0.8, -0.01, 0.25, 0.5]],
+          face: 1.0001,
+        },
+      ],
+      1,
+    );
+    expect(seen.text[0]).toMatchObject({ x: 0, y: 0.95, w: 0.28, h: 0.05 });
+    expect(seen.salient[0]).toMatchObject({ x: 0.8, y: 0, w: 0.2, h: 0.49 });
+    expect(Analysis.safeParse({ id: "c", ...seen }).success).toBe(true);
   });
 });

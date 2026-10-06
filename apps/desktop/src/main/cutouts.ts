@@ -10,6 +10,7 @@ import {
   derivedPaths,
   makeBlurPlate,
   makeCutout,
+  makeStillCutout,
   once,
 } from "@vedit/media";
 import {
@@ -64,7 +65,7 @@ export async function makeNeededCutouts(
       continue;
     }
     await once(file, () =>
-      makeCutout(input, range.from, range.to, file, {
+      (src.kind === "image" ? makeStillCutout : makeCutout)(input, range.from, range.to, file, {
         ...(scene.keep && { keep: scene.keep }),
         ...(scene.person && { person: scene.person }),
         ...(signal && { signal }),
@@ -89,7 +90,8 @@ export async function makeNeededCutouts(
         keep,
       ) ?? madeCovering(scene, keep);
     const src = doc.sources.find((s) => s.id === scene.source);
-    if (!c || !src?.width || !src.height) continue;
+    // A photo's blurred background is the photo blurred (plates are made from moving footage).
+    if (!c || !src?.width || !src.height || src.kind !== "video") continue;
     const file = paths.blur(scene.source, c.from, c.to, amount, keep);
     if (!existsSync(file)) {
       const input = await derivationInput(projectDir, src);
@@ -112,8 +114,7 @@ export async function makeNeededCutouts(
   const sources = new Set([...added.keys(), ...plates.keys()]);
   return [...sources].flatMap((source): Op[] => {
     const existing = doc.analyses.find((a) => a.id === source);
-    if (!existing) return [];
-    const cutouts = [...(existing.cutouts ?? []), ...(added.get(source) ?? [])].map((c) => {
+    const cutouts = [...(existing?.cutouts ?? []), ...(added.get(source) ?? [])].map((c) => {
       const more = (plates.get(source) ?? [])
         .filter((p) => p.from === c.from && p.to === c.to && p.keep === (c.keep ?? ""))
         .map((p) => p.amount);
@@ -121,6 +122,9 @@ export async function makeNeededCutouts(
         ? { ...c, blurs: [...new Set([...((c as { blurs?: number[] }).blurs ?? []), ...more])] }
         : c;
     });
-    return [{ op: "update", coll: "analyses", id: source, patch: { cutouts } }];
+    // A photo isn't indexed, so it has no analysis until its first cutout.
+    return existing
+      ? [{ op: "update", coll: "analyses", id: source, patch: { cutouts } }]
+      : [{ op: "insert", coll: "analyses", item: { id: source, silences: [], cutouts } }];
   });
 }

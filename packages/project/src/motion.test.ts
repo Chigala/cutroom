@@ -112,6 +112,26 @@ describe("cutouts", () => {
     expect(scenesNeedingCutout(doc as never, starts).map((s) => s.id)).toEqual(["a", "b"]);
   });
 
+  it("cuts the person out of a photo shot too", () => {
+    const base = emptyProject("t");
+    const doc = {
+      ...base,
+      sources: [
+        { id: "c", kind: "video", label: "c", path: "/c.mp4", duration: 20 },
+        { id: "p", kind: "image", label: "p", path: "/p.webp", duration: 0 },
+        { id: "s", kind: "solid", label: "s", color: "#000", duration: 0 },
+      ],
+      scenes: [
+        { id: "a", source: "c", in: 0, out: 2, note: "", volume: 1 },
+        { id: "b", source: "p", in: 0, out: 2.4, note: "", volume: 1, subject: { shadow: 0.5 } },
+        { id: "d", source: "s", in: 0, out: 2, note: "", volume: 1, background: { kind: "blur" } },
+      ],
+    };
+    const tl = timelineOf(doc as never);
+    const starts = new Map(tl.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]));
+    expect(scenesNeedingCutout(doc as never, starts).map((s) => s.id)).toEqual(["b"]);
+  });
+
   it("names derived footage in keys that parse back", () => {
     expect(parseDerivedKey(cutoutKey("clip_1", 4.1, 7))).toEqual({
       kind: "cutout",

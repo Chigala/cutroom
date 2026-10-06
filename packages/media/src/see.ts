@@ -201,6 +201,14 @@ async function seeApple(
 
 const key = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
+/** A share of the frame, kept inside it (boxes at the edge come back a touch outside). */
+const u = (v: number) => r3(Math.min(1, Math.max(0, v)));
+/** A box clipped to the frame. */
+const inFrame = ([x, y, w, h]: readonly number[]) => {
+  const x1 = u(x!);
+  const y1 = u(y!);
+  return { x: x1, y: y1, w: r3(u(x! + w!) - x1), h: r3(u(y! + h!) - y1) };
+};
 
 /**
  * Frames into what a clip's analysis keeps: each piece of text as one stretch while it stays on screen
@@ -221,10 +229,7 @@ export function summarize(frames: readonly FrameSeen[], rate: number): Seen {
           start: r3(f.t),
           end: r3(f.t + step),
           text: x.s.trim().slice(0, 200),
-          x: r3(x.box[0]),
-          y: r3(x.box[1]),
-          w: r3(x.box[2]),
-          h: r3(x.box[3]),
+          ...inFrame(x.box),
         };
         runs.push(fresh);
         open.set(k, fresh);
@@ -238,13 +243,13 @@ export function summarize(frames: readonly FrameSeen[], rate: number): Seen {
     const y1 = Math.min(...f.salient.map((b) => b[1]));
     const x2 = Math.max(...f.salient.map((b) => b[0] + b[2]));
     const y2 = Math.max(...f.salient.map((b) => b[1] + b[3]));
-    return [{ t: r3(f.t), x: r3(x1), y: r3(y1), w: r3(x2 - x1), h: r3(y2 - y1) }];
+    return [{ t: r3(f.t), ...inFrame([x1, y1, x2 - x1, y2 - y1]) }];
   });
   const quality = frames.map((f) => ({
     t: r3(f.t),
-    ...(f.face !== undefined && { face: r3(f.face) }),
-    ...(f.look !== undefined && { look: r3(f.look) }),
-    ...(f.sharp !== undefined && { sharp: r3(f.sharp) }),
+    ...(f.face !== undefined && { face: u(f.face) }),
+    ...(f.look !== undefined && { look: r3(Math.min(1, Math.max(-1, f.look))) }),
+    ...(f.sharp !== undefined && { sharp: u(f.sharp) }),
   }));
   return { text: runs.slice(0, 400), salient, quality };
 }

@@ -131,6 +131,7 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   WebFetch: "Reading a page",
   web_search: "Searching the web",
   web_fetch: "Reading a page",
+  undo: "Undoing",
   run_checks: "Running checks",
   apply_fix: "Fixing",
 };

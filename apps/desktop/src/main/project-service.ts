@@ -101,6 +101,7 @@ import { claudeStatus, claudeTasks } from "./claude.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
+import { makeNeededFootage } from "./footage.ts";
 import { History } from "./history.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { InspirationStore } from "./inspirations.ts";
@@ -1387,6 +1388,7 @@ export class ProjectService {
       ...(cutoutsAvailable() && {
         cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
+      footage: async (doc: ProjectDoc) => makeNeededFootage(store.dir, doc),
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
         const keys = {
@@ -1453,7 +1455,8 @@ export class ProjectService {
 
   /**
    * After edits settle: make any cutout the project now needs (a background change, something behind
-   * the subject), one job at a time, and record it so the subject layer switches on.
+   * the subject), then any steadied or slowed shot's footage, one job at a time, and record them so they
+   * switch on.
    */
   private scheduleCutouts(): void {
     clearTimeout(this.cutoutTimer);
@@ -1474,6 +1477,24 @@ export class ProjectService {
         } catch (err) {
           console.error("[cutout] failed:", err);
           this.emit("error", { message: `Couldn't cut out the person: ${(err as Error).message}` });
+        }
+        // Then steadied and slowed shots (after the cutouts' record, so each sees the other's).
+        if (this.store !== store) return;
+        try {
+          const touched = new Set<string>();
+          const ops = await makeNeededFootage(store.dir, store.doc, {
+            onProgress: (source, fraction, label) => {
+              touched.add(source);
+              this.emit("index", { source, stage: "analyze", fraction, label });
+            },
+          });
+          for (const id of touched)
+            this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
+          if (ops.length && this.store === store)
+            store.commitAndBroadcast({ author: "index", message: "Steadied and smoothed shots", ops });
+        } catch (err) {
+          console.error("[footage] failed:", err);
+          this.emit("error", { message: `Couldn't steady or smooth a shot: ${(err as Error).message}` });
         }
       });
     }, 800);

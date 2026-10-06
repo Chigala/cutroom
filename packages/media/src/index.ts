@@ -32,6 +32,7 @@ export {
   segmentsOf,
 } from "./sheets.ts";
 export * from "./sounds.ts";
+export { trackCamera } from "./steady.ts";
 export * from "./stock.ts";
 export { linkTracks, type Track, type TrackPoint, trackRange } from "./track.ts";
 export * from "./transcode.ts";

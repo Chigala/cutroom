@@ -222,6 +222,32 @@ export const Scene = z
       .describe(
         "A speed ramp, the velocity edit: speeds through the shot's footage, eased between (1 to 0.3 on the hit, then 2). Overrides speed; the shot's own sound is dropped",
       ),
+    stabilize: z
+      .object({
+        amount: z
+          .number()
+          .min(0)
+          .max(1)
+          .default(0.6)
+          .describe("How much of the shake goes: 0.3 keeps some handheld life, 1 holds it as if on a tripod"),
+        zoom: z
+          .number()
+          .min(1)
+          .max(1.5)
+          .default(1.15)
+          .describe("The most it may zoom in to keep the frame filled; shake beyond that is steadied less"),
+      })
+      .optional()
+      .describe(
+        "Steady a shaky shot: the camera's shake is measured and cancelled, zooming in a little to hide the edges",
+      ),
+    interpolate: z
+      .boolean()
+      .optional()
+      .meta({ default: true })
+      .describe(
+        "Slowed past the frames its footage has (by speed or a ramp), the in-between frames are made by motion interpolation so slow motion doesn't stutter; false repeats frames",
+      ),
     camera: z
       .array(Keyframe)
       .max(32)
@@ -457,6 +483,26 @@ export const Analysis = z.object({
     )
     .optional()
     .describe("Stretches of the clip with the person cut out from the background, in its own time"),
+  cameraPaths: z
+    .array(
+      z.object({
+        from: Seconds,
+        to: Seconds,
+        fps: z.number().positive(),
+        x: z.array(z.number()).describe("Sideways, in shares of the picture's width"),
+        y: z.array(z.number()).describe("Up and down, in shares of its height"),
+        a: z.array(z.number()).describe("Turn, radians"),
+        s: z.array(z.number()).describe("Zoom, as the log of the scale"),
+      }),
+    )
+    .optional()
+    .describe(
+      "How the camera moved over stretches of the clip, frame by frame from the stretch's start (to steady them)",
+    ),
+  flows: z
+    .array(z.string())
+    .optional()
+    .describe("Slowed shots made with in-between frames (smooth slow motion), by their hash"),
   sounds: z
     .array(
       z.object({

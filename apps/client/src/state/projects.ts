@@ -62,7 +62,15 @@ export function connectProjects(): () => void {
   const offProject = useProject.subscribe((s, prev) => {
     // What was selected, pointed at, marked or being renamed belongs to the project it was in.
     if (s.dir !== prev.dir) {
-      setUi({ selection: null, selectedScene: null, pointer: null, pointing: false, renaming: false });
+      // A project opened lands in its editor, from wherever you were (Inspirations).
+      setUi({
+        selection: null,
+        selectedScene: null,
+        pointer: null,
+        pointing: false,
+        renaming: false,
+        view: "editor",
+      });
       setRange(null);
       void refreshProjects();
       return;

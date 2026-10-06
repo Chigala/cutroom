@@ -1,26 +1,29 @@
 @import "tailwindcss";
 
-/* Tokens from the design canvas. Dark only: footage reads best on near-black. */
+/*
+ * Tokens. Dark only: footage reads best on near-black. Warm greys (a touch of yellow in each, never
+ * blue), three surfaces deep; text steps down by colour, not by size.
+ */
 @theme {
-  --color-bg: #111113;
-  --color-sunken: #0c0c0e;
-  --color-panel: #16161a;
-  --color-track: #131316;
-  --color-card: #18181c;
-  --color-raised: #1c1c21;
-  --color-button: #1f1f24;
-  --color-chip: #24242b;
-  --color-control: #26262d;
-  --color-selected: #2e2e36;
-  --color-line: #26262b;
-  --color-line-strong: #2e2e35;
-  --color-edge: #34343c;
+  --color-bg: #141413;
+  --color-sunken: #10100f;
+  --color-panel: #1a1a19;
+  --color-track: #151514;
+  --color-card: #1e1e1d;
+  --color-raised: #222221;
+  --color-button: #262625;
+  --color-chip: #2b2b29;
+  --color-control: #2d2d2b;
+  --color-selected: #343432;
+  --color-line: #272726;
+  --color-line-strong: #31312f;
+  --color-edge: #3e3e3b;
 
-  --color-fg: #ececee;
-  --color-fg-2: #d4d4d8;
-  --color-fg-3: #c8c8ce;
-  --color-muted: #a1a1aa;
-  --color-faint: #71717a;
+  --color-fg: #eeede9;
+  --color-fg-2: #d8d7d2;
+  --color-fg-3: #c6c5bf;
+  --color-muted: #a3a29b;
+  --color-faint: #777670;
 
   --color-accent: #f5a524;
   --color-accent-hover: #ffc35c;
@@ -28,8 +31,11 @@
   --color-ok: #7dd3a7;
   --color-bad: #f87171;
 
-  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* The system's own UI face (SF on a Mac, Segoe on Windows), IBM Plex where there's neither. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "IBM Plex Sans", system-ui,
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "IBM Plex Mono", monospace;
 
   --animate-fade-in: fade-in 160ms ease-out both;
   --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -61,7 +67,9 @@
     color: var(--color-fg);
     font-family: var(--font-sans);
     font-size: 14px;
+    letter-spacing: -0.003em;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     overflow: hidden;
     user-select: none;
     cursor: default;

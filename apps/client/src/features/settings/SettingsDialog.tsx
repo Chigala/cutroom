@@ -1,13 +1,29 @@
 /**
- * Settings: a section list on the left, the section's rows on the right (what it does on the left of each
- * row, its control on the right). Every change saves as it's made; keys save as they're typed or pasted.
+ * Settings, as a page over the editor: sections down the left (grouped, each with its icon), the
+ * section's rows on the right (what it does on the left of each row, one control on the right). Every
+ * change saves as it's made; keys save once their service says they work.
  */
 
-import { CheckIcon, CopyIcon, EyeIcon, EyeSlashIcon, FolderOpenIcon } from "@phosphor-icons/react";
+import {
+  ArrowSquareOutIcon,
+  CaretDownIcon,
+  CheckIcon,
+  ClosedCaptioningIcon,
+  CopyIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  FolderOpenIcon,
+  type Icon,
+  ImagesIcon,
+  PulseIcon,
+  ScissorsIcon,
+  SlidersHorizontalIcon,
+  SparkleIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import type { AgentStatus, Diagnostics, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
-import { type ReactNode, useEffect, useState } from "react";
-import { Dialog } from "../../components/Dialog.tsx";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button, Segmented } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
 import { useClaude } from "../../state/claude.ts";
@@ -15,20 +31,33 @@ import { followLibrary, useLibrary } from "../../state/library.ts";
 import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { setSideOpen, setUi, useUi } from "../../state/ui.ts";
-import { EffortSlider } from "../chat/EffortSlider.tsx";
+import { EFFORTS, RECOMMENDED } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
 
-/** Words alone: six short, plain names say it better than icons would. */
-const SECTIONS = [
-  { id: "claude", label: "Claude" },
-  { id: "editing", label: "Editing" },
-  { id: "transcription", label: "Transcription" },
-  { id: "media", label: "Media sources" },
-  { id: "advanced", label: "Advanced" },
-  { id: "diagnostics", label: "Diagnostics" },
-] as const;
-type Section = (typeof SECTIONS)[number]["id"];
+/** The sections, in two groups: how Cutroom edits, and this computer. */
+const GROUPS = [
+  {
+    label: "Cutroom",
+    sections: [
+      { id: "claude", label: "Claude", icon: SparkleIcon },
+      { id: "editing", label: "Editing", icon: ScissorsIcon },
+      { id: "transcription", label: "Transcription", icon: ClosedCaptioningIcon },
+      { id: "media", label: "Media sources", icon: ImagesIcon },
+    ],
+  },
+  {
+    label: "This computer",
+    sections: [
+      { id: "advanced", label: "Advanced", icon: SlidersHorizontalIcon },
+      { id: "diagnostics", label: "Diagnostics", icon: PulseIcon },
+    ],
+  },
+] as const satisfies readonly {
+  label: string;
+  sections: readonly { id: string; label: string; icon: Icon }[];
+}[];
+type Section = (typeof GROUPS)[number]["sections"][number]["id"];
 
 const MODELS = [
   ["claude-opus-5-5", "Opus 5.5 · best edits"],
@@ -96,6 +125,12 @@ export function SettingsDialog() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [section, setSection] = useState<Section>(useUi.getState().settingsSection ?? "claude");
   const [saved, setSaved] = useState<{ ok: boolean; at: number } | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // Each section opens at its top, not wherever the last one was scrolled to.
+  const open = (id: Section) => {
+    setSection(id);
+    scroller.current?.scrollTo({ top: 0 });
+  };
 
   useEffect(() => {
     // Opened on a section once (Help → Diagnostics); the next opening starts at the top again.
@@ -115,36 +150,48 @@ export function SettingsDialog() {
     }
   };
 
-  if (!settings) return null;
   const close = () => setUi({ dialog: null });
+  if (!settings) return null;
   const groq = settings.transcriber === "groq";
   const englishOnly = !groq && settings.whisperModel.endsWith(".en");
 
   return (
-    <Dialog title="Settings" onClose={close} width={800}>
-      <div className="-m-5 flex h-[min(600px,calc(100vh-130px))]">
-        <nav className="flex w-[188px] shrink-0 flex-col gap-0.5 border-r border-line bg-sunken/40 p-2">
-          {SECTIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setSection(id)}
-              aria-current={section === id ? "page" : undefined}
-              className={clsx(
-                "rounded-lg px-3 py-[7px] text-left text-[13px] transition-colors",
-                section === id ? "bg-selected text-fg" : "text-muted hover:bg-button hover:text-fg-2",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-          <SaveNote saved={saved} />
-        </nav>
+    <Sheet onClose={close}>
+      <nav
+        aria-label="Settings sections"
+        className="flex w-[232px] shrink-0 flex-col gap-5 bg-sunken/50 px-3 pt-5 pb-3"
+      >
+        <span className="px-2.5 text-[13px] font-semibold text-fg">Settings</span>
+        {GROUPS.map((g) => (
+          <div key={g.label} className="flex flex-col gap-0.5">
+            <span className="px-2.5 pb-1 text-[12px] text-faint">{g.label}</span>
+            {g.sections.map(({ id, label, icon: SectionIcon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => open(id)}
+                aria-current={section === id ? "page" : undefined}
+                className={clsx(
+                  "flex h-9 items-center gap-3 rounded-lg px-2.5 text-left text-[14px] transition-colors duration-150",
+                  section === id ? "bg-selected text-fg" : "text-fg-3 hover:bg-button hover:text-fg",
+                )}
+              >
+                <SectionIcon size={17} className={section === id ? "text-fg" : "text-muted"} />
+                {label}
+              </button>
+            ))}
+          </div>
+        ))}
+        <SaveNote saved={saved} />
+      </nav>
 
-        <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+      <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[680px] px-10 pt-12 pb-16">
           {section === "claude" && (
             <Page title="Claude" intro="The model that edits with you, on your own Claude plan.">
-              <ClaudeSetup />
+              <div className="pb-5">
+                <ClaudeSetup />
+              </div>
               <Row title="Model" hint="Opus makes the best edits; Sonnet answers sooner.">
                 <Select
                   value={settings.model}
@@ -152,9 +199,18 @@ export function SettingsDialog() {
                   options={withCurrent(MODELS, settings.model)}
                 />
               </Row>
-              <div className="flex flex-col gap-2 border-t border-line pt-5">
-                <EffortSlider value={settings.effort} onChange={(effort) => void update({ effort })} />
-              </div>
+              <Row
+                title="Effort"
+                hint={`How long Claude thinks before it acts. Higher is smarter on big edits, slower, and uses more of your plan. ${EFFORTS.find((e) => e.value === RECOMMENDED)?.label} suits most edits; first cuts think harder on their own.`}
+                wide
+              >
+                <Segmented
+                  fit
+                  value={settings.effort}
+                  options={EFFORTS}
+                  onChange={(effort) => void update({ effort })}
+                />
+              </Row>
               <Row
                 title="Show its thinking"
                 hint="A summary of its thinking streams into the chat as it works, folded away when it's done."
@@ -206,9 +262,9 @@ export function SettingsDialog() {
                     ? "On Groq: the same model as Best, in seconds, with nothing to download. The audio is sent to Groq."
                     : "On this computer: nothing leaves it."
                 }
-                wide
               >
                 <Segmented
+                  fit
                   value={settings.transcriber}
                   options={[
                     { value: "local", label: "This computer" },
@@ -236,9 +292,9 @@ export function SettingsDialog() {
                         ? "Fast: small and quick, English only, and least accurate."
                         : "Best: the most accurate; holds up on streams, music and slang. Downloads 1.6 GB once."
                   }
-                  wide
                 >
                   <Segmented
+                    fit
                     value={
                       WHISPER.some((w) => w.value === settings.whisperModel)
                         ? settings.whisperModel
@@ -285,7 +341,7 @@ export function SettingsDialog() {
                   onSave={(v) => update({ [k.key]: v })}
                 />
               ))}
-              <p className="text-xs leading-relaxed text-faint">
+              <p className="m-0 pt-5 text-[12.5px] leading-relaxed text-faint">
                 Keys are kept encrypted on this computer, never in a settings file, and each is checked with
                 its service before it's saved. One stock footage key is enough. KLIPY test keys allow 100
                 searches an hour.
@@ -327,38 +383,75 @@ export function SettingsDialog() {
           {section === "diagnostics" && <DiagnosticsPage />}
         </div>
       </div>
-    </Dialog>
+    </Sheet>
   );
 }
 
-/** The STYLE.md new projects start with; each project's own is in its Style tab. */
+/**
+ * The page Settings sits on: most of the window, over the editor dimmed, its close button in the
+ * corner. A real <dialog>: focus stays in it, Escape closes it.
+ */
+function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && !el.open) el.showModal();
+    return () => el?.close();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      aria-label="Settings"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="m-auto h-[min(820px,calc(100vh-56px))] w-[min(1080px,calc(100vw-56px))] max-w-none overflow-hidden rounded-2xl border border-line-strong bg-panel p-0 text-fg shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop:bg-black/55 backdrop:backdrop-blur-[3px] open:flex open:animate-rise"
+    >
+      {children}
+      <button
+        type="button"
+        aria-label="Close settings"
+        title="Close (Esc)"
+        onClick={onClose}
+        className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-button hover:text-fg"
+      >
+        <XIcon size={17} />
+      </button>
+    </dialog>
+  );
+}
+
+/** The STYLE.md new projects start with. A project's own is STYLE.md in its folder: ask in chat. */
 function NewProjectStyle({ saved }: { saved: string }) {
   const { text, setText } = useStyleDraft(saved);
   return (
-    <div className="flex flex-col gap-3 border-t border-line pt-5">
-      <div className="flex flex-col gap-1">
-        <span className="text-[13px] font-medium text-fg">Style for new projects</span>
-        <span className="text-xs leading-relaxed text-muted">
-          The STYLE.md every new project starts with: your taste in words, read before every edit. A project's
-          own is in its Style tab.
-        </span>
+    <Row
+      title="Style for new projects"
+      hint="The STYLE.md every new project starts with: your taste in words, read before every edit. Pick a starting point, then make it yours. To change one project's style, ask in its chat."
+      wide
+    >
+      <div className="flex w-full flex-col gap-3">
+        <PresetGrid text={text} onPick={setText} compact />
+        <div className="rounded-xl bg-sunken/70 px-4 py-3 ring-1 ring-line ring-inset focus-within:ring-edge">
+          <StyleText text={text} onChange={setText} className="h-[240px]" />
+        </div>
       </div>
-      <PresetGrid text={text} onPick={setText} compact />
-      <div className="rounded-xl border border-line-strong bg-raised px-4 py-3">
-        <StyleText text={text} onChange={setText} className="h-[220px]" />
-      </div>
-    </div>
+    </Row>
   );
 }
 
 function Page({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-5">
-      <header className="flex flex-col gap-1">
-        <h3 className="text-[17px] font-semibold tracking-[-0.01em]">{title}</h3>
-        <p className="text-[13px] text-muted">{intro}</p>
+    <div className="flex flex-col">
+      <header className="flex flex-col gap-1.5 pb-6">
+        <h2 className="m-0 text-[22px] font-semibold tracking-[-0.015em] text-fg">{title}</h2>
+        <p className="m-0 text-[14px] leading-relaxed text-muted">{intro}</p>
       </header>
-      {children}
+      <div className="flex flex-col divide-y divide-line">{children}</div>
     </div>
   );
 }
@@ -376,14 +469,12 @@ function Row({
   children: ReactNode;
 }) {
   return (
-    <div
-      className={clsx("flex gap-x-6 gap-y-2.5 border-t border-line pt-5", wide ? "flex-col" : "items-center")}
-    >
+    <div className={clsx("flex gap-x-8 gap-y-3.5 py-5", wide ? "flex-col" : "items-center")}>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-[13px] font-medium text-fg">{title}</span>
-        <span className="text-xs leading-relaxed text-muted">{hint}</span>
+        <span className="text-[14px] font-medium text-fg">{title}</span>
+        <span className="text-[13px] leading-relaxed text-muted">{hint}</span>
       </div>
-      <div className={clsx("shrink-0", wide ? "w-full" : "flex w-[210px] justify-end")}>{children}</div>
+      <div className={clsx("shrink-0", wide ? "w-full" : "flex max-w-[260px] justify-end")}>{children}</div>
     </div>
   );
 }
@@ -404,15 +495,16 @@ function Switch({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
+      // On in the accent (what's switched on reads at a glance), off a quiet grey.
       className={clsx(
-        "relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-150",
-        checked ? "bg-accent" : "bg-control",
+        "relative h-6 w-[42px] shrink-0 rounded-full transition-colors duration-200",
+        checked ? "bg-accent" : "bg-control ring-1 ring-line-strong ring-inset",
       )}
     >
       <span
         className={clsx(
-          "absolute top-[3px] left-[3px] size-4 rounded-full bg-white shadow transition-transform duration-150",
-          checked && "translate-x-4",
+          "absolute top-[3px] left-[3px] size-[18px] rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.4)] transition-transform duration-200 ease-out",
+          checked ? "translate-x-[18px] bg-white" : "bg-muted",
         )}
       />
     </button>
@@ -431,18 +523,25 @@ function Select({
   disabled?: boolean;
 }) {
   return (
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-[32px] w-full rounded-lg border border-line-strong bg-raised px-2.5 text-[13px] text-fg outline-none focus:border-edge disabled:opacity-50"
-    >
-      {options.map(([v, label]) => (
-        <option key={v} value={v}>
-          {label}
-        </option>
-      ))}
-    </select>
+    <div className="relative min-w-[200px]">
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 w-full appearance-none rounded-lg bg-control pr-9 pl-3 text-[13.5px] text-fg outline-none transition-colors hover:bg-selected focus-visible:ring-2 focus-visible:ring-edge disabled:opacity-50"
+      >
+        {options.map(([v, label]) => (
+          <option key={v} value={v}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <CaretDownIcon
+        size={13}
+        weight="bold"
+        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted"
+      />
+    </div>
   );
 }
 
@@ -471,8 +570,8 @@ function TextInput({
       placeholder={placeholder}
       spellCheck={false}
       className={clsx(
-        "h-[32px] w-full rounded-lg border border-line-strong bg-raised px-3 text-[13px] text-fg outline-none placeholder:text-faint focus:border-edge",
-        mono && "font-mono text-[12px]",
+        "h-9 w-full rounded-lg bg-sunken/70 px-3 text-[13.5px] text-fg ring-1 ring-line ring-inset outline-none placeholder:text-faint focus:ring-edge",
+        mono && "font-mono text-[12.5px]",
       )}
     />
   );
@@ -495,11 +594,11 @@ function Glossary({ words, onSave }: { words: readonly string[]; onSave: (w: str
       hint="Names, brands and jargon the transcript should get right, and the captions with it."
       wide
     >
-      <div className="flex min-h-[38px] w-full flex-wrap items-center gap-1.5 rounded-lg border border-line-strong bg-raised px-2 py-1.5 focus-within:border-edge">
+      <div className="flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-lg bg-sunken/70 px-2 py-1.5 ring-1 ring-line ring-inset focus-within:ring-edge">
         {words.map((w) => (
           <span
             key={w}
-            className="flex items-center gap-0.5 rounded-md bg-chip py-0.5 pr-0.5 pl-2 text-xs text-fg-2"
+            className="flex items-center gap-0.5 rounded-md bg-control py-0.5 pr-0.5 pl-2 text-[12.5px] text-fg-2"
           >
             {w}
             <button
@@ -564,14 +663,14 @@ function KeyRow({
     }
   };
   return (
-    <div className="flex flex-col gap-2 border-t border-line pt-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[13px] font-medium">{name}</span>
-          <span className="text-xs text-muted">{what}</span>
+    <div className="flex flex-col gap-3.5 py-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-[14px] font-medium">{name}</span>
+          <span className="text-[13px] text-muted">{what}</span>
         </div>
         {source === "saved" ? (
-          <span className="flex shrink-0 items-center gap-2 text-xs">
+          <span className="flex shrink-0 items-center gap-2 text-[12.5px]">
             <span className="flex items-center gap-1 text-ok">
               <CheckIcon size={12} /> Saved
             </span>
@@ -591,9 +690,9 @@ function KeyRow({
             href={`https://${get}`}
             target="_blank"
             rel="noreferrer"
-            className="shrink-0 text-xs text-accent hover:underline"
+            className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[12.5px] text-fg-3 hover:bg-button hover:text-fg"
           >
-            Get a free key
+            Get a free key <ArrowSquareOutIcon size={12} />
           </a>
         )}
       </div>
@@ -613,7 +712,7 @@ function KeyRow({
               if (e.key === "Enter") void check();
             }}
             placeholder={source === "saved" ? "Paste a new key to replace it" : `Paste your ${name} key`}
-            className="h-[34px] w-full rounded-lg border border-line-strong bg-raised pr-9 pl-3 font-mono text-[12px] text-fg outline-none placeholder:font-sans placeholder:text-faint focus:border-edge"
+            className="h-9 w-full rounded-lg bg-sunken/70 pr-9 pl-3 font-mono text-[12.5px] text-fg ring-1 ring-line ring-inset outline-none placeholder:font-sans placeholder:text-faint focus:ring-edge"
           />
           <button
             type="button"
@@ -624,7 +723,7 @@ function KeyRow({
             {shown ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
           </button>
         </div>
-        <Button size="sm" disabled={!typed.trim() || checking} onClick={() => void check()}>
+        <Button disabled={!typed.trim() || checking} onClick={() => void check()}>
           {checking ? "Checking…" : "Check"}
         </Button>
       </div>
@@ -647,21 +746,23 @@ function LibraryRow() {
   useEffect(() => followLibrary(), []);
   const n = (state?.assets ?? []).filter((a) => a.scope === "library").length;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[13px] font-medium">Your library</span>
-        <span className="text-xs text-muted">
+    <div className="flex flex-col gap-3.5 py-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-[14px] font-medium">Your library</span>
+          <span className="text-[13px] leading-relaxed text-muted">
+            The sounds, music and memes you keep for every project. Claude uses them before searching the web;
+            each project can also have its own assets/ folder.
+          </span>
+        </div>
+        <span className="shrink-0 text-[12.5px] text-faint tabular-nums">
           {n} {n === 1 ? "asset" : "assets"}
         </span>
       </div>
-      <span className="text-xs leading-relaxed text-muted">
-        The sounds, music and memes you keep for every project. The agent uses them before searching the web.
-        Each project can also have its own assets/ folder.
-      </span>
-      <span className="truncate font-mono text-[11.5px] text-fg-2" title={state?.dir}>
-        {state?.dir.replace(/^\/Users\/[^/]+/, "~") ?? "…"}
-      </span>
-      <div className="flex gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate text-[13px] text-fg-3" title={state?.dir}>
+          {state?.dir.replace(/^\/Users\/[^/]+/, "~") ?? "…"}
+        </span>
         <Button size="sm" onClick={() => void host.library.reveal("library")}>
           <FolderOpenIcon size={13} /> Show in Finder
         </Button>
@@ -676,7 +777,7 @@ function LibraryRow() {
             setSideOpen(true);
           }}
         >
-          Open the Library tab
+          Open the tab
         </Button>
       </div>
     </div>
@@ -710,29 +811,24 @@ function DiagnosticsPage() {
       title="Diagnostics"
       intro="What to send along when something goes wrong. API keys are never included."
     >
-      <div className="flex flex-col gap-1 rounded-lg border border-line px-3 py-2.5 font-mono text-[12px] text-fg-2">
-        <span>Cutroom {d.version}</span>
-        <span className="text-muted">
-          Electron {d.electron} · {d.os}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => void host.app.openLogs()}>
-          <FolderOpenIcon size={13} /> Open logs folder
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() =>
-            void navigator.clipboard.writeText(report()).then(
-              () => toast("Copied. Paste it into your bug report, with the log file if you can."),
-              () => toast("Couldn't copy it.", "warn"),
-            )
-          }
-        >
-          <CopyIcon size={13} /> Copy a report
-        </Button>
-      </div>
+      <Row title={`Cutroom ${d.version}`} hint={`Electron ${d.electron} · ${d.os}`}>
+        <div className="flex gap-1.5">
+          <Button size="sm" onClick={() => void host.app.openLogs()}>
+            <FolderOpenIcon size={13} /> Logs
+          </Button>
+          <Button
+            size="sm"
+            onClick={() =>
+              void navigator.clipboard.writeText(report()).then(
+                () => toast("Copied. Paste it into your bug report, with the log file if you can."),
+                () => toast("Couldn't copy it.", "warn"),
+              )
+            }
+          >
+            <CopyIcon size={13} /> Copy a report
+          </Button>
+        </div>
+      </Row>
       <Row
         title="Problems this session"
         hint={d.problems.length ? "Newest first. The full story is in the logs." : "None so far."}
@@ -741,9 +837,9 @@ function DiagnosticsPage() {
         {d.problems.length > 0 && (
           <ol className="flex max-h-[260px] flex-col gap-1.5 overflow-y-auto">
             {d.problems.map((p, i) => (
-              <li key={i} className="flex gap-2 rounded-md bg-raised/60 px-2.5 py-1.5 text-xs">
+              <li key={i} className="flex gap-3 rounded-lg bg-sunken/70 px-3 py-2 text-[12.5px]">
                 <span
-                  className={clsx("shrink-0 font-mono", p.level === "error" ? "text-bad" : "text-accent")}
+                  className={clsx("shrink-0 tabular-nums", p.level === "error" ? "text-bad" : "text-muted")}
                 >
                   {new Date(p.at).toLocaleTimeString([], {
                     hour: "2-digit",

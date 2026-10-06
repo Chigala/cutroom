@@ -3,10 +3,11 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type Variant = "default" | "accent" | "ghost" | "control";
 
+/** Filled, never outlined: the accent for the one action that matters, soft fills for the rest. */
 const variants: Record<Variant, string> = {
-  default: "bg-button border border-line-strong text-fg hover:bg-chip",
+  default: "bg-control text-fg hover:bg-selected",
   accent: "bg-accent text-accent-fg font-semibold hover:bg-accent-hover",
-  ghost: "bg-transparent border border-line-strong text-fg-3 hover:bg-button",
+  ghost: "bg-transparent text-fg-3 hover:bg-button hover:text-fg",
   control: "bg-control text-fg-2 hover:bg-selected",
 };
 
@@ -101,13 +102,16 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  fit,
 }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
+  /** As wide as its options (a setting's control), not the full width (tabs). */
+  fit?: boolean;
 }) {
   return (
-    <div role="tablist" className="flex rounded-[9px] bg-button p-[3px]">
+    <div role="tablist" className={clsx("rounded-[10px] bg-button p-[3px]", fit ? "inline-flex" : "flex")}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -116,8 +120,11 @@ export function Segmented<T extends string>({
           aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
           className={clsx(
-            "h-[30px] flex-1 rounded-[7px] text-[13px] transition-colors",
-            value === o.value ? "bg-selected text-fg" : "text-muted hover:text-fg-2",
+            "h-[30px] rounded-[7px] text-[13px] whitespace-nowrap transition-colors duration-150",
+            fit ? "px-3.5" : "flex-1",
+            value === o.value
+              ? "bg-selected text-fg shadow-[0_1px_2px_rgba(0,0,0,0.35)]"
+              : "text-muted hover:text-fg-2",
           )}
         >
           {o.label}
@@ -136,7 +143,7 @@ export function Kbd({ children }: { children: ReactNode }) {
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between">
-      <span className="font-mono text-[11px] tracking-[0.06em] text-muted uppercase">{children}</span>
+      <span className="text-[12.5px] font-medium text-muted">{children}</span>
       {right}
     </div>
   );

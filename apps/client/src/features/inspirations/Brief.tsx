@@ -39,7 +39,7 @@ function inline(text: string): ReactNode {
         {p.slice(2, -2)}
       </strong>
     ) : p.startsWith("`") ? (
-      <code key={i} className="rounded bg-control px-1 font-mono text-[11.5px]">
+      <code key={i} className="rounded bg-control px-1 font-mono text-[12.5px]">
         {p.slice(1, -1)}
       </code>
     ) : (
@@ -50,11 +50,11 @@ function inline(text: string): ReactNode {
 
 export function Brief({ md }: { md: string }) {
   return (
-    <div className="flex flex-col gap-2.5 text-[13px] leading-relaxed text-fg-2">
+    <div className="flex flex-col gap-3 text-[14px] leading-[1.7] text-fg-3">
       {blocks(md).map((b, i) => {
         if (b.kind === "h")
           return b.level <= 1 ? null : (
-            <h3 key={i} className="m-0 mt-2 text-[13px] font-semibold text-fg">
+            <h3 key={i} className="m-0 mt-4 text-[14px] font-semibold text-fg first:mt-0">
               {b.text}
             </h3>
           );
@@ -68,7 +68,7 @@ export function Brief({ md }: { md: string }) {
         return (
           <List
             key={i}
-            className={`m-0 flex flex-col gap-1 pl-5 ${b.kind === "ul" ? "list-disc" : "list-decimal"}`}
+            className={`m-0 flex flex-col gap-1.5 pl-5 marker:text-faint ${b.kind === "ul" ? "list-disc" : "list-decimal"}`}
           >
             {b.items.map((item, j) => (
               <li key={j}>{inline(item)}</li>

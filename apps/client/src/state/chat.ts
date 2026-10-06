@@ -167,16 +167,82 @@ const set = useChat.setState;
 let seq = 0;
 const id = () => `m${Date.now().toString(36)}${++seq}`;
 
+/**
+ * A project's conversation while another is on screen. Claude keeps working in a project you leave:
+ * its conversation is kept here, follows the request's events, saves itself, and comes back when you
+ * return. `tracking`: only its running request is known (the window reloaded while it ran elsewhere);
+ * the saved conversation is the truth, so nothing is saved from here.
+ */
+interface Conversation {
+  items: ChatItem[];
+  activeRun: string | null;
+  queue: QueuedMessage[];
+  tracking?: boolean;
+}
+
+/** Conversations of projects not on screen with something still going on, by folder. */
+const away = new Map<string, Conversation>();
+/** Which project each request is for. */
+const runDirs = new Map<string, string>();
+
+const current = () => useProject.getState().dir;
+
+/** The projects Claude is working in right now (the rail's spinners), the one on screen included. */
+export const useWorking = create<{ dirs: readonly string[] }>()(() => ({ dirs: [] }));
+
+function noteWorking(): void {
+  const here = current();
+  const dirs = [...away].filter(([d, c]) => c.activeRun && d !== here).map(([d]) => d);
+  if (here && useChat.getState().activeRun) dirs.push(here);
+  const prev = useWorking.getState().dirs;
+  if (dirs.length !== prev.length || dirs.some((d, i) => d !== prev[i])) useWorking.setState({ dirs });
+}
+useChat.subscribe((s, prev) => {
+  if (s.activeRun !== prev.activeRun) noteWorking();
+});
+
+/** A project's conversation: the one on screen, or one kept while Claude works in it. */
+function conv(dir: string): Conversation {
+  if (dir === current()) {
+    const { items, activeRun, queue } = useChat.getState();
+    return { items, activeRun, queue };
+  }
+  return away.get(dir) ?? { items: [], activeRun: null, queue: [] };
+}
+
+function setConv(dir: string, change: (c: Conversation) => Partial<Conversation>): void {
+  if (dir === current()) set((s) => change({ items: s.items, activeRun: s.activeRun, queue: s.queue }));
+  else {
+    const c = conv(dir);
+    away.set(dir, { ...c, ...change(c) });
+  }
+  noteWorking();
+}
+
+/** A request finished in a project not on screen: listeners say so (projects.ts toasts it). */
+const finishedAway = new Set<(dir: string, ok: boolean, text: string) => void>();
+export function onFinishedAway(listener: (dir: string, ok: boolean, text: string) => void): () => void {
+  finishedAway.add(listener);
+  return () => finishedAway.delete(listener);
+}
+
+/** Says a request ended where it can't be seen: done, or failed (a stop you asked for isn't news). */
+function announce(dir: string, e: AgentEvent): void {
+  if (e.type === "done") for (const l of finishedAway) l(dir, true, e.summary);
+  else if (e.type === "error" && e.message !== "Stopped")
+    for (const l of finishedAway) l(dir, false, e.message);
+}
+
 function updateRun(runId: string, patch: (run: AgentRun) => Partial<AgentRun>): void {
-  set((s) => ({
-    items: s.items.map((m) => (m.kind === "agent" && m.runId === runId ? { ...m, ...patch(m) } : m)),
+  setConv(runDirs.get(runId) ?? current(), (c) => ({
+    items: c.items.map((m) => (m.kind === "agent" && m.runId === runId ? { ...m, ...patch(m) } : m)),
   }));
 }
 
 /** The last few exchanges, as memory for the next request. */
-function history(): { user: string; agent: string }[] {
+function history(dir: string): { user: string; agent: string }[] {
   const turns: { user: string; agent: string }[] = [];
-  const items = useChat.getState().items;
+  const items = conv(dir).items;
   items.forEach((m, i) => {
     if (m.kind !== "user") return;
     const reply = items.slice(i + 1).find((x): x is AgentRun => x.kind === "agent");
@@ -192,15 +258,17 @@ export async function send(
   depth: "quick" | "thorough" = "quick",
   /** Source ids of clips, images or screenshots the message is about. */
   attachments: readonly string[] = [],
+  /** The project it's for: the one on screen, or (a waiting message) one Claude works in elsewhere. */
+  dir: string = current(),
 ): Promise<void> {
   const trimmed = text.trim();
   if (!trimmed) return;
   // Busy: it waits its turn, and goes when this request is done.
-  if (useChat.getState().activeRun) {
-    set((s) => ({ queue: [...s.queue, { id: id(), text: trimmed, context, depth, attachments }] }));
+  if (conv(dir).activeRun) {
+    setConv(dir, (c) => ({ queue: [...c.queue, { id: id(), text: trimmed, context, depth, attachments }] }));
     return;
   }
-  const memory = history();
+  const memory = history(dir);
   const runItem: AgentRun = {
     kind: "agent",
     id: id(),
@@ -215,9 +283,9 @@ export async function send(
     elapsedMs: null,
     error: null,
   };
-  set((s) => ({
+  setConv(dir, (c) => ({
     items: [
-      ...s.items,
+      ...c.items,
       {
         kind: "user",
         id: id(),
@@ -237,24 +305,26 @@ export async function send(
       context,
       history: memory,
       depth,
+      dir,
       ...(attachments.length && { attachments: attachments.map((source) => ({ source })) }),
     });
+    runDirs.set(runId, dir);
     const merged = pendingEvents(runId, { ...runItem, runId });
-    set((s) => ({
+    setConv(dir, (c) => ({
       activeRun: merged.status === "running" ? runId : null,
-      items: s.items.map((m) => (m.id === runItem.id ? merged : m)),
+      items: c.items.map((m) => (m.id === runItem.id ? merged : m)),
     }));
     // It finished before run() even answered: the queue moves on all the same.
-    if (merged.status === "done") setTimeout(sendNextQueued, 0);
+    if (merged.status === "done") setTimeout(() => sendNextQueued(dir), 0);
   } catch (err) {
-    set((s) => ({
+    setConv(dir, (c) => ({
       activeRun: null,
-      items: s.items.map((m) =>
+      items: c.items.map((m) =>
         m.id === runItem.id ? { ...runItem, status: "error", error: (err as Error).message } : m,
       ),
     }));
   }
-  persist();
+  persist(dir);
 }
 
 /**
@@ -280,12 +350,12 @@ export function removeQueued(queuedId: string): void {
 }
 
 /** Sends the next waiting message, if nothing's running (after a stop or an error paused the queue). */
-export function sendNextQueued(): void {
-  const { queue, activeRun } = useChat.getState();
+export function sendNextQueued(dir: string = current()): void {
+  const { queue, activeRun } = conv(dir);
   const next = queue[0];
   if (!next || activeRun) return;
-  set({ queue: queue.slice(1) });
-  void send(next.text, next.context, next.depth, next.attachments);
+  setConv(dir, (c) => ({ queue: c.queue.slice(1) }));
+  void send(next.text, next.context, next.depth, next.attachments, dir);
 }
 
 /** Keeps what a stopped run did, as one undoable change (its chips appear under the run). */
@@ -390,35 +460,42 @@ export function useSuggestion(): string | null {
   });
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-/** Saves finished messages to the project folder (debounced; running ones are saved when they end). */
-function persist(): void {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const records: ChatRecord[] = useChat.getState().items.flatMap((m): ChatRecord[] => {
-      if (m.kind === "user")
-        return [
-          { kind: "user", text: m.text, at: m.at, ...(m.attachments && { attachments: m.attachments }) },
-        ];
-      if (m.kind === "note") return [{ kind: "note", commitId: m.commitId, at: m.at }];
-      if (m.status === "running") return [];
-      return [
-        {
-          kind: "agent",
-          at: m.at,
-          steps: m.steps,
-          text: m.text,
-          ...(m.work.length && { work: m.work }),
-          ...(m.next && { next: m.next }),
-          status: m.status,
-          commitId: m.commitId,
-          elapsedMs: m.elapsedMs,
-          error: m.error,
-        },
-      ];
-    });
-    void host.project.saveChat(records).catch(() => {});
+/** Records waiting to be saved, and their timers, by project. */
+const saving = new Map<string, { records: ChatRecord[]; timer: ReturnType<typeof setTimeout> }>();
+
+/**
+ * Saves a project's finished messages to its folder (debounced; running ones are saved when they end).
+ * The records are taken now, so a project switched away from still saves its own conversation.
+ */
+function persist(dir: string = current()): void {
+  if (!dir || away.get(dir)?.tracking) return;
+  const records: ChatRecord[] = conv(dir).items.flatMap((m): ChatRecord[] => {
+    if (m.kind === "user")
+      return [{ kind: "user", text: m.text, at: m.at, ...(m.attachments && { attachments: m.attachments }) }];
+    if (m.kind === "note") return [{ kind: "note", commitId: m.commitId, at: m.at }];
+    if (m.status === "running") return [];
+    return [
+      {
+        kind: "agent",
+        at: m.at,
+        steps: m.steps,
+        text: m.text,
+        ...(m.work.length && { work: m.work }),
+        ...(m.next && { next: m.next }),
+        status: m.status,
+        commitId: m.commitId,
+        elapsedMs: m.elapsedMs,
+        error: m.error,
+      },
+    ];
+  });
+  const prev = saving.get(dir);
+  if (prev) clearTimeout(prev.timer);
+  const timer = setTimeout(() => {
+    saving.delete(dir);
+    void host.project.saveChat(records, dir).catch(() => {});
   }, 400);
+  saving.set(dir, { records, timer });
 }
 
 async function loadChat(): Promise<void> {
@@ -451,7 +528,17 @@ async function loadChat(): Promise<void> {
  * reply come back, Stop works again, and its draft shows everything done so far, then carries on live.
  */
 async function resumeRunning(): Promise<void> {
-  const running = await host.agent.active().catch(() => []);
+  const all = await host.agent.active().catch(() => []);
+  const here = current();
+  // Running in other projects (the window reloaded while Claude worked there): followed for the rail
+  // and to say when they're done; their conversation loads when you open them.
+  for (const r of all) {
+    runDirs.set(r.runId, r.dir);
+    if (r.dir !== here && !away.has(r.dir))
+      away.set(r.dir, { items: [], activeRun: r.runId, queue: [], tracking: true });
+  }
+  noteWorking();
+  const running = all.filter((r) => r.dir === here);
   for (const r of running) {
     if (useChat.getState().items.some((m) => m.kind === "agent" && m.runId === r.runId)) continue;
     const last = useChat.getState().items.at(-1);
@@ -500,25 +587,48 @@ export function firstCutPrompt(): string {
 
 export function connectChat(): () => void {
   const offAgent = host.on("agent", (e) => {
+    // Each request's events go to its own project's conversation, on screen or not.
+    const dir = runDirs.get(e.runId) ?? current();
+    const here = dir === current();
     if (e.type === "start") set({ backend: e.backend });
     if (e.type === "usage") noteUsage(e);
-    // The live draft: each change as the agent makes it; gone when the work lands, held when it stopped
-    // partway with something to keep.
-    if (e.type === "draft") addDraft(e.runId, e.ops, e.at);
-    if (e.type === "done") endDraft(e.runId);
-    if (e.type === "error") {
-      if (e.kept) holdDraft(e.runId);
-      else endDraft(e.runId);
+    // The live draft (on screen only): each change as the agent makes it; gone when the work lands, held
+    // when it stopped partway with something to keep.
+    if (here) {
+      if (e.type === "draft") addDraft(e.runId, e.ops, e.at);
+      if (e.type === "done") endDraft(e.runId);
+      if (e.type === "error") {
+        if (e.kept) holdDraft(e.runId);
+        else endDraft(e.runId);
+      }
     }
-    const known = useChat.getState().items.some((m) => m.kind === "agent" && m.runId === e.runId);
+    const end = e.type === "done" || e.type === "error";
+    const tracked = away.get(dir);
+    if (tracked?.tracking) {
+      // Only followed (the window reloaded while it ran): its end is all there is to show.
+      if (end) {
+        away.delete(dir);
+        noteWorking();
+        announce(dir, e);
+      }
+      return;
+    }
+    const known = conv(dir).items.some((m) => m.kind === "agent" && m.runId === e.runId);
     if (!known) early.set(e.runId, [...(early.get(e.runId) ?? []), e]);
     else updateRun(e.runId, (run) => reduce(run, e));
-    if (known && (e.type === "done" || e.type === "error")) {
-      set((s) => (s.activeRun === e.runId ? { activeRun: null } : s));
-      persist();
+    if (known && end) {
+      setConv(dir, (c) => (c.activeRun === e.runId ? { activeRun: null } : {}));
+      persist(dir);
+      const run = conv(dir).items.find((m) => m.kind === "agent" && m.runId === e.runId);
+      if (!here) announce(dir, e);
       // The queue moves on after a request that finished; a stop or an error pauses it.
-      const run = useChat.getState().items.find((m) => m.kind === "agent" && m.runId === e.runId);
-      if (run?.kind === "agent" && run.status === "done") setTimeout(sendNextQueued, 0);
+      if (run?.kind === "agent" && run.status === "done") setTimeout(() => sendNextQueued(dir), 0);
+      // Nothing left going on in a project not on screen: its conversation is saved, so it's let go.
+      setTimeout(() => {
+        const c = away.get(dir);
+        if (c && !c.activeRun && !c.queue.length) away.delete(dir);
+        noteWorking();
+      }, 0);
     }
   });
   // Imports and outside file edits show up in the conversation as notes with undoable chips.
@@ -575,11 +685,33 @@ function noteCommit(commit: Commit): void {
   persist();
 }
 
-/** Each project has its own conversation. */
+/**
+ * Each project has its own conversation. Leaving one where Claude is working (or messages wait their
+ * turn) keeps it, following its request; coming back brings it back as it is now, with the request's
+ * draft so far on the preview.
+ */
 let chatLoading: Promise<void> = Promise.resolve();
 useProject.subscribe((s, prev) => {
-  if (s.dir && s.dir !== prev.dir) chatLoading = loadChat();
+  if (!s.dir || s.dir === prev.dir) return;
+  if (prev.dir) {
+    const { items, activeRun, queue } = useChat.getState();
+    if (activeRun || queue.length) away.set(prev.dir, { items, activeRun, queue });
+  }
+  const back = away.get(s.dir);
+  away.delete(s.dir);
+  if (back && !back.tracking) {
+    set({ items: back.items, activeRun: back.activeRun, queue: back.queue });
+    chatLoading = showDraftSoFar(s.dir);
+  } else chatLoading = loadChat();
+  noteWorking();
 });
+
+/** A request still running in the project just opened: what it has changed so far, on the preview. */
+async function showDraftSoFar(dir: string): Promise<void> {
+  const running = await host.agent.active().catch(() => []);
+  for (const r of running)
+    if (r.dir === dir && r.dir === current() && r.ops.length) addDraft(r.runId, r.ops, 0);
+}
 
 /** Resolves once the open project's conversation is in (after a switch, before sending into it). */
 export const chatReady = (): Promise<void> => chatLoading;

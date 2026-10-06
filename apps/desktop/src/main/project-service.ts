@@ -94,7 +94,7 @@ import {
 } from "@vedit/project";
 import { ProjectStore, readLog } from "@vedit/project/node";
 import { renderStills, senseMotion } from "@vedit/render";
-import { app, type BrowserWindow, dialog, nativeImage, shell } from "electron";
+import { app, type BrowserWindow, dialog, Notification, nativeImage, shell } from "electron";
 import { z } from "zod";
 import { capturePage } from "./capture.ts";
 import { claudeStatus, claudeTasks } from "./claude.ts";
@@ -213,25 +213,25 @@ export class ProjectService {
   /** A new project at `dir` with `clips` imported (the benchmark's). */
   async benchProject(dir: string, clips: string[]): Promise<void> {
     await mkdir(dir, { recursive: true });
-    await this.switchTo(await ProjectStore.create(dir, await this.fresh(dir), this.events()));
+    await this.switchTo(await ProjectStore.create(dir, await this.fresh(dir), this.events(dir)));
     const r = await this.importFiles(clips);
     if (!r.ok) throw new Error(r.error);
   }
 
   /** Measures the rendered motion of `doc` (the agent's inspect_motion). */
-  senseMotion(doc: ProjectDoc) {
+  senseMotion(doc: ProjectDoc, store: ProjectStore = this.requireStore()) {
     return senseMotion({
       doc,
       entry: renderEntry(),
-      workDir: path.join(this.requireStore().dir, CACHE_DIR, "sense"),
+      workDir: path.join(store.dir, CACHE_DIR, "sense"),
       safeZone: clearArea(doc.checkRules),
-      resolve: (key) => this.resolveIn(doc, key.replace(/\?.*$/, ""), "proxy"),
+      resolve: (key) => this.resolveIn(doc, key.replace(/\?.*$/, ""), "proxy", store),
     });
   }
 
   /** How every dialogue cut in `doc` sounds (the agent's inspect_joins), from each clip's speech audio. */
-  measureJoins(doc: ProjectDoc) {
-    const dir = path.join(this.requireStore().dir, CACHE_DIR, "audio");
+  measureJoins(doc: ProjectDoc, store: ProjectStore = this.requireStore()) {
+    const dir = path.join(store.dir, CACHE_DIR, "audio");
     return measureJoins(doc, async (id) => {
       const src = doc.sources.find((s) => s.id === id);
       if (!src?.path || !src.hasAudio || !existsSync(src.path)) return null;
@@ -267,17 +267,23 @@ export class ProjectService {
    * A media key to a file, looked up in a given state of the project: the saved one, or the agent's
    * working copy (whose new clips, like a track it just found, aren't saved yet).
    */
-  private async resolveIn(doc: ProjectDoc | null, key: string, query: string): Promise<string | null> {
+  private async resolveIn(
+    doc: ProjectDoc | null,
+    key: string,
+    query: string,
+    /** The project the doc is from (a background request's), else the open one. */
+    from: ProjectStore | null = this.store,
+  ): Promise<string | null> {
     // An asset in the library or the project's assets/ (the Library tab's previews).
     if (key.startsWith("lib/")) return this.library.resolve(key.slice(4));
     // Footage made from a clip: its cutout, or a ramped shot (rendered on first ask).
     if (key.includes("~"))
-      return this.store && doc ? resolveDerived(this.store.dir, doc, key, doc.meta.format.fps) : null;
+      return from && doc ? resolveDerived(from.dir, doc, key, doc.meta.format.fps) : null;
     if (key.startsWith("sfx/")) {
       const name = key.slice(4) as SfxName;
       return SFX_NAMES.includes(name) ? sfxFile(name, paths.cache()) : null;
     }
-    const store = this.store;
+    const store = from;
     // A picture the agent looked at (a frame strip), kept for the chat.
     if (/^looks\/[a-z0-9-]+\.jpg$/.test(key)) return store ? path.join(store.dir, CACHE_DIR, key) : null;
     if (key.startsWith(`${FONTS_DIR}/`)) {
@@ -313,10 +319,18 @@ export class ProjectService {
   }
 
   private async doSwitch(next: ProjectStore): Promise<ProjectSnapshot> {
-    for (const ctrl of this.runs.values()) ctrl.abort();
     this.indexer.reset();
     this.exporter.stop();
-    await this.store?.close();
+    // The project on screen until now: Claude may still be working in it, and carries on in the
+    // background (it's closed when its last request ends). Otherwise it closes.
+    const prev = this.store;
+    if (prev && prev !== next) {
+      if (this.busy(prev.dir)) this.background.set(prev.dir, prev);
+      else await prev.close();
+    }
+    this.background.delete(next.dir);
+    // Worked on in the background: what Claude did there is on disk before the window reads the history.
+    await next.flush();
     this.store = next;
     next.watch();
     await this.rescueTemporary(next);
@@ -341,9 +355,71 @@ export class ProjectService {
     return this.snapshot();
   }
 
-  private events() {
+  /**
+   * Projects Claude is working in while another is on screen, by folder: kept open (and watching their
+   * files) until their last request ends.
+   */
+  private background = new Map<string, ProjectStore>();
+
+  /** Whether Claude has a request running in this project. */
+  private busy(dir: string): boolean {
+    for (const a of this.asked.values()) if (a.dir === dir) return true;
+    return false;
+  }
+
+  /** Background projects being closed (saved), by folder: reopening one waits for its files. */
+  private closing = new Map<string, Promise<void>>();
+
+  /** A project's store: the one on screen, one working in the background, or opened from its folder. */
+  private async openStore(dir: string): Promise<ProjectStore> {
+    if (this.store?.dir === dir) return this.store;
+    const kept = this.background.get(dir);
+    if (kept) return kept;
+    await this.closing.get(dir);
+    return ProjectStore.open(dir, this.events(dir));
+  }
+
+  /** A project kept open for a request while another is on screen (a queued message sent there). */
+  private async backgroundStore(dir: string): Promise<ProjectStore> {
+    if (this.store?.dir === dir) return this.store;
+    const kept = this.background.get(dir);
+    if (kept) return kept;
+    if (!(await this.recent()).some((r) => r.dir === dir))
+      throw new Error("That project isn't in your list.");
+    // Just let go of (its last request ended): its files are written before they're read again.
+    await this.closing.get(dir);
+    const again = this.background.get(dir);
+    if (again) return again;
+    const store = await ProjectStore.open(dir, this.events(dir));
+    store.watch();
+    this.background.set(dir, store);
+    return store;
+  }
+
+  /** Closes a background project once Claude has nothing left running in it. */
+  private async release(store: ProjectStore): Promise<void> {
+    if (store === this.store || this.busy(store.dir) || this.background.get(store.dir) !== store) return;
+    this.background.delete(store.dir);
+    const closed = store.close().finally(() => {
+      if (this.closing.get(store.dir) === closed) this.closing.delete(store.dir);
+    });
+    this.closing.set(store.dir, closed);
+    await closed;
+  }
+
+  private events(dir: string) {
     return {
       onCommit: (commit: Commit) => {
+        // A project working in the background: its changes stay in it (the window shows another one),
+        // and its thumbnail follows its shots.
+        if (this.store?.dir !== dir) {
+          const store = this.background.get(dir);
+          if (store && commit.ops.some((op) => "coll" in op && op.coll === "scenes"))
+            void this.queueThumb(() => makeThumbnail(dir, store.doc))
+              .then((made) => made && this.emit("thumbnail", { dir }))
+              .catch(() => undefined);
+          return;
+        }
         this.emit("commit", { commit, head: commit.id });
         this.renamed(commit);
         // Clips removed (or imports undone) stop indexing.
@@ -364,7 +440,7 @@ export class ProjectService {
     );
     if (last) {
       try {
-        return await this.switchTo(await ProjectStore.open(last.dir, this.events()));
+        return await this.switchTo(await this.openStore(last.dir));
       } catch {
         // moved or deleted since; fall through to the demo
       }
@@ -393,7 +469,7 @@ export class ProjectService {
       if (files.length) return this.startWith(files);
       target = result.filePaths[0];
     }
-    return this.switchTo(await ProjectStore.open(target, this.events()));
+    return this.switchTo(await this.openStore(target));
   }
 
   /** "New project from videos…": pick clips, get a fresh project with them in it. */
@@ -421,7 +497,7 @@ export class ProjectService {
     const dir = await freeDir(path.join(app.getPath("videos"), name));
     await mkdir(dir, { recursive: true });
     const snapshot = await this.switchTo(
-      await ProjectStore.create(dir, await this.fresh(dir), this.events()),
+      await ProjectStore.create(dir, await this.fresh(dir), this.events(dir)),
     );
     setTimeout(() => {
       void this.importFiles(files).then((r) => {
@@ -442,7 +518,7 @@ export class ProjectService {
     if (result.canceled || !result.filePaths[0]) return null;
     const dir = await freeDir(path.join(result.filePaths[0], sanitize(name)));
     await mkdir(dir, { recursive: true });
-    return this.switchTo(await ProjectStore.create(dir, await this.fresh(dir), this.events()));
+    return this.switchTo(await ProjectStore.create(dir, await this.fresh(dir), this.events(dir)));
   }
 
   /** A new project's doc: empty, with the user's style and the brand kit new projects start with. */
@@ -584,10 +660,10 @@ export class ProjectService {
   async openDemo(): Promise<ProjectSnapshot> {
     const dir = paths.demo();
     try {
-      return await this.switchTo(await ProjectStore.open(dir, this.events()));
+      return await this.switchTo(await this.openStore(dir));
     } catch {
       await mkdir(dir, { recursive: true });
-      return this.switchTo(await ProjectStore.create(dir, demoProject(), this.events()));
+      return this.switchTo(await ProjectStore.create(dir, demoProject(), this.events(dir)));
     }
   }
 
@@ -690,7 +766,7 @@ export class ProjectService {
   async duplicate(rawDir: unknown, rawFrom: unknown): Promise<ProjectSnapshot> {
     const dir = await this.listed(rawDir);
     const from = z.enum(["edit", "footage"]).parse(rawFrom);
-    const open = this.store?.dir === dir ? this.store : null;
+    const open = this.store?.dir === dir ? this.store : (this.background.get(dir) ?? null);
     await open?.flush();
     const name =
       open?.doc.meta.name ?? (await this.recent()).find((r) => r.dir === dir)?.name ?? path.basename(dir);
@@ -699,7 +775,7 @@ export class ProjectService {
     const target = await freeDir(path.join(path.dirname(dir), sanitize(label)));
     await copyProject(dir, target);
     try {
-      const next = await ProjectStore.open(target, this.events());
+      const next = await ProjectStore.open(target, this.events(target));
       const ops: Op[] = [
         { op: "merge", key: "meta", patch: { name: label } },
         // Files the project owns (attachments, stock, sounds) were copied with it: the copy uses its own.
@@ -728,8 +804,14 @@ export class ProjectService {
   async trash(raw: unknown): Promise<ProjectSnapshot | null> {
     const dir = await this.listed(raw);
     const wasOpen = this.store?.dir === dir;
+    // Claude stops working in it, on screen or in the background.
+    for (const [runId, a] of this.asked) if (a.dir === dir) this.runs.get(runId)?.abort();
+    const kept = this.background.get(dir);
+    if (kept) {
+      this.background.delete(dir);
+      await kept.close();
+    }
     if (wasOpen) {
-      for (const ctrl of this.runs.values()) ctrl.abort();
       this.indexer.reset();
       this.exporter.stop();
       await this.store?.close();
@@ -742,7 +824,7 @@ export class ProjectService {
       await shell.trashItem(dir);
     } catch (err) {
       // Not trashed (no Trash on that drive, no permission): the project stays open, as it was.
-      if (wasOpen) await this.switchTo(await ProjectStore.open(dir, this.events()));
+      if (wasOpen) await this.switchTo(await this.openStore(dir));
       throw err;
     }
     await this.updateRecent((list) => list.filter((r) => r.dir !== dir));
@@ -867,8 +949,11 @@ export class ProjectService {
    * already in it), so the project keeps working wherever it goes. The ops add the clip; placing it is
    * up to the caller.
    */
-  async assetSource(id: string, doc: ProjectDoc): Promise<{ ops: Op[]; id: string; asset: AssetEntry }> {
-    const store = this.requireStore();
+  async assetSource(
+    id: string,
+    doc: ProjectDoc,
+    store: ProjectStore = this.requireStore(),
+  ): Promise<{ ops: Op[]; id: string; asset: AssetEntry }> {
     const asset = this.library.asset(id);
     const file = this.library.resolve(id);
     if (!asset || !file) throw new Error(`No asset "${id}" in the library.`);
@@ -1137,10 +1222,14 @@ export class ProjectService {
     }
   }
 
-  async saveChat(records: unknown): Promise<void> {
-    const store = this.requireStore();
+  async saveChat(records: unknown, rawDir?: unknown): Promise<void> {
     if (!Array.isArray(records)) return;
-    const file = path.join(store.dir, CHAT_LOG);
+    // A conversation Claude carried on in the background goes to its own project.
+    const dir =
+      typeof rawDir === "string" && rawDir !== this.store?.dir
+        ? await this.listed(rawDir)
+        : this.requireStore().dir;
+    const file = path.join(dir, CHAT_LOG);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(records.slice(-300)));
   }
@@ -1177,11 +1266,12 @@ export class ProjectService {
   }
 
   /** What the agent can ask of the machine: frames of footage, and music from the web. */
-  /** What the agent can ask of the machine: frames of footage, and music from the web. */
-  private agentHost(): AgentHost {
+  /** What the agent can ask of the machine, for a request in `store`'s project (on screen or not). */
+  private agentHost(store: ProjectStore): AgentHost {
+    // In the background, the library's "project" assets are the open project's: only the shared ones.
+    const here = () => store === this.store;
     return {
       frame: async (sourceId, time, width) => {
-        const store = this.requireStore();
         const src = store.doc.sources.find((s) => s.id === sourceId);
         if (!src?.path) throw new Error("no such clip");
         const proxy = cachePaths(store.dir, sourceId).proxy;
@@ -1194,7 +1284,6 @@ export class ProjectService {
       },
       // Faces and people tracked over a stretch of a clip's preview copy, split at its shot changes.
       track: async (sourceId, from, to, idPrefix) => {
-        const store = this.requireStore();
         const proxy = cachePaths(store.dir, sourceId).proxy;
         const src = store.doc.sources.find((s) => s.id === sourceId);
         if (!src?.path) throw new Error("no such clip");
@@ -1211,19 +1300,17 @@ export class ProjectService {
           ...(options?.composition && { composition: options.composition }),
           ...(options?.scale && { scale: options.scale }),
           // The agent's working copy, not the saved project: it may hold clips it just added.
-          resolve: (key) => this.resolveIn(doc, key.replace(/\?.*$/, ""), "proxy"),
+          resolve: (key) => this.resolveIn(doc, key.replace(/\?.*$/, ""), "proxy", store),
         });
         return { images: [...images], errors: [...errors] };
       },
       keepPicture: async (jpeg) => {
-        const store = this.requireStore();
         const name = `looks/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.jpg`;
         await mkdir(path.join(store.dir, CACHE_DIR, "looks"), { recursive: true });
         await writeFile(path.join(store.dir, CACHE_DIR, name), jpeg);
         return name;
       },
       findMusic: async (mood, doc) => {
-        const store = this.requireStore();
         const found = await findMusic(mood, {
           targetDir: path.join(store.dir, "music"),
           cacheDir: paths.cache(),
@@ -1231,10 +1318,9 @@ export class ProjectService {
         if (!found) return null;
         return { ops: musicOps(doc, found), title: found.title, bpm: found.beats.bpm };
       },
-      peaks: (id, doc) => this.indexer.peaksNow(id, doc),
+      peaks: (id, doc) => this.indexer.peaksNow(id, doc, store.dir),
       // A second listen to a stretch the first pass missed or misheard (singing, music over the voice).
       transcribe: async (sourceId, from, to, { text, hint }) => {
-        const store = this.requireStore();
         const src = store.doc.sources.find((s) => s.id === sourceId);
         if (!src?.path) throw new Error("no such clip");
         const settings = await getSettings();
@@ -1267,9 +1353,14 @@ export class ProjectService {
         }
       },
       library: {
-        search: async () => this.library.entries(),
+        search: async () => {
+          const all = await this.library.entries();
+          return here() ? all : { ...all, assets: all.assets.filter((e) => e.scope === "library") };
+        },
         use: async (id, doc) => {
-          const { ops, id: source } = await this.assetSource(id, doc);
+          if (!here() && this.library.asset(id)?.scope !== "library")
+            throw new Error("That asset is in another project's assets/: only the shared library is here.");
+          const { ops, id: source } = await this.assetSource(id, doc, store);
           return { ops, id: source };
         },
         update: (id, patch) => this.library.update(id, patch),
@@ -1278,11 +1369,11 @@ export class ProjectService {
       },
       kits: {
         list: () => listKits(),
-        save: (doc, name, id) => saveKit(doc, this.requireStore().dir, name, id),
+        save: (doc, name, id) => saveKit(doc, store.dir, name, id),
         apply: async (id, doc) => {
           const kit = await getKit(id);
           if (!kit) return null;
-          await copyKitFonts(kit, this.requireStore().dir);
+          await copyKitFonts(kit, store.dir);
           return { ops: kitOps(doc, kit), name: kit.name };
         },
         remember: (id, note) => rememberInKit(id, note),
@@ -1294,7 +1385,7 @@ export class ProjectService {
       },
       // Off macOS the agent's cutout tool says they aren't available here.
       ...(cutoutsAvailable() && {
-        cutouts: async (doc: ProjectDoc) => makeNeededCutouts(this.requireStore().dir, doc),
+        cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
@@ -1305,11 +1396,10 @@ export class ProjectService {
         const candidates = await searchStock(query, { kind, orientation, keys });
         return { candidates, sheet: candidates.length ? await stockSheet(candidates) : null };
       },
-      senseMotion: (doc) => this.senseMotion(doc),
-      measureJoins: (doc) => this.measureJoins(doc),
+      senseMotion: (doc) => this.senseMotion(doc, store),
+      measureJoins: (doc) => this.measureJoins(doc, store),
       findSounds: (query, maxSeconds) => findSounds(query, { maxSeconds }),
       addSound: async (c, label, doc) => {
-        const store = this.requireStore();
         const file = await downloadSound(c, path.join(store.dir, "media", "sounds"));
         const { hit, tail } = await soundHit(file);
         const origin = {
@@ -1321,7 +1411,6 @@ export class ProjectService {
         return { ...fetchedSourceOps(doc, await probe(file), label, origin, c.title), hit, tail };
       },
       addStock: async (c, label, doc) => {
-        const store = this.requireStore();
         const file = await downloadStock(c, path.join(store.dir, "media", "stock"));
         const origin = {
           url: c.page,
@@ -1344,13 +1433,11 @@ export class ProjectService {
         return { candidates, sheet: candidates.length ? await stockSheet(candidates) : null };
       },
       addMeme: async (c, label, doc) => {
-        const store = this.requireStore();
         const file = await downloadMeme(c, path.join(store.dir, "media", "memes"));
         const origin = { url: c.page, provider: "klipy", license: "KLIPY", author: "" };
         return fetchedSourceOps(doc, await probe(file), label, origin, c.title);
       },
       capturePage: async (url, o, doc) => {
-        const store = this.requireStore();
         const got = await capturePage(url, path.join(store.dir, "media", "captures"), o);
         const origin = { url: got.url, provider: "web", license: "", author: new URL(got.url).hostname };
         const { ops, id } = fetchedSourceOps(doc, await probe(got.file), o.label, origin, got.title);
@@ -1394,7 +1481,10 @@ export class ProjectService {
 
   async runAgent(raw: unknown): Promise<{ runId: string }> {
     const req = AgentRequest.parse(raw);
-    const store = this.requireStore();
+    // Its own project: the open one, or (a waiting message, sent when the request before it in a
+    // project working in the background ended) that one.
+    const store =
+      req.dir && req.dir !== this.store?.dir ? await this.backgroundStore(req.dir) : this.requireStore();
     const settings = await this.agentSettings();
     const runId = newId("run");
     // A first cut, or a request the size of one (a long brief, a project with nothing edited yet, or
@@ -1440,7 +1530,7 @@ export class ProjectService {
       history: req.history,
       attachments: req.attachments.map((a) => a.source),
       handEdits: hand,
-      host: this.agentHost(),
+      host: this.agentHost(store),
       backend: settings.backend,
       model: settings.model,
       effort: thorough && settings.effort !== "max" ? "high" : settings.effort,
@@ -1475,8 +1565,9 @@ export class ProjectService {
             ops: result.ops,
             groups: result.groups,
           });
-          // Music the agent found still needs its waveform measured.
-          this.indexer.enqueue(store.doc.sources.filter((s) => s.status === "pending").map((s) => s.id));
+          // Music the agent found still needs its waveform measured (in the background: when it's opened).
+          if (store === this.store)
+            this.indexer.enqueue(store.doc.sources.filter((s) => s.status === "pending").map((s) => s.id));
         }
         // Claude just answered: describe any shots it couldn't reach before.
         void this.indexer.describeMissing();
@@ -1487,6 +1578,7 @@ export class ProjectService {
           summary: result.summary,
           ...(result.next && { next: result.next }),
         });
+        this.notify(store, result.summary || "Done.");
       })
       .catch((err: unknown) => {
         const message =
@@ -1505,13 +1597,41 @@ export class ProjectService {
         const held = err instanceof OpError ? undefined : this.partials.get(runId);
         if (!held) this.partials.delete(runId);
         send({ type: "error", message, ...(held?.groups.length && { kept: held.groups.length }) });
+        if (!ctrl.signal.aborted) this.notify(store, message, true);
       })
       .finally(() => {
         this.runs.delete(runId);
         this.asked.delete(runId);
+        void this.release(store);
       });
 
     return { runId };
+  }
+
+  /**
+   * Says Claude finished, by a system notification, when it can't be seen: the request was in a project
+   * not on screen, or the app isn't in front. A click opens that project.
+   */
+  private notify(store: ProjectStore, text: string, failed = false): void {
+    const win = this.window();
+    const elsewhere = store !== this.store;
+    if (!elsewhere && win?.isFocused()) return;
+    if (!Notification.isSupported()) return;
+    const name = store.doc.meta.name;
+    const note = new Notification({
+      title: failed ? `Claude stopped in ${name}` : `Claude finished ${name}`,
+      body: text.replace(/\s+/g, " ").slice(0, 180),
+      silent: false,
+    });
+    note.on("click", () => {
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+      }
+      if (store.dir !== this.store?.dir) this.emit("focusProject", { dir: store.dir });
+    });
+    note.show();
   }
 
   /** Shots indexing couldn't describe (Claude unreachable then): described now, if Claude answers. */
@@ -1556,15 +1676,13 @@ export class ProjectService {
 
   /** Requests still running in this project, with their changes so far (the window reloaded). */
   activeRuns(): ActiveRun[] {
-    const dir = this.store?.dir;
-    return [...this.asked]
-      .filter(([, a]) => a.dir === dir)
-      .map(([runId, a]) => ({
-        runId,
-        prompt: a.prompt,
-        startedAt: a.startedAt,
-        ops: this.partials.get(runId)?.ops ?? [],
-      }));
+    return [...this.asked].map(([runId, a]) => ({
+      runId,
+      dir: a.dir,
+      prompt: a.prompt,
+      startedAt: a.startedAt,
+      ops: this.partials.get(runId)?.ops ?? [],
+    }));
   }
 
   discardPartial(runId: unknown): void {
@@ -1584,6 +1702,7 @@ export class ProjectService {
     this.exporter.stop();
     step("stopped background work");
     await this.store?.close();
+    for (const store of this.background.values()) await store.close();
     step("saved the project");
   }
 }

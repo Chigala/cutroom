@@ -85,6 +85,7 @@ export function createWebHost(): EditorApi {
     importDone: true,
     export: true,
     thumbnail: true,
+    focusProject: true,
     claude: true,
     menu: true,
     library: true,

@@ -11,11 +11,16 @@ const fake = vi.hoisted(() => {
   };
   let n = 0;
   const prompts: string[] = [];
+  /** Which project each request was sent for, and each conversation saved into. */
+  const runDirs: (string | undefined)[] = [];
+  const saved: { dir: string | undefined; records: { kind: string; text?: string }[] }[] = [];
   const discarded: string[] = [];
   /** Requests the app says are still running, for the next load. */
   const running: unknown[] = [];
   return {
     prompts,
+    runDirs,
+    saved,
     discarded,
     running,
     emit: (e: unknown) => {
@@ -23,8 +28,9 @@ const fake = vi.hoisted(() => {
     },
     host: {
       agent: {
-        run: async (req: { prompt: string }) => {
+        run: async (req: { prompt: string; dir?: string }) => {
           prompts.push(req.prompt);
+          runDirs.push(req.dir);
           return { runId: `r${++n}` };
         },
         cancel: async () => {},
@@ -34,7 +40,8 @@ const fake = vi.hoisted(() => {
       },
       settings: { get: async () => ({ autoFirstCut: false }), set: async () => {} },
       project: {
-        saveChat: async () => {},
+        saveChat: async (records: { kind: string; text?: string }[], dir?: string) =>
+          void saved.push({ dir, records }),
         loadChat: async () => [],
         commit: async () => ({ ok: false, error: "not in tests" }),
       },
@@ -167,6 +174,7 @@ describe("a reload mid-request", () => {
     chat.useChat.setState({ items: [], queue: [], activeRun: null });
     fake.running.push({
       runId: "r-live",
+      dir: "/reloaded",
       prompt: "grade it warm",
       startedAt: Date.now() - 5000,
       ops: [
@@ -198,6 +206,78 @@ describe("a reload mid-request", () => {
     });
     expect(project.useProject.getState().draft?.ops).toHaveLength(3);
     done("r-live");
+    expect(project.useProject.getState().draft).toBeNull();
+  });
+});
+
+describe("Claude working in the background", () => {
+  it("keeps working in a project you leave: its events, reply and queue stay with it", async () => {
+    const finished: [string, boolean][] = [];
+    const off = chat.onFinishedAway((dir, ok) => void finished.push([dir, ok]));
+    project.load({ dir: "/a", doc: emptyProject("A"), head: null, commits: [] } as never);
+    await flush();
+    await chat.send("make it punchy");
+    await chat.send("then shorter");
+    const runA = chat.useChat.getState().activeRun!;
+    expect(fake.runDirs.at(-1)).toBe("/a");
+
+    // To project B: its own, empty conversation, free for a request of its own.
+    project.load({ dir: "/b", doc: emptyProject("B"), head: null, commits: [] } as never);
+    await flush();
+    expect(chat.useChat.getState().items).toEqual([]);
+    expect(chat.useChat.getState().activeRun).toBeNull();
+    expect(chat.useWorking.getState().dirs).toEqual(["/a"]);
+    await chat.send("add captions");
+    expect(fake.runDirs.at(-1)).toBe("/b");
+    const runB = chat.useChat.getState().activeRun!;
+
+    // A's request ends while B is on screen: its reply goes to A, saved into A's folder, and it's said.
+    fake.saved.length = 0;
+    event({ runId: runA, type: "text", delta: "Tightened it." });
+    done(runA);
+    expect(chat.useChat.getState().items.some((m) => m.kind === "agent" && m.runId === runA)).toBe(false);
+    expect(finished).toEqual([["/a", true]]);
+    // A's waiting message goes, still to A.
+    await flush();
+    await flush();
+    expect(fake.prompts.at(-1)).toBe("then shorter");
+    expect(fake.runDirs.at(-1)).toBe("/a");
+    await new Promise((r) => setTimeout(r, 450));
+    const intoA = fake.saved.filter((x) => x.dir === "/a");
+    expect(intoA.at(-1)?.records.map((r) => r.kind)).toEqual(["user", "agent", "user"]);
+    // B saves its own conversation, never A's.
+    const intoB = fake.saved.filter((x) => x.dir === "/b").flatMap((x) => x.records);
+    expect(intoB.some((r) => r.text === "make it punchy" || r.text === "Tightened it.")).toBe(false);
+
+    // B's own request is untouched, and back in A its conversation is as it is now.
+    expect(chat.useChat.getState().activeRun).toBe(runB);
+    project.load({ dir: "/a", doc: emptyProject("A"), head: null, commits: [] } as never);
+    await flush();
+    const items = chat.useChat.getState().items;
+    expect(items.filter((m) => m.kind === "user").map((m) => (m as { text: string }).text)).toEqual([
+      "make it punchy",
+      "then shorter",
+    ]);
+    expect(items.find((m) => m.kind === "agent" && m.runId === runA)).toMatchObject({ status: "done" });
+    expect(chat.useChat.getState().activeRun).not.toBeNull();
+    expect(chat.useWorking.getState().dirs).toEqual(expect.arrayContaining(["/a", "/b"]));
+    off();
+  });
+
+  it("doesn't put a background request's draft on the project on screen", async () => {
+    project.load({ dir: "/c", doc: emptyProject("C"), head: null, commits: [] } as never);
+    await flush();
+    await chat.send("grade it");
+    const runC = chat.useChat.getState().activeRun!;
+    project.load({ dir: "/d", doc: emptyProject("D"), head: null, commits: [] } as never);
+    await flush();
+    event({
+      runId: runC,
+      type: "draft",
+      label: "Warm",
+      ops: [{ op: "merge", key: "look", patch: {} }],
+      at: 0,
+    });
     expect(project.useProject.getState().draft).toBeNull();
   });
 });

@@ -7,7 +7,7 @@ import type { ProjectSnapshot, RecentProject } from "@vedit/bridge";
 import { create } from "zustand";
 import { useUploads } from "../lib/attach.ts";
 import { host } from "../lib/host.ts";
-import { useChat } from "./chat.ts";
+import { chatReady, firstCutPrompt, onFinishedAway, send } from "./chat.ts";
 import { useJobs } from "./jobs.ts";
 import { load, useProject } from "./project.ts";
 import { setRange } from "./timeline.ts";
@@ -44,6 +44,21 @@ export async function refreshProjects(): Promise<void> {
 export function connectProjects(): () => void {
   void refreshProjects();
   const offThumb = host.on("thumbnail", ({ dir }) => loadThumb(dir, true));
+  // Claude finished in a project not on screen: said here (the app also sends a system notification
+  // when it isn't in front), with the way there.
+  const offFinished = onFinishedAway((dir, ok, text) => {
+    const name = useProjects.getState().recent.find((r) => r.dir === dir)?.name ?? "a project";
+    const said = text.replace(/\s+/g, " ").trim();
+    toast(
+      `${ok ? `Claude finished ${name}` : `Claude stopped in ${name}`}${said ? `: ${said.slice(0, 90)}${said.length > 90 ? "…" : ""}` : ""}`,
+      ok ? "info" : "warn",
+      { label: "Open", run: () => void openProject(() => host.project.open(dir)) },
+    );
+  });
+  // Its system notification was clicked.
+  const offFocus = host.on("focusProject", ({ dir }) => {
+    if (dir !== useProject.getState().dir) void openProject(() => host.project.open(dir));
+  });
   const offProject = useProject.subscribe((s, prev) => {
     // What was selected, pointed at, marked or being renamed belongs to the project it was in.
     if (s.dir !== prev.dir) {
@@ -59,6 +74,8 @@ export function connectProjects(): () => void {
   });
   return () => {
     offThumb();
+    offFinished();
+    offFocus();
     offProject();
   };
 }
@@ -67,9 +84,10 @@ export function connectProjects(): () => void {
 let opening: Promise<boolean> | null = null;
 
 /**
- * Opens a project (from a path, the system picker, a copy) and switches the editor to it. Switching
- * stops what's running in this one, so while Claude is editing or an export is rendering it asks first;
- * with an editor open (a graphic, a look, a style) it's closed first, so its unsaved work isn't lost.
+ * Opens a project (from a path, the system picker, a copy) and switches the editor to it. Claude keeps
+ * working in the one left (it carries on in the background); an export rendering would stop, so that
+ * asks first. With an editor open (a graphic, a look, a style) it's closed first, so its unsaved work
+ * isn't lost.
  */
 export async function openProject(fn: () => Promise<ProjectSnapshot | null>): Promise<boolean> {
   if (opening) return false;
@@ -82,13 +100,11 @@ export async function openProject(fn: () => Promise<ProjectSnapshot | null>): Pr
     toast("Close the editor first (save or discard what's in it).", "warn");
     return false;
   }
-  const busy = useChat.getState().activeRun
-    ? "Claude is still editing this video. Switching stops it."
-    : useJobs.getState().export?.status === "running"
-      ? "An export is rendering. Switching stops it."
-      : null;
-  if (busy) {
-    toast(busy, "warn", { label: "Stop and switch", run: () => void go(fn) });
+  if (useJobs.getState().export?.status === "running") {
+    toast("An export is rendering. Switching stops it.", "warn", {
+      label: "Stop and switch",
+      run: () => void go(fn),
+    });
     return false;
   }
   return go(fn);
@@ -110,6 +126,24 @@ function go(fn: () => Promise<ProjectSnapshot | null>): Promise<boolean> {
     }
   })();
   return opening;
+}
+
+/**
+ * Forks a project into a copy beside it, and opens the copy. "edit": the cut as it is, to take another
+ * direction. "footage": the original clips with everything already worked out about them (transcripts,
+ * shot analysis, preview copies), the edit cleared; Claude then makes a first cut in it straight away
+ * (when first cuts are automatic), so only the edit is done again. The original can be gone back to
+ * while Claude works: it carries on in the background.
+ */
+export async function forkProject(dir: string, from: "edit" | "footage"): Promise<void> {
+  const name = useProjects.getState().recent.find((r) => r.dir === dir)?.name ?? "the project";
+  if (!(await openProject(() => host.project.duplicate(dir, from)))) return;
+  if (from === "edit") return toast(`Forked ${name}: the same cut, to try another direction.`);
+  await chatReady();
+  const { autoFirstCut } = await host.settings.get().catch(() => ({ autoFirstCut: false }));
+  if (!autoFirstCut) return toast(`Forked ${name} from its original clips. Ask for a cut when you're ready.`);
+  toast(`Forked ${name} from its original clips. Claude is making a first cut.`);
+  void send(firstCutPrompt(), {}, "thorough");
 }
 
 /** "2h ago", "yesterday", "12 Sep". */

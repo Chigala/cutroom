@@ -172,3 +172,64 @@
     animation: none;
   }
 }
+
+/*
+ * Claude working in a project: a thin arc travelling round its thumbnail, and its status line shimmering,
+ * the way Claude's own "thinking" does. Still when motion is reduced.
+ */
+@property --ring-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.working-ring {
+  position: absolute;
+  inset: -3.5px;
+  border-radius: 9px;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--ring-turn),
+    transparent 0deg 190deg,
+    color-mix(in srgb, var(--color-accent) 35%, transparent) 260deg,
+    var(--color-accent) 345deg,
+    transparent 360deg
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  animation: ring-turn 1.5s linear infinite;
+}
+@keyframes ring-turn {
+  to {
+    --ring-turn: 360deg;
+  }
+}
+.shimmer {
+  background:
+    linear-gradient(
+      90deg,
+      var(--color-accent) 35%,
+      color-mix(in srgb, var(--color-accent) 35%, white) 50%,
+      var(--color-accent) 65%
+    )
+    0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .working-ring,
+  .shimmer {
+    animation: none;
+  }
+}

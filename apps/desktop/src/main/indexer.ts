@@ -783,10 +783,9 @@ export class Indexer {
   }
 
   /** The waveform of a clip, if it has been measured. */
-  async peaks(id: string): Promise<Uint8Array | null> {
-    const store = this.deps.store();
-    if (!store) return null;
-    const file = cachePaths(store.dir, id).peaks;
+  async peaks(id: string, dir = this.deps.store()?.dir): Promise<Uint8Array | null> {
+    if (!dir) return null;
+    const file = cachePaths(dir, id).peaks;
     if (!existsSync(file)) return null;
     return new Uint8Array(await readFile(file));
   }
@@ -795,14 +794,16 @@ export class Indexer {
    * The waveform now: measured straight from the file when indexing hasn't got to it yet (a track the
    * agent just brought in), so the agent never has to wait and ask again.
    */
-  async peaksNow(id: string, doc?: ProjectDoc): Promise<Uint8Array | null> {
-    const stored = await this.peaks(id);
-    if (stored?.length) return stored;
+  async peaksNow(id: string, doc?: ProjectDoc, dir?: string): Promise<Uint8Array | null> {
+    // A request in a project working in the background names its own folder.
     const store = this.deps.store();
+    const where = dir ?? store?.dir;
+    const stored = await this.peaks(id, where);
+    if (stored?.length) return stored;
     // The agent's working copy when given: a sound it just added isn't in the saved project yet.
     const src = (doc ?? store?.doc)?.sources.find((s) => s.id === id);
-    if (!store || !src?.path || (src.kind !== "audio" && src.kind !== "video")) return null;
-    const file = cachePaths(store.dir, id).peaks;
+    if (!where || !src?.path || (src.kind !== "audio" && src.kind !== "video")) return null;
+    const file = cachePaths(where, id).peaks;
     const peaks = await waveformPeaks(src.path);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, peaks);

@@ -1072,7 +1072,7 @@ function Queue() {
         {!busy && (
           <button
             type="button"
-            onClick={sendNextQueued}
+            onClick={() => sendNextQueued()}
             className="rounded-md px-1.5 py-0.5 text-accent hover:bg-button"
           >
             Send next

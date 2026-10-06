@@ -29,7 +29,7 @@ const api: EditorApi = {
     reveal: (rel) => invoke(Channel.reveal, rel),
     showFile: (file) => invoke(Channel.showFile, file),
     loadChat: () => invoke(Channel.loadChat),
-    saveChat: (records) => invoke(Channel.saveChat, records),
+    saveChat: (records, dir) => invoke(Channel.saveChat, records, dir),
   },
   index: {
     peaks: (id) => invoke(Channel.peaks, id),

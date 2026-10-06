@@ -13,7 +13,7 @@ import { clsx } from "clsx";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { host } from "../../lib/host.ts";
 import { mod } from "../../lib/keys.ts";
-import { useChat } from "../../state/chat.ts";
+import { useWorking } from "../../state/chat.ts";
 import { useProject } from "../../state/project.ts";
 import { ago, matching, openProject, refreshProjects, useProjects } from "../../state/projects.ts";
 import { setUi } from "../../state/ui.ts";
@@ -32,7 +32,7 @@ interface Row {
 export function Switcher() {
   const recent = useProjects((s) => s.recent);
   const dir = useProject((s) => s.dir);
-  const working = useChat((s) => s.activeRun !== null);
+  const working = useWorking((s) => s.dirs);
   const [query, setQuery] = useState("");
   const [at, setAt] = useState(0);
   const ref = useRef<HTMLDialogElement>(null);
@@ -59,8 +59,8 @@ export function Switcher() {
         key: r.dir,
         icon: <ProjectThumb dir={r.dir} name={r.name} className="!h-[34px] !w-[24px] text-[11px]" />,
         label: r.name,
-        meta: r.dir === dir ? (working ? "Claude is editing" : "Open") : ago(r.openedAt),
-        ...(r.dir === dir && working && { metaClass: "text-accent" }),
+        meta: working.includes(r.dir) ? "Claude is editing" : r.dir === dir ? "Open" : ago(r.openedAt),
+        ...(working.includes(r.dir) && { metaClass: "shimmer" }),
         run: () => (r.dir === dir ? close() : go(() => host.project.open(r.dir))),
       }),
     );

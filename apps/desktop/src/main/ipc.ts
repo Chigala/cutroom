@@ -45,7 +45,7 @@ export function registerIpc(service: ProjectService): void {
     [Channel.reveal]: (rel) => service.reveal(rel),
     [Channel.showFile]: (file) => service.showFile(file),
     [Channel.loadChat]: () => service.loadChat(),
-    [Channel.saveChat]: (records) => service.saveChat(records),
+    [Channel.saveChat]: (records, dir) => service.saveChat(records, dir),
     [Channel.peaks]: (id) => service.indexer.peaks(str(id)),
     [Channel.retryIndex]: (id) => service.retryIndex(id),
     [Channel.describeShots]: () => service.describeMissing(),

@@ -53,6 +53,11 @@ export type AgentContext = z.infer<typeof AgentContext>;
 
 export const AgentRequest = z.object({
   prompt: z.string().min(1).max(8000),
+  /**
+   * The project it's for, when that isn't the one on screen: a waiting message sent once the request
+   * before it, in a project working in the background, is done. Unset: the open project.
+   */
+  dir: z.string().max(4096).optional(),
   context: AgentContext.default({}),
   /** Earlier requests and replies in this project, for follow-ups. */
   history: z
@@ -137,6 +142,8 @@ export type Backend = "api" | "subscription";
 /** A request still running, with the changes it has made so far. */
 export interface ActiveRun {
   readonly runId: string;
+  /** The project it's working in (it may not be the one on screen). */
+  readonly dir: string;
   readonly prompt: string;
   readonly startedAt: number;
   readonly ops: readonly Op[];
@@ -453,7 +460,8 @@ export interface EditorApi {
     /** Shows any absolute file in the file manager (exports). */
     showFile(file: string): Promise<void>;
     loadChat(): Promise<ChatRecord[]>;
-    saveChat(records: ChatRecord[]): Promise<void>;
+    /** Saves the conversation of the open project, or of `dir` (one Claude worked on in the background). */
+    saveChat(records: ChatRecord[], dir?: string): Promise<void>;
   };
   readonly index: {
     /** Loudness envelope of a clip, 50 values per second, for drawing waveforms. */
@@ -471,7 +479,10 @@ export interface EditorApi {
     keep(runId: string): Promise<CommitResult>;
     /** Throws away what a run that didn't finish did. */
     discard(runId: string): Promise<void>;
-    /** Requests still running (after the window reloads mid-request): to show them and their draft again. */
+    /**
+     * Requests still running, in any project (after the window reloads mid-request, or to show which
+     * projects Claude is working in): to show them and their draft again.
+     */
     active(): Promise<ActiveRun[]>;
   };
   /** Downloads the app makes for itself, and starting them ahead of time. */
@@ -569,6 +580,8 @@ export interface EditorEvents {
   export: ExportEvent;
   /** A project's thumbnail was made again (its first shot changed). */
   thumbnail: { dir: string };
+  /** Open this project (a notification that Claude finished there was clicked). */
+  focusProject: { dir: string };
   claude: ClaudeTask;
   menu: { action: MenuAction };
   library: LibraryState;

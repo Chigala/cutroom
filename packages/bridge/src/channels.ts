@@ -6,6 +6,7 @@ export type EditorEventName =
   | "importDone"
   | "export"
   | "thumbnail"
+  | "focusProject"
   | "claude"
   | "menu"
   | "library"

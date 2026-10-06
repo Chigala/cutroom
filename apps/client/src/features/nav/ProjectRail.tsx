@@ -4,7 +4,6 @@
  * shows their names; closed, it's a strip of frames that leaves the room to the edit.
  */
 import {
-  CircleNotchIcon,
   CopyIcon,
   DotsThreeIcon,
   FilmStripIcon,
@@ -23,9 +22,16 @@ import { Dialog } from "../../components/Dialog.tsx";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
 import { isMac, mod } from "../../lib/keys.ts";
-import { useChat } from "../../state/chat.ts";
+import { useWorking } from "../../state/chat.ts";
 import { useProject } from "../../state/project.ts";
-import { ago, loadThumb, openProject, refreshProjects, useProjects } from "../../state/projects.ts";
+import {
+  ago,
+  forkProject,
+  loadThumb,
+  openProject,
+  refreshProjects,
+  useProjects,
+} from "../../state/projects.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 
@@ -198,7 +204,7 @@ function ProjectButton({
   hint: (text: string, meta?: string) => object;
   onMenu: (x: number, y: number) => void;
 }) {
-  const working = useChat((s) => current && s.activeRun !== null);
+  const working = useWorking((s) => s.dirs.includes(project.dir));
   const meta = working ? "Claude is editing" : current ? "Open" : ago(project.openedAt);
   return (
     <div className="group/project relative">
@@ -231,19 +237,14 @@ function ProjectButton({
         )}
       >
         <span className="relative shrink-0">
-          <ProjectThumb dir={project.dir} name={project.name} ring={current && !open} />
-          {working && (
-            <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-bg">
-              <CircleNotchIcon size={11} className="animate-spin text-accent" />
-            </span>
-          )}
+          <ProjectThumb dir={project.dir} name={project.name} ring={current && !open && !working} />
+          {/* Claude working in it: an arc travels round the thumbnail. */}
+          {working && <span aria-hidden className="working-ring" />}
         </span>
         {open && (
           <span className="flex min-w-0 flex-1 flex-col gap-0.5 pr-6">
             <span className="truncate text-[13px] text-fg">{project.name}</span>
-            <span className={clsx("truncate text-[11px]", working ? "text-accent" : "text-faint")}>
-              {meta}
-            </span>
+            <span className={clsx("truncate text-[11px]", working ? "shimmer" : "text-faint")}>{meta}</span>
           </span>
         )}
       </button>
@@ -463,12 +464,9 @@ function ProjectMenu({
   onClose: () => void;
   onTrash: () => void;
 }) {
-  const duplicate = (from: "edit" | "footage") => {
+  const fork = (from: "edit" | "footage") => {
     onClose();
-    void openProject(() => host.project.duplicate(project.dir, from)).then((ok) => {
-      if (ok)
-        toast(from === "edit" ? `Made a copy of ${project.name}` : `Back to the footage of ${project.name}`);
-    });
+    void forkProject(project.dir, from);
   };
   return (
     <Popover x={x} y={y} onClose={onClose}>
@@ -484,18 +482,18 @@ function ProjectMenu({
         </MenuItem>
       )}
       <MenuItem
-        icon={<CopyIcon size={15} />}
-        hint="Try a different direction"
-        onClick={() => duplicate("edit")}
+        icon={<FilmStripIcon size={15} />}
+        hint="Already transcribed: Claude only redoes the edit"
+        onClick={() => fork("footage")}
       >
-        Duplicate this edit
+        Fork from the original clips
       </MenuItem>
       <MenuItem
-        icon={<FilmStripIcon size={15} />}
-        hint="Same clips, already analysed"
-        onClick={() => duplicate("footage")}
+        icon={<CopyIcon size={15} />}
+        hint="The same cut, to try another direction"
+        onClick={() => fork("edit")}
       >
-        Start over from the footage
+        Fork this edit
       </MenuItem>
       <Divider />
       <MenuItem

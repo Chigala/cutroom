@@ -148,8 +148,9 @@ the environment.
 - **Projects and history**: every project you've opened sits down the left as a frame of its footage;
   one click (or ⌘1-9) switches, ⌘K finds any of them, ⌘B shows their names. The chat is the history:
   restore the edit to any request, or to your own edits in between, and undo the restore like anything
-  else. Duplicate a project to try another direction, or start over from its footage (already
-  analysed, so nothing is indexed twice).
+  else. Fork a project from its original clips (already transcribed and analysed, so Claude only
+  makes the edit again, in the background while you carry on) or from its edit, to try another
+  direction.
 - **Export**: Remotion renders the same composition the preview plays, from full-quality masters; the
   voice is cut separately with ffmpeg, cleaned and levelled to -14 LUFS, then mixed under the picture.
 

@@ -4,6 +4,7 @@
  * and the cutouts that separate the person from the background.
  */
 import type { Analysis, Keyframe, ProjectDoc, Scene } from "./schema.ts";
+import type { Timeline } from "./time.ts";
 
 // --- Speed ramps --------------------------------------------------------------------------------------
 
@@ -284,8 +285,38 @@ export function scenesNeedingCutout(
 /** An effect file that styles the person (.subject) or what's behind them (.background) on their own. */
 export const separatesSubject = (css: string) => /\.(subject|background)\b/.test(css);
 
-/** The stretch of a clip a shot's cutout should cover: its footage, widened to tenths of a second. */
-export const cutoutRange = (scene: Pick<Scene, "in" | "out">) => ({
-  from: Math.max(0, Math.floor(scene.in * 10) / 10),
-  to: Math.ceil(scene.out * 10) / 10,
-});
+/**
+ * How far past its own cut a shot's picture shows, in output seconds: into a transition, the shot coming
+ * in starts early and the one going out ends late (half the transition each side, never longer than
+ * either shot). A little over, for the rounding to frames.
+ */
+export function pictureReach(tl: Timeline, id: string): { early: number; late: number } {
+  const p = tl.byId.get(id);
+  if (!p) return { early: 0, late: 0 };
+  const half = (q: Timeline["scenes"][number] | undefined) => {
+    const prev = q && tl.scenes[q.index - 1];
+    const tr = q?.scene.transition;
+    if (!q || !prev || !tr) return 0;
+    return Math.max(0.07, Math.min(tr.duration, prev.duration, q.duration)) / 2 + 0.05;
+  };
+  return { early: half(p), late: half(tl.scenes[p.index + 1]) };
+}
+
+/**
+ * The stretch of a clip a shot's cutout should cover: its footage, and what shows of it past its cut
+ * into a transition either side (with the shot's timeline), widened to tenths of a second and kept in
+ * the clip (`length`, when known).
+ */
+export function cutoutRange(
+  scene: Pick<Scene, "id" | "in" | "out" | "speed">,
+  tl?: Timeline,
+  length?: number,
+): { from: number; to: number } {
+  const reach = tl ? pictureReach(tl, scene.id) : { early: 0, late: 0 };
+  const speed = scene.speed ?? 1;
+  const end = length && length > 0 ? length : Number.POSITIVE_INFINITY;
+  return {
+    from: Math.max(0, Math.floor((scene.in - reach.early * speed) * 10) / 10),
+    to: Math.ceil(Math.max(scene.out, Math.min(end, scene.out + reach.late * speed)) * 10) / 10,
+  };
+}

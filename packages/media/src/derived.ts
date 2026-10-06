@@ -803,9 +803,10 @@ export async function makeBlurPlate(
   const r = Math.max(1, radius / 2);
   const weight = new Float32Array(size);
   const tmp = new Float32Array(size);
+  const base = [new Float32Array(size), new Float32Array(size), new Float32Array(size)];
   const planes = [new Float32Array(size), new Float32Array(size), new Float32Array(size)];
-  const wide = [new Float32Array(size), new Float32Array(size), new Float32Array(size)];
-  const weightWide = new Float32Array(size);
+  const den = new Float32Array(size);
+  const filled = new Uint8Array(size);
   const result = Buffer.alloc(size * 3);
   const mattes = framesOf(matte, size);
   for await (const frame of framesOf(picture, size * 3)) {
@@ -815,24 +816,42 @@ export async function makeBlurPlate(
     boxBlur(weight, tmp, w, h, 2);
     for (let i = 0; i < size; i++) weight[i] = weight[i]! < 0.02 ? 1 : Math.max(0, 1 - weight[i]! / 0.08);
     for (let c = 0; c < 3; c++) {
-      const p = planes[c]!;
-      for (let i = 0; i < size; i++) p[i] = (frame[i * 3 + c]! / 255) * weight[i]!;
-      wide[c]!.set(p);
-      gaussian(p, tmp, w, h, r);
-      gaussian(wide[c]!, tmp, w, h, r * 4);
+      const b = base[c]!;
+      for (let i = 0; i < size; i++) b[i] = (frame[i * 3 + c]! / 255) * weight[i]!;
     }
-    weightWide.set(weight);
-    const den = weight;
-    gaussian(den, tmp, w, h, r);
-    gaussian(weightWide, tmp, w, h, r * 4);
-    for (let i = 0; i < size; i++) {
-      // Where the person covers a wide area, the near blur has no background to average: reach further.
-      const near = den[i]!;
-      const far = weightWide[i]!;
+    // The blur asked for; where the person covers more than it reaches, wider and wider until every
+    // pixel has background to average. The person never shows through their own background.
+    filled.fill(0);
+    let left = size;
+    for (let reach = r, first = true; left > 0 && reach < 4 * Math.max(w, h); reach *= 4, first = false) {
+      den.set(weight);
+      gaussian(den, tmp, w, h, reach);
       for (let c = 0; c < 3; c++) {
-        const v =
-          near > 0.05 ? planes[c]![i]! / near : far > 1e-3 ? wide[c]![i]! / far : frame[i * 3 + c]! / 255;
-        result[i * 3 + c] = Math.max(0, Math.min(255, Math.round(v * 255)));
+        planes[c]!.set(base[c]!);
+        gaussian(planes[c]!, tmp, w, h, reach);
+      }
+      const enough = first ? 0.05 : 1e-3;
+      for (let i = 0; i < size; i++) {
+        if (filled[i] || den[i]! <= enough) continue;
+        for (let c = 0; c < 3; c++)
+          result[i * 3 + c] = Math.max(0, Math.min(255, Math.round((planes[c]![i]! / den[i]!) * 255)));
+        filled[i] = 1;
+        left--;
+      }
+    }
+    if (left > 0) {
+      // Still some (the person fills the frame): the background's average colour, or the frame itself
+      // when there's no background at all.
+      let total = 0;
+      const sum = [0, 0, 0];
+      for (let i = 0; i < size; i++) {
+        total += weight[i]!;
+        for (let c = 0; c < 3; c++) sum[c]! += base[c]![i]!;
+      }
+      for (let i = 0; i < size; i++) {
+        if (filled[i]) continue;
+        for (let c = 0; c < 3; c++)
+          result[i * 3 + c] = total > 1 ? Math.round((sum[c]! / total) * 255) : frame[i * 3 + c]!;
       }
     }
     if (!encode.stdin.write(result)) await new Promise((r2) => encode.stdin.once("drain", r2));

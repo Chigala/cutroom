@@ -24,6 +24,7 @@ import {
   captionPages,
   cutoutCovering,
   cutoutKey,
+  cutoutRange,
   type Effect,
   fitsInside,
   followPath,
@@ -162,16 +163,15 @@ export const VideoComposition = ({
   // once their cutout is made; and ramped shots' rendered footage.
   const cutouts = useMemo(() => {
     const starts = new Map(tl.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]));
-    const out = new Map<string, { key: string; from: number; plate?: string }>();
+    const out = new Map<string, { key: string; from: number; to: number; plate?: string }>();
     for (const s of scenesNeedingCutout(doc, starts)) {
       // What the cutout keeps with the person (the mic they hold...), part of which one it is.
       const keep = keepTag(s);
-      const c = cutoutCovering(
-        doc.analyses.find((a) => a.id === s.source),
-        s.in,
-        s.out,
-        keep,
-      );
+      const analysis = doc.analyses.find((a) => a.id === s.source);
+      // One reaching into the transitions either side; until it's made, one over the shot itself.
+      const wanted = cutoutRange(s, tl, sources.get(s.source)?.duration);
+      const c =
+        cutoutCovering(analysis, wanted.from, wanted.to, keep) ?? cutoutCovering(analysis, s.in, s.out, keep);
       if (!c) continue;
       // A blurred background made without the person (no halo), once it exists.
       const amount = s.background?.kind === "blur" ? (s.background.amount ?? 18) : null;
@@ -179,10 +179,15 @@ export const VideoComposition = ({
         amount !== null && c.blurs?.includes(amount)
           ? blurPlateKey(s.source, c.from, c.to, amount, keep)
           : undefined;
-      out.set(s.id, { key: cutoutKey(s.source, c.from, c.to, keep), from: c.from, ...(plate && { plate }) });
+      out.set(s.id, {
+        key: cutoutKey(s.source, c.from, c.to, keep),
+        from: c.from,
+        to: c.to,
+        ...(plate && { plate }),
+      });
     }
     return out;
-  }, [doc, tl]);
+  }, [doc, tl, sources]);
   // Each shot framed on its person (their tracked face over the shot), or following them as they move.
   const framed = useMemo(() => {
     const out = new Map<string, Framed>();
@@ -827,7 +832,7 @@ const Scenes = memo(function Scenes({
   /** The short crossfade at every hard cut (mix.cutFade). */
   cutFade: number;
   /** Shots with the person cut out: the cutout's media key and where it starts in the clip. */
-  cutouts: ReadonlyMap<string, { key: string; from: number; plate?: string }>;
+  cutouts: ReadonlyMap<string, { key: string; from: number; to: number; plate?: string }>;
   /** Ramped shots: their rendered footage's media key. */
   ramps: ReadonlyMap<string, string>;
   /** Each shot's framing on its person. */
@@ -846,6 +851,8 @@ const Scenes = memo(function Scenes({
   );
   const windows = useMemo(() => transitionWindows(tl, fps, transitions), [tl, fps, transitions]);
   const plan = useMemo(() => audioPlan(tl, jlFade, cutFade), [tl, jlFade, cutFade]);
+  // Whole frames of output in `seconds` of footage at `speed` (what a cutout has to spare past a cut).
+  const spare = (seconds: number, speed: number) => Math.max(0, Math.floor((seconds / speed) * fps + 1e-6));
   return (
     <>
       {tl.scenes.map((p, i) => {
@@ -853,56 +860,71 @@ const Scenes = memo(function Scenes({
         const source = sources.get(p.scene.source);
         const cut = cutouts.get(p.scene.id);
         if (layer === "subject") {
-          // The person alone, placed and moved exactly like the footage under them.
+          // The person alone, placed and moved exactly like the footage under them: through the
+          // transitions either side too (as far as the cutout reaches), moved by them like the footage.
           if (!cut || !source) return null;
           const fr = framed.get(p.scene.id);
           const face = fr?.face ?? faces.get(p.scene.source);
+          const speed = p.scene.speed ?? 1;
+          const own = span.durationInFrames;
+          const early = Math.min(windows.get(p.scene.id)?.before ?? 0, spare(p.scene.in - cut.from, speed));
+          const late = Math.min(
+            windows.get(tl.scenes[i + 1]?.scene.id ?? "")?.after ?? 0,
+            spare(cut.to - p.scene.out, speed),
+          );
           return (
             <Sequence
               key={p.scene.id}
-              from={span.from}
-              durationInFrames={span.durationInFrames}
+              from={span.from - early}
+              durationInFrames={early + own + late}
               premountFor={fps}
               name={`${p.scene.id} subject`}
             >
-              <ShotWindow
-                from={0}
-                to={span.durationInFrames}
-                filter={adjustFilter(p.scene.adjust, `${p.scene.id}-s`)}
-                balance={whiteBalance(p.scene.adjust)}
-                balanceId={`wb-${p.scene.id}-s`}
-                flip={p.scene.flip ?? false}
-              >
-                <ShotMotion
-                  drift={look.drift ? (look.driftAmount ?? DRIFT) : 0}
-                  zoom={jumped[i] ? look.jumpZoom : 1}
-                  framing={p.scene.framing}
-                  face={face}
-                  offset={0}
-                  length={span.durationInFrames}
-                  camera={p.scene.camera}
+              <AbsoluteFill ref={wrappers.get(p.scene.id)}>
+                <ShotWindow
+                  from={0}
+                  to={early + own + late}
+                  filter={adjustFilter(p.scene.adjust, `${p.scene.id}-s`)}
+                  balance={whiteBalance(p.scene.adjust)}
+                  balanceId={`wb-${p.scene.id}-s`}
+                  flip={p.scene.flip ?? false}
                 >
-                  <SubjectLook
-                    look={p.scene.subject}
-                    id={p.scene.id}
-                    accent={accent}
-                    length={span.durationInFrames}
+                  <ShotMotion
+                    drift={look.drift ? (look.driftAmount ?? DRIFT) : 0}
+                    zoom={jumped[i] ? look.jumpZoom : 1}
+                    framing={p.scene.framing}
+                    face={face}
+                    offset={early}
+                    length={own}
+                    camera={p.scene.camera}
                   >
-                    <SceneMedia
-                      scene={{ ...p.scene, in: p.scene.in - cut.from, out: p.scene.out - cut.from }}
-                      face={face}
-                      {...(fr?.path && { follow: { ...fr.path, offset: 0 } })}
-                      backdrop={false}
-                      source={source}
-                      mediaKey={cut.key}
-                      mediaBase={mediaBase}
-                      quality={quality}
-                      muted
-                      volume={0}
-                    />
-                  </SubjectLook>
-                </ShotMotion>
-              </ShotWindow>
+                    <SubjectLook
+                      look={p.scene.subject}
+                      id={p.scene.id}
+                      accent={accent}
+                      offset={early}
+                      length={own}
+                    >
+                      <SceneMedia
+                        scene={{
+                          ...p.scene,
+                          in: p.scene.in - (early / fps) * speed - cut.from,
+                          out: p.scene.out + (late / fps) * speed - cut.from,
+                        }}
+                        face={face}
+                        {...(fr?.path && { follow: { ...fr.path, offset: early } })}
+                        backdrop={false}
+                        source={source}
+                        mediaKey={cut.key}
+                        mediaBase={mediaBase}
+                        quality={quality}
+                        muted
+                        volume={0}
+                      />
+                    </SubjectLook>
+                  </ShotMotion>
+                </ShotWindow>
+              </AbsoluteFill>
             </Sequence>
           );
         }
@@ -932,6 +954,7 @@ const Scenes = memo(function Scenes({
           : Math.min(media, p.scene.out + (Math.max(picLate, soundLate) / fps) * speed);
         const lead = Math.round(((p.scene.in - from) / speed) * fps);
         const late = ramp ? 0 : Math.max(picLate, soundLate);
+        const plateEarly = cut ? Math.min(picEarly, lead, spare(p.scene.in - cut.from, speed)) : 0;
         const own = span.durationInFrames;
         const seqFrom = span.from - lead;
         const extended = lead > 0 || late > 0;
@@ -1002,17 +1025,24 @@ const Scenes = memo(function Scenes({
                     />
                   </AbsoluteFill>
                   {bg?.kind === "blur" && cut?.plate && source && (
-                    <SceneMedia
-                      scene={{ ...p.scene, in: from - cut.from, out: to - cut.from }}
-                      face={face}
-                      {...(fr?.path && { follow: { ...fr.path, offset: lead } })}
-                      source={source}
-                      mediaKey={cut.plate}
-                      mediaBase={mediaBase}
-                      quality={quality}
-                      muted
-                      volume={0}
-                    />
+                    // Picture only: from where the shot shows (not where its sound starts), as far as the plate reaches.
+                    <Sequence from={lead - plateEarly} layout="none">
+                      <SceneMedia
+                        scene={{
+                          ...p.scene,
+                          in: p.scene.in - (plateEarly / fps) * speed - cut.from,
+                          out: Math.min(to, cut.to) - cut.from,
+                        }}
+                        face={face}
+                        {...(fr?.path && { follow: { ...fr.path, offset: plateEarly } })}
+                        source={source}
+                        mediaKey={cut.plate}
+                        mediaBase={mediaBase}
+                        quality={quality}
+                        muted
+                        volume={0}
+                      />
+                    </Sequence>
                   )}
                   {/* Or replaced: a colour or another clip, with the person drawn over it. */}
                   {bg?.kind === "color" && (
@@ -1070,17 +1100,20 @@ export function SubjectLook({
   look,
   id,
   accent,
+  offset = 0,
   length,
   children,
 }: {
   look: Scene["subject"];
   id: string;
   accent: string;
+  /** Frames the shot starts early (into a transition); its look is timed to the shot itself. */
+  offset?: number;
   /** The shot's length in frames. */
   length: number;
   children: ReactNode;
 }) {
-  const frame = useCurrentFrame();
+  const frame = useCurrentFrame() - offset;
   const { fps } = useVideoConfig();
   if (!look || (!look.outline && !look.glow && !look.shadow)) return <>{children}</>;
   const a = look.from ? Math.round(look.from * fps) : null;

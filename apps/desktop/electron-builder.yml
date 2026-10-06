@@ -81,6 +81,8 @@ linux:
   # The .deb needs a maintainer (its package metadata); no email is published.
   maintainer: Cutroom
 deb:
+  # Named for the app, not the workspace package (@vedit/desktop would put it in a folder).
+  artifactName: cutroom_${version}_${arch}.${ext}
   # Ubuntu 24.04 renamed several libraries (the t64 transition): accept either name.
   depends:
     - libgtk-3-0t64 | libgtk-3-0

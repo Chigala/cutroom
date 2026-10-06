@@ -74,7 +74,9 @@ export async function copyProject(from: string, to: string): Promise<void> {
   });
 }
 
-const within = (dir: string, file: string) => file.startsWith(dir + path.sep);
+/** Whether `file` is inside `dir`, with either separator (Windows takes both, and joins with a backslash). */
+const within = (dir: string, file: string) =>
+  file.replaceAll("\\", "/").startsWith(`${dir.replaceAll("\\", "/")}/`);
 
 /** A copy's sources that live in the original's folder, pointed at the copy's own files instead. */
 export function relinkOps(doc: Pick<ProjectDoc, "sources">, from: string, to: string): Op[] {

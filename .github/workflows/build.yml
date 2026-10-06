@@ -16,7 +16,8 @@ jobs:
       matrix:
         include:
           - name: macOS (Apple silicon)
-            os: macos-14
+            # Xcode 16: the newest Vision requests (the tools still run on macOS 13.3+, see bundle-tools.mts).
+            os: macos-15
             # Unsigned, but consistently ad-hoc signed so Gatekeeper's "Open Anyway" works.
             args: --mac --arm64 -c.mac.identity=- -c.mac.hardenedRuntime=false
             files: apps/desktop/release/*.dmg

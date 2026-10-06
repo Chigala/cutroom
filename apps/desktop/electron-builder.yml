@@ -78,6 +78,8 @@ linux:
     - from: .tmp/runtime/node_modules/@anthropic-ai/claude-agent-sdk-linux-${arch}
       to: native/claude-agent-sdk
   target: [AppImage, deb]
+  # The .deb needs a maintainer (its package metadata); no email is published.
+  maintainer: Cutroom
 deb:
   # Ubuntu 24.04 renamed several libraries (the t64 transition): accept either name.
   depends:

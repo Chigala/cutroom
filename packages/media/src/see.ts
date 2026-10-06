@@ -48,11 +48,14 @@ for i in 0..<count {
   let faces = VNDetectFaceCaptureQualityRequest()
   var requests: [VNRequest] = [text, salient, faces]
   var look: VNRequest? = nil
+  // Only an Xcode 16 (Swift 6) SDK has it; built with an older one, there's no look score.
+  #if compiler(>=6.0)
   if #available(macOS 15.0, *) {
     let r = VNCalculateImageAestheticsScoresRequest()
     look = r
     requests.append(r)
   }
+  #endif
   try? handler.perform(requests)
   var line: [String: Any] = ["i": i]
   line["text"] = (text.results ?? []).compactMap { o -> [Any]? in
@@ -61,10 +64,12 @@ for i in 0..<count {
   }
   line["salient"] = (salient.results?.first?.salientObjects ?? []).map { box($0.boundingBox) }
   line["faces"] = (faces.results ?? []).map { f -> [Double] in box(f.boundingBox) + [round3(Double(f.faceCaptureQuality ?? 0))] }
+  #if compiler(>=6.0)
   if #available(macOS 15.0, *), let r = (look as? VNCalculateImageAestheticsScoresRequest)?.results?.first {
     line["look"] = round3(Double(r.overallScore))
     line["utility"] = r.isUtility
   }
+  #endif
   if let data = try? JSONSerialization.data(withJSONObject: line), let s = String(data: data, encoding: .utf8) {
     print(s)
     fflush(stdout)

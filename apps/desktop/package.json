@@ -2,6 +2,7 @@
   "name": "@vedit/desktop",
   "productName": "Cutroom",
   "version": "0.1.0",
+  "homepage": "https://github.com/Chigala/cutroom",
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",

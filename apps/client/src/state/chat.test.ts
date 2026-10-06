@@ -11,8 +11,13 @@ const fake = vi.hoisted(() => {
   };
   let n = 0;
   const prompts: string[] = [];
+  const discarded: string[] = [];
+  /** Requests the app says are still running, for the next load. */
+  const running: unknown[] = [];
   return {
     prompts,
+    discarded,
+    running,
     emit: (e: unknown) => {
       for (const l of listeners) l(e);
     },
@@ -23,10 +28,16 @@ const fake = vi.hoisted(() => {
           return { runId: `r${++n}` };
         },
         cancel: async () => {},
+        discard: async (runId: string) => void discarded.push(runId),
+        active: async () => running.splice(0),
         status: async () => ({ backend: "subscription" }),
       },
       settings: { get: async () => ({ autoFirstCut: false }), set: async () => {} },
-      project: { saveChat: async () => {}, loadChat: async () => [] },
+      project: {
+        saveChat: async () => {},
+        loadChat: async () => [],
+        commit: async () => ({ ok: false, error: "not in tests" }),
+      },
       on: (name: string, fn: (e: unknown) => void) => {
         if (name === "agent") listeners.push(fn);
         return () => {};
@@ -35,13 +46,11 @@ const fake = vi.hoisted(() => {
   };
 });
 
-vi.mock("../lib/host.ts", () => ({ host: fake.host }));
-vi.mock("./project.ts", async () => {
-  const { create } = await import("zustand");
-  return { useProject: create(() => ({ dir: null, doc: null })) };
-});
+vi.mock("../lib/host.ts", () => ({ host: fake.host, setMediaProject: () => {} }));
 
 const chat = await import("./chat.ts");
+const project = await import("./project.ts");
+const { emptyProject } = await import("@vedit/project");
 chat.connectChat();
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -104,5 +113,91 @@ describe("usage", () => {
       limits: { fiveHour: { pct: 40 }, weekly: { pct: 12 }, plan: "max" },
     });
     expect(JSON.parse(localStorage.getItem("cutroom.usage")!)).toEqual(chat.useChat.getState().usage);
+  });
+});
+
+describe("the live draft", () => {
+  const look = () => project.useProject.getState().draft?.doc.look;
+  beforeEach(() => {
+    project.load({ dir: "/p", doc: emptyProject("test"), head: null, commits: [] } as never);
+  });
+
+  it("shows the agent's changes as they come, over the user's own edits, and goes when the work lands", async () => {
+    await chat.send("add a vignette");
+    const runId = chat.useChat.getState().activeRun!;
+    event({
+      runId,
+      type: "draft",
+      label: "Vignette",
+      ops: [{ op: "merge", key: "look", patch: { vignette: true } }],
+      at: 0,
+    });
+    expect(look()?.vignette).toBe(true);
+    // The project itself is untouched until the work lands.
+    expect(project.useProject.getState().doc!.look.vignette).toBe(false);
+    // The user edits meanwhile: the draft is rebuilt on top of their edit.
+    project.edit([{ op: "merge", key: "look", patch: { vignetteStrength: 0.8 } }]);
+    expect(look()).toMatchObject({ vignette: true, vignetteStrength: 0.8 });
+    done(runId);
+    expect(project.useProject.getState().draft).toBeNull();
+  });
+
+  it("holds the work of a stopped request until it's kept or thrown away", async () => {
+    await chat.send("add a vignette");
+    const runId = chat.useChat.getState().activeRun!;
+    event({
+      runId,
+      type: "draft",
+      label: "Vignette",
+      ops: [{ op: "merge", key: "look", patch: { vignette: true } }],
+      at: 0,
+    });
+    event({ runId, type: "error", message: "Stopped", kept: 1 });
+    expect(project.useProject.getState().draft).toMatchObject({ runId, held: true });
+    const run = chat.useChat.getState().items.find((m) => m.kind === "agent" && m.runId === runId);
+    expect(run).toMatchObject({ status: "stopped", kept: 1 });
+    chat.discardWork(runId);
+    expect(project.useProject.getState().draft).toBeNull();
+    expect(fake.discarded).toContain(runId);
+  });
+});
+
+describe("a reload mid-request", () => {
+  it("brings back the running request and its whole draft, each change once", async () => {
+    chat.useChat.setState({ items: [], queue: [], activeRun: null });
+    fake.running.push({
+      runId: "r-live",
+      prompt: "grade it warm",
+      startedAt: Date.now() - 5000,
+      ops: [
+        { op: "merge", key: "look", patch: { vignette: true } },
+        { op: "merge", key: "look", patch: { vignetteStrength: 0.7 } },
+      ],
+    });
+    project.load({ dir: "/reloaded", doc: emptyProject("test"), head: null, commits: [] } as never);
+    await flush();
+    await flush();
+    expect(chat.useChat.getState().activeRun).toBe("r-live");
+    const run = chat.useChat.getState().items.find((m) => m.kind === "agent" && m.runId === "r-live");
+    expect(run).toMatchObject({ status: "running" });
+    expect(project.useProject.getState().draft?.ops).toHaveLength(2);
+    // The next change continues the draft; one it already has isn't applied twice.
+    event({
+      runId: "r-live",
+      type: "draft",
+      label: "Warm",
+      ops: [{ op: "merge", key: "look", patch: {} }],
+      at: 2,
+    });
+    event({
+      runId: "r-live",
+      type: "draft",
+      label: "Warm",
+      ops: [{ op: "merge", key: "look", patch: {} }],
+      at: 2,
+    });
+    expect(project.useProject.getState().draft?.ops).toHaveLength(3);
+    done("r-live");
+    expect(project.useProject.getState().draft).toBeNull();
   });
 });

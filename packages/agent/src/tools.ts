@@ -192,6 +192,8 @@ export interface Scratch {
 export interface ToolContext {
   readonly scratch: Scratch;
   readonly host: AgentHost;
+  /** A change group just applied to the scratch copy: the editor's live draft follows along. */
+  draft?(label: string, ops: readonly Op[]): void;
   step(text: string, status?: "done" | "warn"): void;
   /** What's running right now, for the status line (tools run one at a time). */
   activity?(text: string): void;
@@ -368,6 +370,8 @@ function commit(ctx: ToolContext, label: string, ops: readonly Op[]): ToolResult
   ctx.scratch.ops.push(...ops);
   ctx.scratch.groups.push({ label, ops: ops.map((_, i) => start + i) });
   ctx.step(label);
+  // The editor shows the work as a live draft while the request runs.
+  ctx.draft?.(label, ops);
   return { text: "Applied." };
 }
 

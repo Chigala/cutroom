@@ -37,7 +37,7 @@ import {
 import { isMac } from "../../lib/keys.ts";
 import { peaksOf } from "../../state/jobs.ts";
 import { pause, playback, seekTime, useFrameEffect } from "../../state/playback.ts";
-import { edit, useDoc, useProject } from "../../state/project.ts";
+import { DraftViewContext, edit, useDoc, useDraftShown, useProject } from "../../state/project.ts";
 import { fitTimeline, setRange, useTimeline, zoomBy, zoomTo } from "../../state/timeline.ts";
 import { select, useUi } from "../../state/ui.ts";
 import { AddMenu } from "./AddMenu.tsx";
@@ -47,7 +47,17 @@ const LABEL_W = 88;
 /** The horizontal scroll, in px, that every row's contents shift by (zoomed in). */
 const View = createContext({ offset: 0 });
 
+/** The timeline shows the agent's live draft while it works (view only then), or the project. */
 export function Timeline() {
+  return (
+    <DraftViewContext.Provider value={true}>
+      <TimelineBody />
+    </DraftViewContext.Provider>
+  );
+}
+
+function TimelineBody() {
+  const draftShown = useDraftShown();
   const section = useRef<HTMLElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -122,7 +132,11 @@ export function Timeline() {
           <Row label={<AddMenu />}>
             <Ruler duration={tl.duration} pps={pps} start={start} width={width} track={track} />
           </Row>
-          <div className="flex min-h-0 flex-1 flex-col gap-1" onPointerDown={scrub}>
+          {/* The draft is only to watch: its items aren't in the project yet. Scrubbing still works. */}
+          <div
+            className={clsx("flex min-h-0 flex-1 flex-col gap-1", draftShown && "[&_*]:pointer-events-none")}
+            onPointerDown={scrub}
+          >
             <Row label="Video" trackRef={track} tall>
               {pps > 0 && <VideoTrack tl={tl} pps={pps} />}
             </Row>
@@ -154,6 +168,14 @@ export function Timeline() {
           </div>
         </div>
         {range && pps > 0 && <RangeBand range={range} pps={pps} offset={offset} width={width} />}
+        {draftShown && (
+          <span
+            title="The agent's draft, to watch. Switch to your project on the preview to edit."
+            className="absolute top-2.5 left-1/2 -translate-x-1/2 rounded-md bg-accent/15 px-2 py-0.5 font-mono text-[10px] text-accent animate-fade-in"
+          >
+            Draft
+          </span>
+        )}
         <ZoomControls zoom={zoom} />
         <Playhead pps={pps} offset={offset} width={width} start={start} />
       </section>

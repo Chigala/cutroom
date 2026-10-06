@@ -7,7 +7,8 @@ import type { AgentContext, AgentEvent, AgentUsage, Backend, ChatRecord, WorkEnt
 import type { Commit } from "@vedit/project";
 import { create } from "zustand";
 import { host } from "../lib/host.ts";
-import { useProject } from "./project.ts";
+import { addDraft, endDraft, holdDraft, receive, useProject } from "./project.ts";
+import { toast } from "./toast.ts";
 
 export interface UserMessage {
   readonly kind: "user";
@@ -40,6 +41,8 @@ export interface AgentRun {
   readonly commitId: string | null;
   readonly elapsedMs: number | null;
   readonly error: string | null;
+  /** Stopped or failed partway: this many change groups are held, to keep or throw away. */
+  readonly kept?: number;
 }
 
 /** Changes that didn't come from chat (imports, file edits), shown inline so the story is complete. */
@@ -264,6 +267,9 @@ export function retry(runItemId: string): void {
   const at = items.findIndex((m) => m.id === runItemId);
   const asked = items.slice(0, at).findLast((m): m is UserMessage => m.kind === "user");
   if (at < 0 || !asked) return;
+  // Asking again: what the stopped attempt left as a draft goes.
+  const attempt = items[at];
+  if (attempt?.kind === "agent" && attempt.kept && attempt.runId) discardWork(attempt.runId);
   set({ items: items.filter((m) => m.id !== runItemId && m.id !== asked.id) });
   void send(asked.text, asked.context, asked.depth ?? "quick", asked.attachments ?? []);
 }
@@ -280,6 +286,28 @@ export function sendNextQueued(): void {
   if (!next || activeRun) return;
   set({ queue: queue.slice(1) });
   void send(next.text, next.context, next.depth, next.attachments);
+}
+
+/** Keeps what a stopped run did, as one undoable change (its chips appear under the run). */
+export async function keepWork(runId: string): Promise<void> {
+  const result = await host.agent
+    .keep(runId)
+    .catch((err: Error) => ({ ok: false as const, error: err.message }));
+  if (!result.ok) {
+    toast(`Couldn't keep it: ${result.error}`, "warn");
+    return;
+  }
+  receive(result.commit);
+  endDraft(runId);
+  updateRun(runId, () => ({ kept: undefined, commitId: result.commit.id }));
+  persist();
+}
+
+/** Throws away what a stopped run did. */
+export function discardWork(runId: string): void {
+  void host.agent.discard(runId);
+  endDraft(runId);
+  updateRun(runId, () => ({ kept: undefined }));
 }
 
 export function stop(): void {
@@ -329,6 +357,7 @@ function reduce(run: AgentRun, e: AgentEvent): Partial<AgentRun> {
     case "activity":
       return { activity: e.text };
     case "usage":
+    case "draft":
       return {};
     case "done": {
       // The last turn's narration is the reply itself: it moves out of the work to stand on its own.
@@ -348,6 +377,7 @@ function reduce(run: AgentRun, e: AgentEvent): Partial<AgentRun> {
         status: e.message === "Stopped" ? "stopped" : "error",
         error: e.message === "Stopped" ? null : e.message,
         elapsedMs: Date.now() - run.at,
+        ...(e.kept && { kept: e.kept }),
       };
   }
 }
@@ -413,6 +443,47 @@ async function loadChat(): Promise<void> {
       return { ...r, work, kind: "agent", id: id(), runId: null, backend: null };
     }),
   });
+  await resumeRunning();
+}
+
+/**
+ * A request still running when the window loads (it was reloaded mid-request): its message and a running
+ * reply come back, Stop works again, and its draft shows everything done so far, then carries on live.
+ */
+async function resumeRunning(): Promise<void> {
+  const running = await host.agent.active().catch(() => []);
+  for (const r of running) {
+    if (useChat.getState().items.some((m) => m.kind === "agent" && m.runId === r.runId)) continue;
+    const last = useChat.getState().items.at(-1);
+    // The message itself was saved when it was sent; only the reply is missing.
+    const asked = last?.kind === "user" && last.text === r.prompt.trim();
+    const reply: AgentRun = {
+      kind: "agent",
+      id: id(),
+      at: r.startedAt,
+      runId: r.runId,
+      backend: useChat.getState().backend,
+      steps: [],
+      work: [],
+      text: "",
+      activity: "Still working…",
+      status: "running",
+      commitId: null,
+      elapsedMs: null,
+      error: null,
+    };
+    set((s) => ({
+      activeRun: r.runId,
+      items: [
+        ...s.items,
+        ...(asked ? [] : [{ kind: "user" as const, id: id(), at: r.startedAt, text: r.prompt, context: {} }]),
+        reply,
+      ],
+    }));
+    // Events that came in while the chat was loading belong to it.
+    updateRun(r.runId, (run) => pendingEvents(r.runId, run));
+    if (r.ops.length) addDraft(r.runId, r.ops, 0);
+  }
 }
 
 export const FIRST_CUT_PROMPT =
@@ -422,6 +493,14 @@ export function connectChat(): () => void {
   const offAgent = host.on("agent", (e) => {
     if (e.type === "start") set({ backend: e.backend });
     if (e.type === "usage") noteUsage(e);
+    // The live draft: each change as the agent makes it; gone when the work lands, held when it stopped
+    // partway with something to keep.
+    if (e.type === "draft") addDraft(e.runId, e.ops, e.at);
+    if (e.type === "done") endDraft(e.runId);
+    if (e.type === "error") {
+      if (e.kept) holdDraft(e.runId);
+      else endDraft(e.runId);
+    }
     const known = useChat.getState().items.some((m) => m.kind === "agent" && m.runId === e.runId);
     if (!known) early.set(e.runId, [...(early.get(e.runId) ?? []), e]);
     else updateRun(e.runId, (run) => reduce(run, e));

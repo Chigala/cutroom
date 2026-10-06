@@ -18,6 +18,7 @@ import {
   runAgent,
 } from "@vedit/agent";
 import type {
+  ActiveRun,
   AgentEvent,
   AgentStatus,
   AttachResult,
@@ -62,6 +63,7 @@ import {
   assetId,
   CACHE_DIR,
   CHAT_LOG,
+  type ChangeGroup,
   type Commit,
   demoProject,
   emptyProject,
@@ -114,6 +116,13 @@ const round3 = (t: number) => Math.round(t * 1000) / 1000;
 export class ProjectService {
   private store: ProjectStore | null = null;
   private runs = new Map<string, AbortController>();
+  /**
+   * Each run's work so far (the live draft), by run: kept or thrown away by the user when the run ends
+   * without finishing. Only for the project it was made in.
+   */
+  private partials = new Map<string, { dir: string; ops: Op[]; groups: ChangeGroup[] }>();
+  /** What each running request was asked and when, for a window that reloads mid-request. */
+  private asked = new Map<string, { dir: string; prompt: string; startedAt: number }>();
   readonly indexer: Indexer;
   readonly exporter: Exporter;
   readonly versions: Versions;
@@ -1111,6 +1120,7 @@ export class ProjectService {
     const thorough = req.depth === "thorough" || req.prompt.length > 1200 || unedited || continuing;
     const ctrl = new AbortController();
     this.runs.set(runId, ctrl);
+    this.asked.set(runId, { dir: store.dir, prompt: req.prompt, startedAt: Date.now() });
     const send = (e: AgentEventBody) => this.emit("agent", { runId, ...e } as AgentEvent);
     const started = Date.now();
     send({ type: "start", backend: settings.backend });
@@ -1119,6 +1129,7 @@ export class ProjectService {
     const claude = await claudeStatus();
     if (claude.apiKey || claude.signedIn === false) {
       this.runs.delete(runId);
+      this.asked.delete(runId);
       send({
         type: "error",
         message: claude.apiKey
@@ -1155,8 +1166,18 @@ export class ProjectService {
       onActivity: (text) => send({ type: "activity", text }),
       onUsage: (usage) => send({ type: "usage", ...usage }),
       onTool: (call) => send({ type: "tool", ...call }),
+      // The editor's live draft: each change as it's made, also held here in case the run doesn't finish.
+      onDraft: (label, ops) => {
+        const held = this.partials.get(runId) ?? { dir: store.dir, ops: [], groups: [] };
+        this.partials.set(runId, held);
+        const start = held.ops.length;
+        held.ops.push(...ops);
+        held.groups.push({ label, ops: ops.map((_, i) => start + i) });
+        send({ type: "draft", label, ops, at: start });
+      },
     })
       .then((result) => {
+        this.partials.delete(runId);
         let commit: Commit | null = null;
         if (result.ops.length) {
           // Rebase: the user may have kept editing while the agent worked.
@@ -1191,9 +1212,16 @@ export class ProjectService {
                   )
                 ? "Claude isn't signed in. Sign in from Settings → Claude (it opens Claude Code's own sign-in)."
                 : `Something went wrong: ${(err as Error).message}`;
-        send({ type: "error", message });
+        // Work done before it stopped is held for the user to keep or throw away (a clash with their own
+        // edits can't be kept as it is).
+        const held = err instanceof OpError ? undefined : this.partials.get(runId);
+        if (!held) this.partials.delete(runId);
+        send({ type: "error", message, ...(held?.groups.length && { kept: held.groups.length }) });
       })
-      .finally(() => this.runs.delete(runId));
+      .finally(() => {
+        this.runs.delete(runId);
+        this.asked.delete(runId);
+      });
 
     return { runId };
   }
@@ -1205,6 +1233,54 @@ export class ProjectService {
 
   cancel(runId: unknown): void {
     if (typeof runId === "string") this.runs.get(runId)?.abort();
+  }
+
+  /** Keeps what a run that didn't finish did, as one undoable change on top of the project as it is. */
+  keepPartial(runId: unknown): CommitResult {
+    const held = typeof runId === "string" ? this.partials.get(runId) : undefined;
+    const store = this.store;
+    if (!held || !store || store.dir !== held.dir)
+      return { ok: false, error: "That work isn't here anymore." };
+    this.partials.delete(runId as string);
+    try {
+      const commit = store.commitAndBroadcast({
+        author: "agent",
+        message:
+          `Kept what the agent did before it stopped: ${held.groups.map((g) => g.label).join(", ")}`.slice(
+            0,
+            480,
+          ),
+        ops: held.ops,
+        groups: held.groups,
+      });
+      this.indexer.enqueue(store.doc.sources.filter((s) => s.status === "pending").map((s) => s.id));
+      return { ok: true, commit };
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof OpError
+            ? `It clashes with what you changed since (${err.message}).`
+            : (err as Error).message,
+      };
+    }
+  }
+
+  /** Requests still running in this project, with their changes so far (the window reloaded). */
+  activeRuns(): ActiveRun[] {
+    const dir = this.store?.dir;
+    return [...this.asked]
+      .filter(([, a]) => a.dir === dir)
+      .map(([runId, a]) => ({
+        runId,
+        prompt: a.prompt,
+        startedAt: a.startedAt,
+        ops: this.partials.get(runId)?.ops ?? [],
+      }));
+  }
+
+  discardPartial(runId: unknown): void {
+    if (typeof runId === "string") this.partials.delete(runId);
   }
 
   async retryIndex(id: unknown): Promise<void> {

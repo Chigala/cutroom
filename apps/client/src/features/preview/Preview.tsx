@@ -36,13 +36,29 @@ import {
   useFrameEffect,
   usePlayback,
 } from "../../state/playback.ts";
-import { edit, useDoc, useProject } from "../../state/project.ts";
+import {
+  DraftViewContext,
+  edit,
+  setShowDraft,
+  useDoc,
+  useProject,
+  useViewedDoc,
+} from "../../state/project.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 import { CommentsRail } from "./CommentsRail.tsx";
 import { EmptyStage } from "./EmptyStage.tsx";
 
+/** The stage plays the agent's live draft while it works (DraftViewContext), or the project as it is. */
 export function Preview() {
+  return (
+    <DraftViewContext.Provider value={true}>
+      <PreviewBody />
+    </DraftViewContext.Provider>
+  );
+}
+
+function PreviewBody() {
   const hasScenes = useDoc((d) => d.scenes.length > 0);
   return (
     <main className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-3.5 bg-sunken px-6 py-5 pr-[260px] [container-type:size]">
@@ -57,6 +73,40 @@ export function Preview() {
       )}
       <CommentsRail />
     </main>
+  );
+}
+
+/**
+ * While the agent works: one small pill. "Draft" (pulsing while it's live) says the stage shows its work
+ * in progress; clicking it shows the project as it is ("Show draft" brings it back).
+ */
+function DraftBadge() {
+  const draft = useProject((s) => s.draft);
+  const shown = useProject((s) => s.showDraft);
+  if (!draft) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => setShowDraft(!shown)}
+      title={
+        shown
+          ? "The agent's work in progress. Click to see your project as it is."
+          : "Your project as it is. Click to see the agent's draft."
+      }
+      className={clsx(
+        "flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] whitespace-nowrap transition-colors animate-fade-in",
+        shown ? "bg-accent/15 text-accent" : "text-muted hover:text-fg",
+      )}
+    >
+      <span
+        className={clsx(
+          "size-1.5 rounded-full",
+          shown ? "bg-accent" : "border border-current",
+          shown && !draft.held && "animate-pulse",
+        )}
+      />
+      {shown ? "Draft" : "Show draft"}
+    </button>
   );
 }
 
@@ -88,12 +138,13 @@ function StageBar() {
           </button>
         ))}
       </div>
+      <DraftBadge />
     </div>
   );
 }
 
 const Stage = memo(function Stage() {
-  const project = useProject((s) => s.doc!);
+  const project = useViewedDoc();
   const stage = useUi((s) => s.stage);
   const stageShape = useUi((s) => s.stageShape);
   // Another shape: the same edit at that shape's size, reframed (as export.formats renders it).
@@ -249,7 +300,7 @@ function SafeZones() {
 
 /** "sc4 · clip_07 · beach": which shot is on screen. Updates only when the shot changes. */
 function SceneLabel() {
-  const doc = useProject((s) => s.doc!);
+  const doc = useViewedDoc();
   const [label, setLabel] = useState("");
   useFrameEffect((frame, s) => {
     const placed = sceneAt(timelineOf(doc), frame / s.fps);
@@ -266,7 +317,7 @@ function SceneLabel() {
 
 /** Comments with a point, shown on the frame while their moment plays. */
 function CommentPins() {
-  const doc = useProject((s) => s.doc!);
+  const doc = useViewedDoc();
   const [visible, setVisible] = useState<readonly Comment[]>([]);
   useFrameEffect((frame, s) => {
     const t = frame / s.fps;

@@ -31,7 +31,9 @@ import {
   type AgentRun,
   type ChangeNote,
   type ChatItem,
+  discardWork,
   FIRST_CUT_PROMPT,
+  keepWork,
   removeQueued,
   retry,
   STARTERS,
@@ -205,6 +207,7 @@ function Run({ run }: { run: AgentRun }) {
           {run.error}
         </p>
       )}
+      {run.kept && run.runId && <KeptRow runId={run.runId} count={run.kept} />}
       {(run.status === "error" || run.status === "stopped") && <RetryRow run={run} />}
       {commit && commit.groups.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -218,6 +221,43 @@ function Run({ run }: { run: AgentRun }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A request that stopped partway with changes made: they're on the stage as a draft; keep them as one
+ * undoable change, or throw them away.
+ */
+function KeptRow({ runId, count }: { runId: string; count: number }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-accent/30 bg-accent/8 px-3 py-2.5 animate-fade-in">
+      <span className="text-[13px] text-fg-2">
+        It made {count === 1 ? "a change" : `${count} changes`} before it stopped. They're on the preview as a
+        draft.
+      </span>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void keepWork(runId).finally(() => setBusy(false));
+          }}
+          className="rounded-lg bg-accent px-2.5 py-1 text-xs font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-50"
+        >
+          Keep {count === 1 ? "it" : "them"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => discardWork(runId)}
+          className="rounded-lg border border-line-strong bg-button px-2.5 py-1 text-xs text-fg-2 hover:bg-chip disabled:opacity-50"
+        >
+          Discard
+        </button>
+      </div>
     </div>
   );
 }

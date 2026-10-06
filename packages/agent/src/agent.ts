@@ -42,6 +42,8 @@ export interface AgentOptions {
   onActivity?(text: string): void;
   onUsage?(usage: AgentUsage): void;
   onTool?(call: ToolCall): void;
+  /** Each change group as it's applied, for the editor's live draft. */
+  onDraft?(label: string, ops: readonly Op[]): void;
 }
 
 export interface AgentResult {
@@ -69,6 +71,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     step: (text, status = "done") => opts.onStep?.(text, status),
     activity: (text) => opts.onActivity?.(text),
     tool: (call) => opts.onTool?.(call),
+    draft: (label, ops) => opts.onDraft?.(label, ops),
   };
   const attached = (opts.attachments ?? [])
     .map((id) => opts.doc.sources.find((s) => s.id === id))

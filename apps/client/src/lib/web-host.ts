@@ -124,6 +124,9 @@ export function createWebHost(): EditorApi {
         return { runId };
       },
       cancel: async () => {},
+      keep: async () => ({ ok: false, error: `The agent runs in the desktop app. ${DESKTOP_ONLY}` }),
+      discard: async () => {},
+      active: async () => [],
       status: async () => ({ backend: "subscription", model: settings.model, apiKey: false }),
     },
     downloads: {

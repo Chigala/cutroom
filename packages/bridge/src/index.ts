@@ -82,7 +82,20 @@ export type AgentEvent =
       /** What the editor might ask for next, in their words: offered in the composer (Tab takes it). */
       readonly next?: string;
     }
-  | { readonly runId: string; readonly type: "error"; readonly message: string }
+  /**
+   * The work so far ended without finishing (stopped, or an error): `kept` change groups are held, for
+   * the user to keep (agent.keep) or throw away (agent.discard).
+   */
+  | { readonly runId: string; readonly type: "error"; readonly message: string; readonly kept?: number }
+  /** A change group the agent just made on its own copy: the editor's live draft applies it too. */
+  | {
+      readonly runId: string;
+      readonly type: "draft";
+      readonly label: string;
+      readonly ops: readonly Op[];
+      /** How many of the run's changes came before these: where they go in the draft. */
+      readonly at: number;
+    }
   /** How much of Claude's context the request filled, and how much of the plan's limits are used. */
   | ({ readonly runId: string; readonly type: "usage" } & AgentUsage);
 
@@ -108,6 +121,14 @@ export interface AgentUsage {
 }
 
 export type Backend = "api" | "subscription";
+
+/** A request still running, with the changes it has made so far. */
+export interface ActiveRun {
+  readonly runId: string;
+  readonly prompt: string;
+  readonly startedAt: number;
+  readonly ops: readonly Op[];
+}
 
 export interface CommitRequest {
   readonly ops: readonly Op[];
@@ -438,6 +459,12 @@ export interface EditorApi {
     run(req: AgentRequest): Promise<{ runId: string }>;
     cancel(runId: string): Promise<void>;
     status(): Promise<AgentStatus>;
+    /** Keeps what a run that didn't finish did, as one undoable change. */
+    keep(runId: string): Promise<CommitResult>;
+    /** Throws away what a run that didn't finish did. */
+    discard(runId: string): Promise<void>;
+    /** Requests still running (after the window reloads mid-request): to show them and their draft again. */
+    active(): Promise<ActiveRun[]>;
   };
   /** Downloads the app makes for itself, and starting them ahead of time. */
   readonly downloads: {

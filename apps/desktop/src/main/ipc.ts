@@ -48,6 +48,9 @@ export function registerIpc(service: ProjectService): void {
     [Channel.agentRun]: (req) => service.runAgent(req),
     [Channel.agentCancel]: (runId) => service.cancel(runId),
     [Channel.agentStatus]: () => service.agentStatus(),
+    [Channel.agentKeep]: (runId) => service.keepPartial(runId),
+    [Channel.agentDiscard]: (runId) => service.discardPartial(runId),
+    [Channel.agentActive]: () => service.activeRuns(),
     [Channel.checkKey]: (provider, key) =>
       PROVIDERS.includes(provider as KeyProvider)
         ? checkKey(provider as KeyProvider, str(key).slice(0, 500))

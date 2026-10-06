@@ -15,6 +15,7 @@ import {
   revertOps,
   summarize,
 } from "@vedit/project";
+import { createContext, useContext } from "react";
 import { create } from "zustand";
 import { host, setMediaProject } from "../lib/host.ts";
 import { toast } from "./toast.ts";
@@ -33,6 +34,13 @@ export interface ProjectState {
   agentTouched: ReadonlySet<string>;
   undoStack: string[];
   redoStack: string[];
+  /**
+   * The agent's work while a request runs (or one that stopped, until it's kept or thrown away): its
+   * changes, and the project with them on top, rebuilt when the project changes underneath.
+   */
+  draft: { runId: string; ops: Op[]; doc: ProjectDoc; held: boolean } | null;
+  /** The preview and timeline show the draft (true) or the project as it is. */
+  showDraft: boolean;
 }
 
 const initial: ProjectState = {
@@ -46,12 +54,82 @@ const initial: ProjectState = {
   agentTouched: new Set(),
   undoStack: [],
   redoStack: [],
+  draft: null,
+  showDraft: true,
 };
 
 export const useProject = create<ProjectState>()(() => initial);
 
-/** The doc, for components rendered only once a project is loaded. */
-export const useDoc = <T>(select: (doc: ProjectDoc) => T): T => useProject((s) => select(s.doc!));
+/** Inside it (the preview and the timeline), the doc is the agent's draft while one is shown. */
+export const DraftViewContext = createContext(false);
+
+/** The doc as a draft view shows it: the agent's draft when there is one and it's shown. */
+export const viewedDoc = (s: ProjectState): ProjectDoc => (s.showDraft && s.draft ? s.draft.doc : s.doc!);
+
+/** The doc, for components rendered only once a project is loaded (the draft, in a draft view). */
+export const useDoc = <T>(select: (doc: ProjectDoc) => T): T => {
+  const inDraftView = useContext(DraftViewContext);
+  return useProject((s) => select(inDraftView ? viewedDoc(s) : s.doc!));
+};
+
+/** The whole doc, the same way. */
+export const useViewedDoc = (): ProjectDoc => {
+  const inDraftView = useContext(DraftViewContext);
+  return useProject((s) => (inDraftView ? viewedDoc(s) : s.doc!));
+};
+
+/** True while the preview and timeline show the agent's draft rather than the project. */
+export const useDraftShown = (): boolean => useProject((s) => s.showDraft && s.draft !== null);
+
+/**
+ * The agent's changes on top of the project as it is now, one by one: one that no longer applies (the
+ * user changed the same thing) is left out of the picture, as the final commit would rebase around it.
+ */
+function withDraft(doc: ProjectDoc, ops: readonly Op[]): ProjectDoc {
+  let next = doc;
+  for (const op of ops) {
+    try {
+      next = applyOps(next, [op]).doc;
+    } catch (err) {
+      if (!(err instanceof OpError)) throw err;
+    }
+  }
+  return next;
+}
+
+/**
+ * A change group the agent just made, for the live draft, at its place in the run (`at`: how many came
+ * before it), so changes already in the draft (after a reload, say) are never applied twice.
+ */
+export function addDraft(runId: string, ops: readonly Op[], at?: number): void {
+  const { doc, draft } = get();
+  if (!doc) return;
+  const before = draft?.runId === runId ? draft.ops : [];
+  const all = [...before.slice(0, at ?? before.length), ...ops];
+  set({ draft: { runId, ops: all, doc: withDraft(doc, all), held: false } });
+}
+
+/** The run ended without finishing, with work to keep or throw away: the draft stays to be judged. */
+export function holdDraft(runId: string): void {
+  const { draft } = get();
+  if (draft?.runId === runId) set({ draft: { ...draft, held: true } });
+}
+
+/** The run's work landed (or was kept, or thrown away): back to the project itself. */
+export function endDraft(runId?: string): void {
+  const { draft } = get();
+  if (draft && (!runId || draft.runId === runId)) set({ draft: null, showDraft: true });
+}
+
+export function setShowDraft(show: boolean): void {
+  set({ showDraft: show });
+}
+
+// The project changed under the draft (an edit, an import): the draft is rebuilt on top of it.
+useProject.subscribe((s, prev) => {
+  if (s.draft && s.doc && s.doc !== prev.doc)
+    set({ draft: { ...s.draft, doc: withDraft(s.doc, s.draft.ops) } });
+});
 
 const set = useProject.setState;
 const get = useProject.getState;

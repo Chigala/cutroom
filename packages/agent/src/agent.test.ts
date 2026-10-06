@@ -152,6 +152,24 @@ describe("agent tools", () => {
     expect(buildPrompt(doc, "make a sizzle", undefined, [])).toContain("<shots>");
   });
 
+  it("reports each change as it's applied, for the editor's live draft", async () => {
+    const { c } = ctx(talking());
+    const drafts: { label: string; ops: number }[] = [];
+    const watched: ToolContext = { ...c, draft: (label, ops) => drafts.push({ label, ops: ops.length }) };
+    await runTool(
+      "apply_ops",
+      { label: "Vignette", ops: [{ op: "merge", key: "look", patch: { vignette: true } }] },
+      watched,
+    );
+    // A change that doesn't apply isn't drafted.
+    await runTool(
+      "apply_ops",
+      { label: "Nothing", ops: [{ op: "delete", coll: "titles", id: "nope" }] },
+      watched,
+    );
+    expect(drafts).toEqual([{ label: "Vignette", ops: 1 }]);
+  });
+
   it("can silence the music over a stretch of the cut", async () => {
     const { c, scratch } = ctx(talking());
     const out = await runTool(

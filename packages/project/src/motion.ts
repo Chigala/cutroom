@@ -4,6 +4,7 @@
  * and the cutouts that separate the person from the background.
  */
 import type { Analysis, Keyframe, ProjectDoc, Scene } from "./schema.ts";
+import type { Timeline } from "./time.ts";
 
 // --- Speed ramps --------------------------------------------------------------------------------------
 
@@ -193,6 +194,8 @@ export function keepTag(scene: Pick<Scene, "keep" | "person">): string {
 export const cutoutKey = (source: string, from: number, to: number, keep = "") =>
   `${source}~cutout~${from.toFixed(2)}~${to.toFixed(2)}${keep ? `~${keep}` : ""}`;
 export const rampKey = (source: string, hash: string) => `${source}~ramp~${hash}`;
+/** A slowed shot made with in-between frames (smooth slow motion). */
+export const flowKey = (source: string, hash: string) => `${source}~flow~${hash}`;
 /** The background of a cutout's stretch blurred without the person (no halo), at a blur amount. */
 export const blurPlateKey = (source: string, from: number, to: number, amount: number, keep = "") =>
   `${source}~bgblur~${from.toFixed(2)}~${to.toFixed(2)}~${amount}${keep ? `~${keep}` : ""}`;
@@ -209,6 +212,7 @@ export function parseDerivedKey(
   | { kind: "cutout"; source: string; from: number; to: number; keep: string }
   | { kind: "bgblur"; source: string; from: number; to: number; amount: number; keep: string }
   | { kind: "ramp"; source: string; hash: string }
+  | { kind: "flow"; source: string; hash: string }
   | null {
   const v = /^(.+)~cover~(\d+(?:\.\d+)?)~(frame|cut|blur)(\d+)?$/.exec(key);
   if (v)
@@ -233,6 +237,8 @@ export function parseDerivedKey(
   if (c) return { kind: "cutout", source: c[1]!, from: Number(c[2]), to: Number(c[3]), keep: c[4] ?? "" };
   const r = /^(.+)~ramp~([0-9a-z]+)$/.exec(key);
   if (r) return { kind: "ramp", source: r[1]!, hash: r[2]! };
+  const f = /^(.+)~flow~([0-9a-z]+)$/.exec(key);
+  if (f) return { kind: "flow", source: f[1]!, hash: f[2]! };
   return null;
 }
 
@@ -284,8 +290,223 @@ export function scenesNeedingCutout(
 /** An effect file that styles the person (.subject) or what's behind them (.background) on their own. */
 export const separatesSubject = (css: string) => /\.(subject|background)\b/.test(css);
 
-/** The stretch of a clip a shot's cutout should cover: its footage, widened to tenths of a second. */
-export const cutoutRange = (scene: Pick<Scene, "in" | "out">) => ({
-  from: Math.max(0, Math.floor(scene.in * 10) / 10),
-  to: Math.ceil(scene.out * 10) / 10,
-});
+/**
+ * How far past its own cut a shot's picture shows, in output seconds: into a transition, the shot coming
+ * in starts early and the one going out ends late (half the transition each side, never longer than
+ * either shot). A little over, for the rounding to frames.
+ */
+export function pictureReach(tl: Timeline, id: string): { early: number; late: number } {
+  const p = tl.byId.get(id);
+  if (!p) return { early: 0, late: 0 };
+  const half = (q: Timeline["scenes"][number] | undefined) => {
+    const prev = q && tl.scenes[q.index - 1];
+    const tr = q?.scene.transition;
+    if (!q || !prev || !tr) return 0;
+    return Math.max(0.07, Math.min(tr.duration, prev.duration, q.duration)) / 2 + 0.05;
+  };
+  return { early: half(p), late: half(tl.scenes[p.index + 1]) };
+}
+
+/**
+ * The stretch of a clip a shot's cutout should cover: its footage, and what shows of it past its cut
+ * into a transition either side (with the shot's timeline), widened to tenths of a second and kept in
+ * the clip (`length`, when known).
+ */
+export function cutoutRange(
+  scene: Pick<Scene, "id" | "in" | "out" | "speed">,
+  tl?: Timeline,
+  length?: number,
+): { from: number; to: number } {
+  const reach = tl ? pictureReach(tl, scene.id) : { early: 0, late: 0 };
+  const speed = scene.speed ?? 1;
+  const end = length && length > 0 ? length : Number.POSITIVE_INFINITY;
+  return {
+    from: Math.max(0, Math.floor((scene.in - reach.early * speed) * 10) / 10),
+    to: Math.ceil(Math.max(scene.out, Math.min(end, scene.out + reach.late * speed)) * 10) / 10,
+  };
+}
+
+// --- Steadying ----------------------------------------------------------------------------------------
+
+export type CameraPath = NonNullable<Analysis["cameraPaths"]>[number];
+
+/** The measured camera path of a clip that covers [from, to] of it, if any. */
+export function cameraPathCovering(
+  analysis: Pick<Analysis, "cameraPaths"> | undefined,
+  from: number,
+  to: number,
+): CameraPath | null {
+  return analysis?.cameraPaths?.find((c) => c.from <= from + 1e-3 && c.to >= to - 1e-3) ?? null;
+}
+
+/**
+ * A steadied shot: for each frame of its camera path, the move that cancels the shake (x, y in shares
+ * of the picture, a in radians, s as log scale), and the zoom that keeps the frame filled through it.
+ */
+export interface Steadied {
+  readonly fps: number;
+  /** Clip seconds where the path starts. */
+  readonly from: number;
+  readonly x: Float32Array;
+  readonly y: Float32Array;
+  readonly a: Float32Array;
+  readonly s: Float32Array;
+  readonly zoom: number;
+  /** The footage's size as shown in the frame, in pixels: what x and y are shares of. */
+  readonly shown: { readonly w: number; readonly h: number };
+}
+
+/** Each value averaged with its neighbours, a Gaussian `sigma` frames wide (fewer at the ends). */
+function smoothed(v: readonly number[], sigma: number): Float32Array {
+  const out = new Float32Array(v.length);
+  const reach = Math.ceil(sigma * 3);
+  for (let i = 0; i < v.length; i++) {
+    let sum = 0;
+    let weight = 0;
+    for (let j = Math.max(0, i - reach); j <= Math.min(v.length - 1, i + reach); j++) {
+      const w = Math.exp(-((j - i) ** 2) / (2 * sigma * sigma));
+      sum += v[j]! * w;
+      weight += w;
+    }
+    out[i] = sum / weight;
+  }
+  return out;
+}
+
+/**
+ * How to steady a shot over its camera path. The camera's path is smoothed (a Gaussian up to 1.5 s
+ * wide by `amount`; at 1 held still, as on a tripod) and each frame moved from where it was to where
+ * the smooth path puts it. The zoom is what keeps the frame filled through those moves, in a frame of
+ * `frame` size showing the footage at `shown` size; past `zoom` the moves are scaled down to fit.
+ */
+export function steady(
+  path: CameraPath,
+  settings: { amount: number; zoom: number },
+  frame: { w: number; h: number },
+  shown: { w: number; h: number },
+): Steadied {
+  const n = path.x.length;
+  const target = (v: readonly number[]): Float32Array => {
+    if (settings.amount >= 0.999) {
+      const mean = v.reduce((a, b) => a + b, 0) / Math.max(1, v.length);
+      return new Float32Array(v.length).fill(mean);
+    }
+    const sigma = settings.amount * 1.5 * path.fps;
+    if (sigma < 0.5) return Float32Array.from(v);
+    // A steady pan is kept as it is (a straight line through the path); only the shake around it is
+    // smoothed, so the ends of the shot don't drift.
+    const n = v.length;
+    const mi = (n - 1) / 2;
+    const mv = v.reduce((a, b) => a + b, 0) / Math.max(1, n);
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < n; i++) {
+      num += (i - mi) * (v[i]! - mv);
+      den += (i - mi) ** 2;
+    }
+    const slope = den ? num / den : 0;
+    const line = (i: number) => mv + slope * (i - mi);
+    const rest = smoothed(
+      v.map((x, i) => x - line(i)),
+      sigma,
+    );
+    return rest.map((x, i) => x + line(i));
+  };
+  const moves = (["x", "y", "a", "s"] as const).map((k) => {
+    const v = path[k];
+    const t = target(v);
+    return Float32Array.from(v, (x, i) => t[i]! - x);
+  }) as [Float32Array, Float32Array, Float32Array, Float32Array];
+  // The zoom a share k of the moves needs: the frame, turned and shifted, must stay inside the footage.
+  const needs = (k: number) => {
+    let z = 1;
+    for (let i = 0; i < n; i++) {
+      const a = Math.abs(moves[2][i]! * k);
+      const sc = Math.exp(moves[3][i]! * k);
+      const tx = Math.abs(moves[0][i]! * k) * shown.w;
+      const ty = Math.abs(moves[1][i]! * k) * shown.h;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      z = Math.max(
+        z,
+        (frame.w * cos + frame.h * sin + 2 * tx) / (sc * shown.w),
+        (frame.h * cos + frame.w * sin + 2 * ty) / (sc * shown.h),
+      );
+    }
+    return z;
+  };
+  let k = 1;
+  if (needs(1) > settings.zoom) {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (needs(mid) > settings.zoom) hi = mid;
+      else lo = mid;
+    }
+    k = lo;
+  }
+  const [x, y, a, s] = moves.map((m) => (k === 1 ? m : m.map((v) => v * k))) as typeof moves;
+  return { fps: path.fps, from: path.from, x, y, a, s, zoom: Math.max(1, needs(k)), shown };
+}
+
+/** A steadied shot's move at `t` seconds of its clip, between the path's frames. */
+export function steadyAt(st: Steadied, t: number): { x: number; y: number; a: number; s: number } {
+  const f = Math.max(0, Math.min(st.x.length - 1, (t - st.from) * st.fps));
+  const i = Math.floor(f);
+  const j = Math.min(st.x.length - 1, i + 1);
+  const u = f - i;
+  const at = (v: Float32Array) => v[i]! + (v[j]! - v[i]!) * u;
+  return { x: at(st.x), y: at(st.y), a: at(st.a), s: at(st.s) };
+}
+
+// --- Smooth slow motion -------------------------------------------------------------------------------
+
+/** The slowest a shot plays its footage: its speed, or the slowest point of its ramp. */
+export const slowest = (scene: Pick<Scene, "speed" | "ramp">): number =>
+  scene.ramp?.length ? Math.min(...scene.ramp.map((r) => r.speed)) : (scene.speed ?? 1);
+
+/**
+ * Whether a shot needs in-between frames: slowed past the frames its footage has at `fps` (30 fps
+ * footage at half speed has 15 a second for 30), and not asked to repeat frames instead.
+ */
+export function needsFlow(
+  scene: Pick<Scene, "speed" | "ramp" | "interpolate">,
+  source: { kind: string; fps?: number | undefined } | undefined,
+  fps: number,
+): boolean {
+  if (scene.interpolate === false || source?.kind !== "video") return false;
+  return slowest(scene) * (source.fps ?? 30) < fps * 0.95;
+}
+
+/**
+ * The stretch of the clip a slowed shot's smooth version covers: a ramped shot's footage (it doesn't
+ * reach into transitions), else what shows of it, into a transition either side too.
+ */
+export function flowRange(
+  scene: Pick<Scene, "id" | "in" | "out" | "speed" | "ramp">,
+  tl: Timeline,
+  length?: number,
+): { from: number; to: number } {
+  return scene.ramp?.length ? { from: scene.in, to: scene.out } : cutoutRange(scene, tl, length);
+}
+
+/** What a smooth version is made from, as a short hash (a change to any of it makes a new one). */
+export function flowHash(
+  scene: Pick<Scene, "source" | "in" | "out" | "speed" | "ramp">,
+  range: { from: number; to: number },
+  fps: number,
+): string {
+  const text = JSON.stringify([
+    scene.source,
+    scene.in.toFixed(3),
+    scene.out.toFixed(3),
+    scene.ramp?.length ? scene.ramp : (scene.speed ?? 1),
+    range.from.toFixed(2),
+    range.to.toFixed(2),
+    fps,
+  ]);
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return (h >>> 0).toString(36);
+}

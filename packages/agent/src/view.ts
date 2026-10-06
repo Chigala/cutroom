@@ -91,6 +91,8 @@ export function projectView(doc: ProjectDoc): string {
       ...(p.scene.volume !== 1 && { volume: p.scene.volume }),
       ...(p.scene.speed !== undefined && p.scene.speed !== 1 && { speed: p.scene.speed }),
       ...(p.scene.ramp?.length && { ramp: p.scene.ramp }),
+      ...(p.scene.stabilize && { stabilize: p.scene.stabilize }),
+      ...(p.scene.interpolate === false && { interpolate: false }),
       ...(p.scene.camera?.length && { camera: p.scene.camera }),
       ...(p.scene.background && { background: p.scene.background }),
       ...(p.scene.subject && { subject: p.scene.subject }),

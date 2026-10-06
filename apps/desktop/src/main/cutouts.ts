@@ -43,20 +43,25 @@ export async function makeNeededCutouts(
   // Cutouts made now, by clip: each with what it keeps with the person (keepTag; "" for the person).
   type Made = { from: number; to: number; keep?: string };
   const added = new Map<string, Made[]>();
-  const madeCovering = (scene: Scene, keep: string) =>
+  const madeCovering = (scene: Scene, want: { from: number; to: number }, keep: string) =>
     added
       .get(scene.source)
-      ?.find((c) => c.from <= scene.in + 1e-3 && c.to >= scene.out - 1e-3 && (c.keep ?? "") === keep) ?? null;
+      ?.find((c) => c.from <= want.from + 1e-3 && c.to >= want.to - 1e-3 && (c.keep ?? "") === keep) ?? null;
+  // What each shot's cutout covers: its footage, and what shows of it into a transition either side.
+  const want = (scene: Scene) =>
+    cutoutRange(scene, tl, doc.sources.find((s) => s.id === scene.source)?.duration);
   for (const scene of scenesNeedingCutout(doc, starts)) {
     const keep = keepTag(scene);
     const analysis = doc.analyses.find((a) => a.id === scene.source);
-    const covered = cutoutCovering(analysis, scene.in, scene.out, keep) ?? madeCovering(scene, keep);
+    const wanted = want(scene);
+    const covered =
+      cutoutCovering(analysis, wanted.from, wanted.to, keep) ?? madeCovering(scene, wanted, keep);
     if (covered && existsSync(paths.cutout(scene.source, covered.from, covered.to, keep))) continue;
     const src = doc.sources.find((s) => s.id === scene.source);
     if (!src) continue;
     const input = await derivationInput(projectDir, src);
     if (!input) continue;
-    const range = covered ?? cutoutRange(scene);
+    const range = covered ?? wanted;
     const made: Made = { ...range, ...(keep && { keep }) };
     const file = paths.cutout(scene.source, range.from, range.to, keep);
     // Already on disk (made before, then undone and redone): just record it again.
@@ -82,13 +87,14 @@ export async function makeNeededCutouts(
     if (scene.background?.kind !== "blur") continue;
     const amount = scene.background.amount ?? 18;
     const keep = keepTag(scene);
+    const wanted = want(scene);
     const c =
       cutoutCovering(
         doc.analyses.find((a) => a.id === scene.source),
-        scene.in,
-        scene.out,
+        wanted.from,
+        wanted.to,
         keep,
-      ) ?? madeCovering(scene, keep);
+      ) ?? madeCovering(scene, wanted, keep);
     const src = doc.sources.find((s) => s.id === scene.source);
     // A photo's blurred background is the photo blurred (plates are made from moving footage).
     if (!c || !src?.width || !src.height || src.kind !== "video") continue;

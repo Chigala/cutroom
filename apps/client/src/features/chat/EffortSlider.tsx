@@ -52,26 +52,27 @@ export function EffortSlider({
   const recommended = EFFORTS.findIndex((e) => e.value === RECOMMENDED);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <span className="text-[15px]">
-          <span className="text-muted">Effort</span>{" "}
-          <span className="ml-1 text-fg">{effortLabel(value)}</span>
+        <span className="flex items-baseline gap-2">
+          <span className="text-[13px] text-muted">Effort</span>
+          <span className="text-[15px] font-medium text-fg">{effortLabel(value)}</span>
         </span>
         <button
           type="button"
           title={HELP}
           aria-label={`About effort: ${HELP}`}
-          className="cursor-help rounded-full text-faint hover:text-fg-2"
+          className="flex size-6 cursor-help items-center justify-center rounded-full text-faint hover:bg-button hover:text-fg-2"
         >
-          <QuestionIcon size={16} />
+          <QuestionIcon size={15} />
         </button>
       </div>
-      <div className="flex justify-between text-[13px] text-muted">
-        <span>Faster</span>
-        <span>Smarter</span>
-      </div>
-      <div className="px-3">
+      {/* Track, stops, thumb and labels share one box (inset by the thumb's radius), so they line up. */}
+      <div className="px-[9px]">
+        <div className="-mx-[9px] mb-2 flex justify-between text-[12px] text-faint">
+          <span>Faster</span>
+          <span>Smarter</span>
+        </div>
         <div
           ref={track}
           role="slider"
@@ -99,40 +100,45 @@ export function EffortSlider({
           }}
           onPointerUp={() => setDragging(false)}
           onPointerLeave={() => setHover(null)}
-          className="relative h-8 cursor-pointer touch-none rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-fg/30"
+          className="group relative h-6 cursor-pointer touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-fg/30 focus-visible:ring-offset-4 focus-visible:ring-offset-panel"
         >
-          {/* The bar, lit up to the chosen level. */}
-          <div className="absolute inset-x-[-12px] top-1/2 h-8 -translate-y-1/2 rounded-xl bg-control" />
+          {/* The rail, and how far along it the chosen level is. */}
+          <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-control" />
           <div
-            className="absolute top-1/2 left-[-12px] h-8 -translate-y-1/2 rounded-xl bg-gradient-to-r from-control to-selected transition-[width] duration-200"
-            style={{ width: `calc(${pos(at)} + 24px)` }}
+            className="absolute top-1/2 left-0 h-1.5 -translate-y-1/2 rounded-full bg-fg-3/70 transition-[width] duration-200 ease-out"
+            style={{ width: pos(at) }}
           />
           {EFFORTS.map((e, i) => (
             <span
               key={e.value}
+              aria-hidden
               className={clsx(
-                "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                i === recommended ? "h-3 w-[2px] bg-fg-3/70" : "size-1 bg-faint",
+                "absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors",
+                i <= at ? "bg-bg/60" : "bg-faint/70",
               )}
               style={{ left: pos(i) }}
             />
           ))}
           <span
-            className="absolute top-1/2 h-7 w-6 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-fg shadow-md transition-[left] duration-200"
+            aria-hidden
+            className="absolute top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-fg shadow-[0_1px_4px_rgba(0,0,0,0.5)] ring-[3px] ring-panel transition-[left,transform] duration-200 ease-out group-active:scale-110"
             style={{ left: pos(at) }}
           />
           {shown !== null && (
             <span
-              className="pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 rounded-lg border border-line-strong bg-raised px-2.5 py-1 text-[13px] whitespace-nowrap text-fg shadow-lg animate-fade-in"
+              className="pointer-events-none absolute bottom-full mb-2.5 -translate-x-1/2 rounded-lg bg-raised px-2.5 py-1 text-[12.5px] whitespace-nowrap text-fg shadow-[0_6px_20px_rgba(0,0,0,0.45)] ring-1 ring-line-strong animate-fade-in"
               style={{ left: pos(shown) }}
             >
               {EFFORTS[shown]!.label}
             </span>
           )}
         </div>
-        <div className="relative mt-2 h-4">
+        <div className="relative mt-2 h-4 text-[12px]">
           <span
-            className="absolute -translate-x-1/2 text-[12px] whitespace-nowrap text-faint"
+            className={clsx(
+              "absolute -translate-x-1/2 whitespace-nowrap",
+              at === recommended ? "text-fg-3" : "text-faint",
+            )}
             style={{ left: pos(recommended) }}
           >
             Recommended

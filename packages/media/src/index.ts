@@ -18,6 +18,7 @@ export {
   useOpenModels,
 } from "./models.ts";
 export * from "./music.ts";
+export * from "./playable.ts";
 export * from "./probe.ts";
 export * from "./profile.ts";
 export * from "./see.ts";
@@ -32,6 +33,7 @@ export {
   segmentsOf,
 } from "./sheets.ts";
 export * from "./sounds.ts";
+export { trackCamera } from "./steady.ts";
 export * from "./stock.ts";
 export { linkTracks, type Track, type TrackPoint, trackRange } from "./track.ts";
 export * from "./transcode.ts";

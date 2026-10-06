@@ -71,14 +71,14 @@ export function PresetGrid({
           title={compact ? o.line : undefined}
           onClick={() => at !== o.id && onPick(o.text)}
           className={clsx(
-            "flex flex-col gap-0.5 rounded-xl border text-left transition-colors",
-            compact ? "px-3 py-2" : "px-3.5 py-2.5",
+            "flex flex-col gap-0.5 rounded-xl text-left transition-colors duration-150",
+            compact ? "px-3 py-2.5" : "px-3.5 py-2.5",
             // Your own words: its own row, after the starting points.
             o.id === "own" && !compact && "col-span-2",
-            at === o.id ? "border-fg/70 bg-raised" : "border-line hover:border-line-strong hover:bg-panel",
+            at === o.id ? "bg-selected ring-1 ring-fg/35 ring-inset" : "bg-button/70 hover:bg-control",
           )}
         >
-          <span className={clsx("font-medium text-fg", compact ? "text-[12.5px]" : "text-[13.5px]")}>
+          <span className={clsx("font-medium text-fg", compact ? "text-[13px]" : "text-[13.5px]")}>
             {o.name}
           </span>
           {!compact && <span className="text-[12px] leading-snug text-muted">{o.line}</span>}
@@ -114,7 +114,7 @@ export function StyleText({
       value={text}
       onChange={(e) => onChange(e.target.value)}
       className={clsx(
-        "w-full resize-none bg-transparent font-mono text-[12.5px] leading-[1.65] text-fg-2 outline-none",
+        "w-full resize-none bg-transparent text-[13.5px] leading-[1.65] text-fg-2 outline-none",
         className,
       )}
     />

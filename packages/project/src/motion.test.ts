@@ -3,6 +3,7 @@ import {
   blurPlateKey,
   cutoutCovering,
   cutoutKey,
+  cutoutRange,
   emptyProject,
   keepTag,
   parseDerivedKey,
@@ -130,6 +131,36 @@ describe("cutouts", () => {
     const tl = timelineOf(doc as never);
     const starts = new Map(tl.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]));
     expect(scenesNeedingCutout(doc as never, starts).map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("covers what shows of a shot into the transitions either side", () => {
+    const scenes = [
+      { id: "a", source: "c", in: 0, out: 2, note: "", volume: 1 },
+      {
+        id: "b",
+        source: "c",
+        in: 5,
+        out: 7,
+        note: "",
+        volume: 1,
+        transition: { kind: "glitch", duration: 0.4 },
+      },
+      { id: "d", source: "c", in: 9, out: 11, note: "", volume: 1, speed: 2 },
+    ];
+    const tl = timelineOf({ scenes } as never);
+    // Without a timeline (or a transition), just its own footage.
+    expect(cutoutRange(scenes[0]!)).toEqual({ from: 0, to: 2 });
+    // Into the glitch: "b" starts early, "a" ends late; neither past the clip.
+    expect(cutoutRange(scenes[1]! as never, tl)).toEqual({ from: 4.7, to: 7 });
+    expect(cutoutRange(scenes[0]! as never, tl, 2.1)).toEqual({ from: 0, to: 2.1 });
+    expect(cutoutRange(scenes[0]! as never, tl)).toEqual({ from: 0, to: 2.3 });
+    // A shot at double speed shows twice the footage in the same time.
+    const fast = timelineOf({
+      scenes: [scenes[0], { ...scenes[2], transition: { kind: "x", duration: 0.4 } }],
+    } as never);
+    expect(cutoutRange({ ...scenes[2]!, transition: { kind: "x", duration: 0.4 } } as never, fast).from).toBe(
+      8.5,
+    );
   });
 
   it("names derived footage in keys that parse back", () => {

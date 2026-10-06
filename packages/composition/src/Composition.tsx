@@ -21,11 +21,16 @@ import {
   type Caption,
   type CaptionPage,
   type CaptionStyle,
+  cameraPathCovering,
   captionPages,
   cutoutCovering,
   cutoutKey,
+  cutoutRange,
   type Effect,
   fitsInside,
+  flowHash,
+  flowKey,
+  flowRange,
   followPath,
   type Graphic,
   type Keyframe,
@@ -35,23 +40,28 @@ import {
   type MusicClip,
   type MusicCue,
   musicBeats,
+  needsFlow,
   type ProjectDoc,
   poseAt,
   poseTransform,
   rampHash,
   rampKey,
+  rampMap,
   type Scene,
   type Sfx,
   type SfxName,
   type Source,
   STARTER_CAPTION_LOOKS,
   STARTER_GRADES,
+  type Steadied,
   sceneAt,
   sceneLength,
   scenesNeedingCutout,
   shotFocus,
   sourceTime,
   spokenWords,
+  steady,
+  steadyAt,
   type Timeline,
   type Title,
   timelineOf,
@@ -89,7 +99,17 @@ import {
 } from "remotion";
 import { CaptionView } from "./CaptionView.tsx";
 import { ProjectFontsContext, projectFontSources, useFonts } from "./fonts.ts";
-import { type FrameSpan, frameSpan, isActive, lockToBeats, placeAll, type Timed, toFrame } from "./frames.ts";
+import {
+  type FrameSpan,
+  frameSpan,
+  isActive,
+  lockToBeats,
+  placeAll,
+  type Timed,
+  toFrame,
+  trimFrom,
+  trimTo,
+} from "./frames.ts";
 import { GraphicView } from "./GraphicView.tsx";
 import { StyleLayer } from "./StyleLayer.tsx";
 
@@ -152,16 +172,15 @@ export const VideoComposition = ({
   // once their cutout is made; and ramped shots' rendered footage.
   const cutouts = useMemo(() => {
     const starts = new Map(tl.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]));
-    const out = new Map<string, { key: string; from: number; plate?: string }>();
+    const out = new Map<string, { key: string; from: number; to: number; plate?: string }>();
     for (const s of scenesNeedingCutout(doc, starts)) {
       // What the cutout keeps with the person (the mic they hold...), part of which one it is.
       const keep = keepTag(s);
-      const c = cutoutCovering(
-        doc.analyses.find((a) => a.id === s.source),
-        s.in,
-        s.out,
-        keep,
-      );
+      const analysis = doc.analyses.find((a) => a.id === s.source);
+      // One reaching into the transitions either side; until it's made, one over the shot itself.
+      const wanted = cutoutRange(s, tl, sources.get(s.source)?.duration);
+      const c =
+        cutoutCovering(analysis, wanted.from, wanted.to, keep) ?? cutoutCovering(analysis, s.in, s.out, keep);
       if (!c) continue;
       // A blurred background made without the person (no halo), once it exists.
       const amount = s.background?.kind === "blur" ? (s.background.amount ?? 18) : null;
@@ -169,10 +188,15 @@ export const VideoComposition = ({
         amount !== null && c.blurs?.includes(amount)
           ? blurPlateKey(s.source, c.from, c.to, amount, keep)
           : undefined;
-      out.set(s.id, { key: cutoutKey(s.source, c.from, c.to, keep), from: c.from, ...(plate && { plate }) });
+      out.set(s.id, {
+        key: cutoutKey(s.source, c.from, c.to, keep),
+        from: c.from,
+        to: c.to,
+        ...(plate && { plate }),
+      });
     }
     return out;
-  }, [doc, tl]);
+  }, [doc, tl, sources]);
   // Each shot framed on its person (their tracked face over the shot), or following them as they move.
   const framed = useMemo(() => {
     const out = new Map<string, Framed>();
@@ -188,13 +212,52 @@ export const VideoComposition = ({
     }
     return out;
   }, [tl, doc.analyses, doc.look.reframe, fps, doc.look.follow]);
+  // Smooth versions of slowed shots (in-between frames), once made: a ramped shot's replaces its ramp;
+  // a shot slowed by its speed shows over its footage (which stays, unseen, for its sound).
+  const flows = useMemo(() => {
+    const out = new Map<string, { key: string; from: number; to: number }>();
+    for (const s of doc.scenes) {
+      const src = sources.get(s.source);
+      if (!needsFlow(s, src, fps)) continue;
+      const range = flowRange(s, tl, src?.duration);
+      const hash = flowHash(s, range, fps);
+      if (doc.analyses.find((a) => a.id === s.source)?.flows?.includes(hash))
+        out.set(s.id, { key: flowKey(s.source, hash), ...range });
+    }
+    return out;
+  }, [doc.scenes, doc.analyses, sources, tl, fps]);
   const ramps = useMemo(
     () =>
       new Map(
-        doc.scenes.filter((s) => s.ramp?.length).map((s) => [s.id, rampKey(s.source, rampHash(s, fps))]),
+        doc.scenes
+          .filter((s) => s.ramp?.length)
+          .map((s) => [s.id, flows.get(s.id)?.key ?? rampKey(s.source, rampHash(s, fps))]),
       ),
-    [doc.scenes, fps],
+    [doc.scenes, fps, flows],
   );
+  // Steadied shots: the moves that cancel their camera's shake, once its path is measured.
+  const steadies = useMemo(() => {
+    const out = new Map<string, Steadied>();
+    for (const s of doc.scenes) {
+      const src = sources.get(s.source);
+      if (!s.stabilize || src?.kind !== "video" || !src.width || !src.height) continue;
+      const a = doc.analyses.find((x) => x.id === s.source);
+      const want = cutoutRange(s, tl, src.duration);
+      const path = cameraPathCovering(a, want.from, want.to) ?? cameraPathCovering(a, s.in, s.out);
+      if (!path) continue;
+      const scale = Math.max(width / src.width, height / src.height) * (s.framing?.scale ?? 1);
+      out.set(
+        s.id,
+        steady(
+          path,
+          { amount: s.stabilize.amount ?? 0.6, zoom: s.stabilize.zoom ?? 1.15 },
+          { w: width, h: height },
+          { w: src.width * scale, h: src.height * scale },
+        ),
+      );
+    }
+    return out;
+  }, [doc.scenes, doc.analyses, sources, tl, width, height]);
   const subjectGradeRef = useRef<HTMLDivElement>(null);
   const subjectEffectRefs = useMemo(
     () => Array.from({ length: EFFECT_SLOTS }, () => createRef<HTMLDivElement>()),
@@ -400,6 +463,8 @@ export const VideoComposition = ({
                   cutFade={doc.mix.cutFade}
                   cutouts={cutouts}
                   ramps={ramps}
+                  flows={flows}
+                  steadies={steadies}
                   framed={framed}
                   layer="base"
                 />
@@ -434,6 +499,8 @@ export const VideoComposition = ({
                   cutFade={doc.mix.cutFade}
                   cutouts={cutouts}
                   ramps={ramps}
+                  flows={flows}
+                  steadies={steadies}
                   framed={framed}
                   layer="subject"
                 />
@@ -799,6 +866,8 @@ const Scenes = memo(function Scenes({
   cutFade,
   cutouts,
   ramps,
+  flows,
+  steadies,
   framed,
   layer,
 }: {
@@ -817,9 +886,12 @@ const Scenes = memo(function Scenes({
   /** The short crossfade at every hard cut (mix.cutFade). */
   cutFade: number;
   /** Shots with the person cut out: the cutout's media key and where it starts in the clip. */
-  cutouts: ReadonlyMap<string, { key: string; from: number; plate?: string }>;
+  cutouts: ReadonlyMap<string, { key: string; from: number; to: number; plate?: string }>;
   /** Ramped shots: their rendered footage's media key. */
   ramps: ReadonlyMap<string, string>;
+  /** Shots slowed by their speed, made smooth: the file and the stretch of the clip it covers. */
+  flows: ReadonlyMap<string, { key: string; from: number; to: number }>;
+  steadies: ReadonlyMap<string, Steadied>;
   /** Each shot's framing on its person. */
   framed: ReadonlyMap<string, Framed>;
   /** The footage, or the cut-out person drawn over it (and over anything behind the subject). */
@@ -836,6 +908,8 @@ const Scenes = memo(function Scenes({
   );
   const windows = useMemo(() => transitionWindows(tl, fps, transitions), [tl, fps, transitions]);
   const plan = useMemo(() => audioPlan(tl, jlFade, cutFade), [tl, jlFade, cutFade]);
+  // Whole frames of output in `seconds` of footage at `speed` (what a cutout has to spare past a cut).
+  const spare = (seconds: number, speed: number) => Math.max(0, Math.floor((seconds / speed) * fps + 1e-6));
   return (
     <>
       {tl.scenes.map((p, i) => {
@@ -843,56 +917,76 @@ const Scenes = memo(function Scenes({
         const source = sources.get(p.scene.source);
         const cut = cutouts.get(p.scene.id);
         if (layer === "subject") {
-          // The person alone, placed and moved exactly like the footage under them.
+          // The person alone, placed and moved exactly like the footage under them: through the
+          // transitions either side too (as far as the cutout reaches), moved by them like the footage.
           if (!cut || !source) return null;
           const fr = framed.get(p.scene.id);
           const face = fr?.face ?? faces.get(p.scene.source);
+          const speed = p.scene.speed ?? 1;
+          const own = span.durationInFrames;
+          const early = Math.min(windows.get(p.scene.id)?.before ?? 0, spare(p.scene.in - cut.from, speed));
+          const late = Math.min(
+            windows.get(tl.scenes[i + 1]?.scene.id ?? "")?.after ?? 0,
+            spare(cut.to - p.scene.out, speed),
+          );
           return (
             <Sequence
               key={p.scene.id}
-              from={span.from}
-              durationInFrames={span.durationInFrames}
+              from={span.from - early}
+              durationInFrames={early + own + late}
               premountFor={fps}
               name={`${p.scene.id} subject`}
             >
-              <ShotWindow
-                from={0}
-                to={span.durationInFrames}
-                filter={adjustFilter(p.scene.adjust, `${p.scene.id}-s`)}
-                balance={whiteBalance(p.scene.adjust)}
-                balanceId={`wb-${p.scene.id}-s`}
-                flip={p.scene.flip ?? false}
-              >
-                <ShotMotion
-                  drift={look.drift ? (look.driftAmount ?? DRIFT) : 0}
-                  zoom={jumped[i] ? look.jumpZoom : 1}
-                  framing={p.scene.framing}
-                  face={face}
-                  offset={0}
-                  length={span.durationInFrames}
-                  camera={p.scene.camera}
+              <AbsoluteFill ref={wrappers.get(p.scene.id)}>
+                <ShotWindow
+                  from={0}
+                  to={early + own + late}
+                  filter={adjustFilter(p.scene.adjust, `${p.scene.id}-s`)}
+                  balance={whiteBalance(p.scene.adjust)}
+                  balanceId={`wb-${p.scene.id}-s`}
+                  flip={p.scene.flip ?? false}
                 >
-                  <SubjectLook
-                    look={p.scene.subject}
-                    id={p.scene.id}
-                    accent={accent}
-                    length={span.durationInFrames}
+                  <ShotMotion
+                    drift={look.drift ? (look.driftAmount ?? DRIFT) : 0}
+                    zoom={jumped[i] ? look.jumpZoom : 1}
+                    framing={p.scene.framing}
+                    face={face}
+                    offset={early}
+                    length={own}
+                    camera={p.scene.camera}
                   >
-                    <SceneMedia
-                      scene={{ ...p.scene, in: p.scene.in - cut.from, out: p.scene.out - cut.from }}
-                      face={face}
-                      {...(fr?.path && { follow: { ...fr.path, offset: 0 } })}
-                      backdrop={false}
-                      source={source}
-                      mediaKey={cut.key}
-                      mediaBase={mediaBase}
-                      quality={quality}
-                      muted
-                      volume={0}
-                    />
-                  </SubjectLook>
-                </ShotMotion>
-              </ShotWindow>
+                    <SubjectLook
+                      look={p.scene.subject}
+                      id={p.scene.id}
+                      accent={accent}
+                      offset={early}
+                      length={own}
+                    >
+                      <Steady
+                        st={steadies.get(p.scene.id)}
+                        at={(f) => p.scene.in + ((f - early) / fps) * speed}
+                      >
+                        <SceneMedia
+                          scene={{
+                            ...p.scene,
+                            in: p.scene.in - (early / fps) * speed - cut.from,
+                            out: p.scene.out + (late / fps) * speed - cut.from,
+                          }}
+                          face={face}
+                          {...(fr?.path && { follow: { ...fr.path, offset: early } })}
+                          backdrop={false}
+                          source={source}
+                          mediaKey={cut.key}
+                          mediaBase={mediaBase}
+                          quality={quality}
+                          muted
+                          volume={0}
+                        />
+                      </Steady>
+                    </SubjectLook>
+                  </ShotMotion>
+                </ShotWindow>
+              </AbsoluteFill>
             </Sequence>
           );
         }
@@ -922,6 +1016,12 @@ const Scenes = memo(function Scenes({
           : Math.min(media, p.scene.out + (Math.max(picLate, soundLate) / fps) * speed);
         const lead = Math.round(((p.scene.in - from) / speed) * fps);
         const late = ramp ? 0 : Math.max(picLate, soundLate);
+        const plateEarly = cut ? Math.min(picEarly, lead, spare(p.scene.in - cut.from, speed)) : 0;
+        // Slowed by its speed and made smooth (a halo-free plate, when there is one, shows instead).
+        const flow = ramp || (bg?.kind === "blur" && cut?.plate) ? undefined : flows.get(p.scene.id);
+        const flowEarly = flow ? Math.min(picEarly, lead, spare(p.scene.in - flow.from, speed)) : 0;
+        const steady = steadies.get(p.scene.id);
+        const rmap = steady && ramp ? rampMap(p.scene) : null;
         const own = span.durationInFrames;
         const seqFrom = span.from - lead;
         const extended = lead > 0 || late > 0;
@@ -951,59 +1051,94 @@ const Scenes = memo(function Scenes({
                   length={own}
                   camera={p.scene.camera}
                 >
-                  {/* Behind the cut-out person: the footage blurred, or dimmed (pushed a little so blurred edges stay off frame). */}
-                  <AbsoluteFill
-                    style={
-                      bg?.kind === "blur" && cut?.plate
-                        ? // The halo-free plate shows instead; the footage stays, unseen, for its sound in preview.
-                          { opacity: 0 }
-                        : bg?.kind === "blur"
-                          ? { filter: `blur(${bg.amount ?? 18}px)`, transform: "scale(1.08)" }
-                          : bg?.kind === "dim"
-                            ? { filter: `brightness(${(1 - Math.min(1, bg.amount ?? 0.55)).toFixed(3)})` }
-                            : bg?.kind === "mono"
-                              ? {
-                                  filter: `grayscale(${Math.min(1, bg.amount ?? 1).toFixed(3)}) contrast(1.06)`,
-                                }
-                              : undefined
-                    }
+                  <Steady
+                    st={steady}
+                    at={(f) => (rmap ? p.scene.in + rmap.sourceAt(f / fps) : from + (f / fps) * speed)}
                   >
-                    <SceneMedia
-                      scene={
-                        ramp
-                          ? { ...p.scene, in: 0, out: sceneLength(p.scene), speed: 1 }
-                          : { ...p.scene, in: from, out: to }
+                    {/* Behind the cut-out person: the footage blurred, or dimmed (pushed a little so blurred edges stay off frame). */}
+                    <AbsoluteFill
+                      style={
+                        bg?.kind === "blur" && cut?.plate
+                          ? // The halo-free plate shows instead; the footage stays, unseen, for its sound in preview.
+                            { opacity: 0 }
+                          : bg?.kind === "blur"
+                            ? { filter: `blur(${bg.amount ?? 18}px)`, transform: "scale(1.08)" }
+                            : bg?.kind === "dim"
+                              ? { filter: `brightness(${(1 - Math.min(1, bg.amount ?? 0.55)).toFixed(3)})` }
+                              : bg?.kind === "mono"
+                                ? {
+                                    filter: `grayscale(${Math.min(1, bg.amount ?? 1).toFixed(3)}) contrast(1.06)`,
+                                  }
+                                : undefined
                       }
-                      face={face}
-                      {...(fr?.path && { follow: { ...fr.path, offset: lead } })}
-                      source={source}
-                      {...(ramp && { mediaKey: ramp })}
-                      mediaBase={mediaBase}
-                      quality={quality}
-                      muted={muted || !!ramp}
-                      // Heard where the sound plan says, crossfading with its neighbours (a ramp drops it).
-                      volume={
-                        ramp
-                          ? 0
-                          : extended
-                            ? (f: number) => p.scene.volume * gainAt(sound, (seqFrom + f) / fps)
-                            : p.scene.volume
-                      }
-                    />
-                  </AbsoluteFill>
-                  {bg?.kind === "blur" && cut?.plate && source && (
-                    <SceneMedia
-                      scene={{ ...p.scene, in: from - cut.from, out: to - cut.from }}
-                      face={face}
-                      {...(fr?.path && { follow: { ...fr.path, offset: lead } })}
-                      source={source}
-                      mediaKey={cut.plate}
-                      mediaBase={mediaBase}
-                      quality={quality}
-                      muted
-                      volume={0}
-                    />
-                  )}
+                    >
+                      <AbsoluteFill style={flow ? { opacity: 0 } : undefined}>
+                        <SceneMedia
+                          scene={
+                            ramp
+                              ? { ...p.scene, in: 0, out: sceneLength(p.scene), speed: 1 }
+                              : { ...p.scene, in: from, out: to }
+                          }
+                          face={face}
+                          {...(fr?.path && { follow: { ...fr.path, offset: lead } })}
+                          source={source}
+                          {...(ramp && { mediaKey: ramp })}
+                          mediaBase={mediaBase}
+                          quality={quality}
+                          muted={muted || !!ramp}
+                          // Heard where the sound plan says, crossfading with its neighbours (a ramp drops it).
+                          volume={
+                            ramp
+                              ? 0
+                              : extended
+                                ? (f: number) => p.scene.volume * gainAt(sound, (seqFrom + f) / fps)
+                                : p.scene.volume
+                          }
+                        />
+                      </AbsoluteFill>
+                      {flow && source && (
+                        // Smooth slow motion, picture only: from where the shot shows, as far as it reaches.
+                        <Sequence from={lead - flowEarly} layout="none">
+                          <SceneMedia
+                            scene={{
+                              ...p.scene,
+                              in: (p.scene.in - (flowEarly / fps) * speed - flow.from) / speed,
+                              out: (Math.min(to, flow.to) - flow.from) / speed,
+                              speed: 1,
+                            }}
+                            face={face}
+                            {...(fr?.path && { follow: { ...fr.path, offset: flowEarly } })}
+                            source={source}
+                            mediaKey={flow.key}
+                            mediaBase={mediaBase}
+                            quality={quality}
+                            muted
+                            volume={0}
+                          />
+                        </Sequence>
+                      )}
+                    </AbsoluteFill>
+                    {bg?.kind === "blur" && cut?.plate && source && (
+                      // Picture only: from where the shot shows (not where its sound starts), as far as the plate reaches.
+                      <Sequence from={lead - plateEarly} layout="none">
+                        <SceneMedia
+                          scene={{
+                            ...p.scene,
+                            in: p.scene.in - (plateEarly / fps) * speed - cut.from,
+                            out: Math.min(to, cut.to) - cut.from,
+                          }}
+                          face={face}
+                          {...(fr?.path && { follow: { ...fr.path, offset: plateEarly } })}
+                          source={source}
+                          mediaKey={cut.plate}
+                          mediaBase={mediaBase}
+                          quality={quality}
+                          muted
+                          volume={0}
+                        />
+                      </Sequence>
+                    )}
+                  </Steady>
                   {/* Or replaced: a colour or another clip, with the person drawn over it. */}
                   {bg?.kind === "color" && (
                     <AbsoluteFill style={{ backgroundColor: bg.color ?? "#111111" }} />
@@ -1060,17 +1195,20 @@ export function SubjectLook({
   look,
   id,
   accent,
+  offset = 0,
   length,
   children,
 }: {
   look: Scene["subject"];
   id: string;
   accent: string;
+  /** Frames the shot starts early (into a transition); its look is timed to the shot itself. */
+  offset?: number;
   /** The shot's length in frames. */
   length: number;
   children: ReactNode;
 }) {
-  const frame = useCurrentFrame();
+  const frame = useCurrentFrame() - offset;
   const { fps } = useVideoConfig();
   if (!look || (!look.outline && !look.glow && !look.shadow)) return <>{children}</>;
   const a = look.from ? Math.round(look.from * fps) : null;
@@ -1521,6 +1659,36 @@ function TransitionLayer({
   );
 }
 
+/**
+ * A steadied shot: each frame moved to where the smooth camera path puts it (cancelling the shake),
+ * zoomed to keep the frame filled. `at`: the clip second showing at a frame of the shot's sequence.
+ */
+function Steady({
+  st,
+  at,
+  children,
+}: {
+  st: Steadied | undefined;
+  at: (frame: number) => number;
+  children: ReactNode;
+}) {
+  const frame = useCurrentFrame();
+  if (!st) return <>{children}</>;
+  const m = steadyAt(st, at(frame));
+  // Moves are shares of the footage as shown; the zoom makes room for them.
+  const tx = (m.x * st.shown.w).toFixed(2);
+  const ty = (m.y * st.shown.h).toFixed(2);
+  return (
+    <AbsoluteFill
+      style={{
+        transform: `scale(${st.zoom.toFixed(4)}) translate(${tx}px, ${ty}px) rotate(${m.a.toFixed(5)}rad) scale(${Math.exp(m.s).toFixed(5)})`,
+      }}
+    >
+      {children}
+    </AbsoluteFill>
+  );
+}
+
 /** Per-shot movement: the drift push-in and the jump-cut zoom, around the framing point. */
 function ShotMotion({
   drift,
@@ -1642,8 +1810,8 @@ function ClipMedia({
         {source.kind === "video" ? (
           <Video
             src={src}
-            trimBefore={toFrame(from, fps)}
-            {...(to !== undefined && { trimAfter: toFrame(to, fps) })}
+            trimBefore={trimFrom(from, fps)}
+            {...(to !== undefined && { trimAfter: trimTo(to, fps, from) })}
             playbackRate={speed}
             volume={0}
             muted
@@ -1664,8 +1832,8 @@ function ClipMedia({
         {behind}
         <Video
           src={src}
-          trimBefore={toFrame(from, fps)}
-          {...(to !== undefined && { trimAfter: toFrame(to, fps) })}
+          trimBefore={trimFrom(from, fps)}
+          {...(to !== undefined && { trimAfter: trimTo(to, fps, from) })}
           playbackRate={speed}
           volume={apart ? 0 : volume}
           muted={apart || muted}
@@ -1675,8 +1843,8 @@ function ClipMedia({
         {apart && (
           <Sound
             src={src}
-            trimBefore={toFrame(from, fps)}
-            {...(to !== undefined && { trimAfter: toFrame(to, fps) })}
+            trimBefore={trimFrom(from, fps)}
+            {...(to !== undefined && { trimAfter: trimTo(to, fps, from) })}
             {...(speed !== undefined && { playbackRate: speed })}
             volume={volume}
           />
@@ -2370,8 +2538,8 @@ function SoundEffect({ sfx, mediaBase, level }: { sfx: Timed<Sfx>; mediaBase: st
   return s.source ? (
     <Sound
       src={`${mediaBase}${encodeURIComponent(s.source)}`}
-      trimBefore={toFrame(s.offset ?? 0, fps)}
-      trimAfter={toFrame(s.offset ?? 0, fps) + n}
+      trimBefore={trimFrom(s.offset ?? 0, fps)}
+      trimAfter={trimFrom(s.offset ?? 0, fps) + Math.max(1, n)}
       volume={volume}
     />
   ) : (
@@ -2411,7 +2579,7 @@ function MusicClipAudio({
   return (
     <Sound
       src={`${mediaBase}${encodeURIComponent(m.source)}`}
-      trimBefore={toFrame(m.offset, fps)}
+      trimBefore={trimFrom(m.offset, fps)}
       loop={m.loop}
       volume={(f) =>
         level *
@@ -2475,8 +2643,8 @@ function Music({
   return (
     <Sound
       src={`${mediaBase}${encodeURIComponent(source!)}`}
-      trimBefore={toFrame(section ? section.start : offset, fps)}
-      {...(section && section.end > section.start && { trimAfter: toFrame(section.end, fps) })}
+      trimBefore={trimFrom(section ? section.start : offset, fps)}
+      {...(section && section.end > section.start && { trimAfter: trimTo(section.end, fps, section.start) })}
       loop={doc.music.loop}
       volume={(f) => doc.mix.musicLevel * ducked(f) * fades(f) * cueGain(f)}
     />

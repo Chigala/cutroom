@@ -117,6 +117,8 @@ export interface AgentHost {
   peaks?(sourceId: string, doc: ProjectDoc): Promise<Uint8Array | null>;
   /** Makes the cutouts `doc` needs (the person separated from the background); ops record new ones. */
   cutouts?(doc: ProjectDoc): Promise<Op[]>;
+  /** Makes what steadied and slowed shots need (camera paths, in-between frames); ops record them. */
+  footage?(doc: ProjectDoc): Promise<Op[]>;
   /** Searches Pexels and Pixabay: candidates and a contact sheet of them. */
   findStock?(
     query: string,
@@ -1308,6 +1310,23 @@ export const TOOLS: readonly AgentTool[] = [
       return result.isError
         ? result
         : { text: `Cut out the person in ${ops.length} ${ops.length === 1 ? "clip" : "clips"}.` };
+    },
+  }),
+  tool({
+    name: "steady_and_smooth",
+    description:
+      "Make what steadied and slowed shots need now: a steadied shot's (scene.stabilize) camera path, and a slowed shot's in-between frames (speed under 1 or a ramp, slower than its footage has frames for). Both are also made automatically in the background; call this after setting them and before you look at frames, so the frames show the result. Steadying takes a second or two; smooth slow motion about 5 to 20 seconds per second of slowed footage, once (cached).",
+    input: z.object({ label: Label }),
+    async run({ label }, ctx) {
+      if (!ctx.host.footage) return { text: "Not available here.", isError: true };
+      const ops = await ctx.host.footage(ctx.scratch.doc);
+      if (!ops.length) return { text: "Every steadied and slowed shot is already made (or there are none)." };
+      const result = commit(ctx, label, ops);
+      return result.isError
+        ? result
+        : {
+            text: `Made the steadied and slowed footage of ${ops.length} ${ops.length === 1 ? "clip" : "clips"}.`,
+          };
     },
   }),
   tool({

@@ -214,7 +214,9 @@ function ProjectButton({
         aria-current={current ? "page" : undefined}
         title={open ? project.dir : undefined}
         onClick={() => {
-          if (!current) void openProject(() => host.project.open(project.dir));
+          // The open one takes you back to its editor (from Inspirations, say); another switches to it.
+          if (current) setUi({ view: "editor" });
+          else void openProject(() => host.project.open(project.dir));
         }}
         onContextMenu={(e) => {
           e.preventDefault();

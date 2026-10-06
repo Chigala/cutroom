@@ -6,6 +6,7 @@
 
 import { ArrowClockwiseIcon, CheckCircleIcon, CircleNotchIcon, WarningIcon } from "@phosphor-icons/react";
 import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
+import { clsx } from "clsx";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
@@ -40,7 +41,7 @@ export function ClaudeSetup() {
 
   if (!status) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-line px-3 py-2.5 text-[13px] text-muted">
+      <div className="flex items-center gap-2.5 rounded-xl bg-sunken/70 px-4 py-3.5 text-[13.5px] text-muted">
         <CircleNotchIcon size={14} className="animate-spin" /> Looking for Claude Code…
       </div>
     );
@@ -62,26 +63,29 @@ export function ClaudeSetup() {
   const updatable = !missing && status.source !== "bundled" && status.versionState !== "ok";
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-lg border border-line px-3 py-2.5">
-      <div className="flex items-start gap-2.5">
-        {ok ? (
-          <CheckCircleIcon size={16} className="mt-0.5 shrink-0 text-ok" />
-        ) : (
-          <WarningIcon size={16} className="mt-0.5 shrink-0 text-accent" />
-        )}
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-[13px] text-fg">
+    <div className="flex flex-col gap-3.5 rounded-xl bg-sunken/70 px-4 py-4">
+      <div className="flex items-start gap-3">
+        <span
+          className={clsx(
+            "flex size-8 shrink-0 items-center justify-center rounded-full",
+            ok ? "bg-ok/12 text-ok" : "bg-accent/12 text-accent",
+          )}
+        >
+          {ok ? <CheckCircleIcon size={17} weight="fill" /> : <WarningIcon size={17} weight="fill" />}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1 pt-px">
+          <span className="truncate text-[14px] font-medium text-fg">
             {headline}
             {status.method && status.signedIn && <span className="text-muted"> · {status.method}</span>}
           </span>
           {!missing && (
-            <span className="truncate text-xs text-muted" title={status.path}>
+            <span className="truncate text-[13px] text-muted" title={status.path}>
               Claude Code {status.version ?? "(unknown version)"} · {WHERE[status.source]}
               {status.source !== "bundled" && status.path && ` (${home(status.path)})`}
             </span>
           )}
           {missing && (
-            <span className="text-xs text-muted">
+            <span className="text-[13px] leading-relaxed text-muted">
               The agent runs on Claude Code, with your Claude subscription. Installing it takes a minute.
             </span>
           )}

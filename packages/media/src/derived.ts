@@ -1,12 +1,12 @@
 /**
  * Footage made from footage, cached per project: a ramped shot (the velocity edit, rendered frame by
- * frame so preview and export match exactly) and a cutout (the person alone, on transparency, from
+ * frame so preview and export match exactly), a slowed one with in-between frames, and a cutout (the person alone, on transparency, from
  * Apple's person segmentation, so graphics can sit behind them and the background can change).
  */
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cpus, tmpdir } from "node:os";
 import path from "node:path";
 import {
   CACHE_DIR,
@@ -26,89 +26,180 @@ import { addForeground, keepOnlyPeople, matteFrames } from "./vision.ts";
 const opts = (signal?: AbortSignal) => (signal ? { signal } : {});
 
 /**
+ * Footage [from, to) of `video` as JPEG frames in `dir`, `rate` a second (up to 1080 high). With
+ * `interpolate`, the frames the footage doesn't have are made by motion interpolation (ffmpeg's
+ * minterpolate: each pixel's motion estimated between real frames and the picture moved along it), in
+ * pieces side by side (it's slow: a few frames a second each). Returns the frame file
+ * nearest clip second `t`.
+ */
+async function footageFrames(
+  video: string,
+  from: number,
+  to: number,
+  rate: number,
+  dir: string,
+  { interpolate = false, signal }: { interpolate?: boolean; signal?: AbortSignal } = {},
+): Promise<(t: number) => string> {
+  const scale = "scale=-2:'min(1080,ih)'";
+  const length = Math.max(1 / rate, to - from);
+  // Pieces, each with a little footage either side for the motion to be read from.
+  // Three at once is quickest: each holds several full frames, and more fight over memory.
+  const count = interpolate ? Math.max(1, Math.min(3, cpus().length - 1, Math.ceil(length / 0.4))) : 1;
+  const piece = length / count;
+  // A few real frames either side is all the motion needs.
+  const pad = 0.1;
+  const made = await Promise.all(
+    Array.from({ length: count }, async (_, j) => {
+      const start = from + j * piece;
+      const lead = interpolate ? Math.min(pad, start) : 0;
+      const filter = interpolate
+        ? `${scale},minterpolate=fps=${rate}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,trim=start=${lead.toFixed(3)}:end=${(lead + piece).toFixed(3)},setpts=PTS-STARTPTS`
+        : `fps=${rate},${scale}`;
+      await run(
+        "ffmpeg",
+        [
+          "-v",
+          "error",
+          "-y",
+          "-ss",
+          (start - lead).toFixed(3),
+          "-t",
+          (piece + lead + (interpolate ? pad : 0)).toFixed(3),
+          "-i",
+          video,
+          "-vf",
+          filter,
+          "-q:v",
+          "2",
+          path.join(dir, `${j}_%06d.jpg`),
+        ],
+        opts(signal),
+      );
+      return (await readdir(dir)).filter((f) => f.startsWith(`${j}_`) && f.endsWith(".jpg")).sort();
+    }),
+  );
+  if (!made.some((m) => m.length)) throw new Error("No footage in that stretch");
+  return (t) => {
+    const j = Math.max(0, Math.min(count - 1, Math.floor((t - from) / piece)));
+    // A piece that came out empty (past the clip's end): the last frame there is.
+    let k = j;
+    while (k > 0 && !made[k]!.length) k--;
+    const frames = made[k]!.length ? made[k]! : made.find((m) => m.length)!;
+    const i = Math.round((t - (from + k * piece)) * rate);
+    return path.join(dir, frames[Math.min(frames.length - 1, Math.max(0, i))]!);
+  };
+}
+
+/** Frame files, one per output frame at `fps`, encoded into `out`. No sound. */
+async function encodeFrames(
+  frames: readonly string[],
+  out: string,
+  dir: string,
+  { fps, signal }: { fps: number; signal?: AbortSignal | undefined },
+): Promise<string> {
+  const lines: string[] = [];
+  for (const f of frames) lines.push(`file '${f}'`, `duration ${(1 / fps).toFixed(6)}`);
+  // The concat demuxer needs the last file once more to honour its duration.
+  lines.push(lines.at(-2)!);
+  const list = path.join(dir, "list.txt");
+  await writeFile(list, lines.join("\n"));
+  await mkdir(path.dirname(out), { recursive: true });
+  const part = `${out}.part.mp4`;
+  await run(
+    "ffmpeg",
+    [
+      "-v",
+      "error",
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      list,
+      "-vf",
+      `fps=${fps},format=yuv420p`,
+      "-frames:v",
+      String(frames.length),
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "17",
+      "-r",
+      String(fps),
+      "-an",
+      "-movflags",
+      "+faststart",
+      part,
+    ],
+    opts(signal),
+  );
+  await rename(part, out);
+  return out;
+}
+
+/** In-between frames a second for footage slowed to `slowest` to play smoothly at `fps` (at most 240). */
+const flowRate = (fps: number, slowest: number) => Math.min(240, Math.max(fps, Math.ceil(fps / slowest)));
+
+/**
  * The shot's footage [from, to) re-timed through its ramp, at `fps`: each output frame shows the
  * source frame the speed curve lands on. Slow stretches use the footage's own frame rate (60 fps
- * footage gives real slow motion, not repeated frames). No sound.
+ * footage gives real slow motion, not repeated frames), or with `interpolate`, frames made between
+ * them. No sound.
  */
 export async function makeRamp(
   video: string,
   shot: { in: number; out: number; ramp: readonly RampPoint[] },
   out: string,
-  { fps, sourceFps = 30, signal }: { fps: number; sourceFps?: number; signal?: AbortSignal },
+  {
+    fps,
+    sourceFps = 30,
+    interpolate = false,
+    signal,
+  }: { fps: number; sourceFps?: number; interpolate?: boolean; signal?: AbortSignal },
 ): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "vedit-ramp-"));
   try {
-    const rate = Math.max(fps, Math.min(120, Math.round(sourceFps)));
-    await run(
-      "ffmpeg",
-      [
-        "-v",
-        "error",
-        "-y",
-        "-ss",
-        shot.in.toFixed(3),
-        "-t",
-        (shot.out - shot.in).toFixed(3),
-        "-i",
-        video,
-        "-vf",
-        `fps=${rate},scale=-2:'min(1080,ih)'`,
-        "-q:v",
-        "2",
-        path.join(dir, "%06d.jpg"),
-      ],
-      opts(signal),
-    );
-    const frames = (await readdir(dir)).filter((f) => f.endsWith(".jpg")).sort();
-    if (!frames.length) throw new Error("No footage in that stretch");
+    const rate = interpolate
+      ? flowRate(fps, Math.min(...shot.ramp.map((r) => r.speed)))
+      : Math.max(fps, Math.min(120, Math.round(sourceFps)));
+    const frameAt = await footageFrames(video, shot.in, shot.out, rate, dir, {
+      interpolate,
+      ...(signal && { signal }),
+    });
     const map = rampMap(shot);
     const count = Math.max(1, Math.round(map.length * fps));
-    const lines: string[] = [];
-    for (let k = 0; k < count; k++) {
-      // The footage moment at the middle of this output frame.
-      const s = map.sourceAt((k + 0.5) / fps);
-      const i = Math.min(frames.length - 1, Math.max(0, Math.round(s * rate)));
-      lines.push(`file '${path.join(dir, frames[i]!)}'`, `duration ${(1 / fps).toFixed(6)}`);
-    }
-    // The concat demuxer needs the last file once more to honour its duration.
-    lines.push(lines.at(-2)!);
-    const list = path.join(dir, "list.txt");
-    await writeFile(list, lines.join("\n"));
-    await mkdir(path.dirname(out), { recursive: true });
-    const part = `${out}.part.mp4`;
-    await run(
-      "ffmpeg",
-      [
-        "-v",
-        "error",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        list,
-        "-vf",
-        `fps=${fps},format=yuv420p`,
-        "-frames:v",
-        String(count),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "17",
-        "-r",
-        String(fps),
-        "-an",
-        "-movflags",
-        "+faststart",
-        part,
-      ],
-      opts(signal),
-    );
-    await rename(part, out);
-    return out;
+    // The footage moment at the middle of each output frame.
+    const frames = Array.from({ length: count }, (_, k) => frameAt(shot.in + map.sourceAt((k + 0.5) / fps)));
+    return await encodeFrames(frames, out, dir, { fps, signal });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Footage [from, to) slowed to `speed` (under 1) with in-between frames made by motion interpolation,
+ * at `fps`: second u of the file shows clip second from + u * speed. No sound (the shot's own plays
+ * as it is).
+ */
+export async function makeSlow(
+  video: string,
+  shot: { from: number; to: number; speed: number },
+  out: string,
+  { fps, signal }: { fps: number; signal?: AbortSignal },
+): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "vedit-slow-"));
+  try {
+    const rate = flowRate(fps, shot.speed);
+    const frameAt = await footageFrames(video, shot.from, shot.to, rate, dir, {
+      interpolate: true,
+      ...(signal && { signal }),
+    });
+    const count = Math.max(1, Math.round(((shot.to - shot.from) / shot.speed) * fps));
+    const frames = Array.from({ length: count }, (_, k) => frameAt(shot.from + (k / fps) * shot.speed));
+    return await encodeFrames(frames, out, dir, { fps, signal });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -501,6 +592,7 @@ export const derivedPaths = (projectDir: string) => ({
       `${source}_${from.toFixed(2)}_${to.toFixed(2)}${keep ? `_${keep}` : ""}.webm`,
     ),
   ramp: (source: string, hash: string) => path.join(projectDir, CACHE_DIR, "ramp", `${source}_${hash}.mp4`),
+  flow: (source: string, hash: string) => path.join(projectDir, CACHE_DIR, "flow", `${source}_${hash}.mp4`),
   /** A cover's stills from one moment of a clip: its frame, the person cut out, the background blurred. */
   cover: (source: string, t: number, part: string) =>
     path.join(projectDir, CACHE_DIR, "cover", `${source}_${t.toFixed(2)}_${part}.png`),
@@ -566,6 +658,11 @@ export async function resolveDerived(
   }
   if (d.kind === "bgblur") {
     const file = paths.blur(d.source, d.from, d.to, d.amount, d.keep);
+    return existsSync(file) ? file : null;
+  }
+  // Made in the background (they take a while): served once they exist.
+  if (d.kind === "flow") {
+    const file = paths.flow(d.source, d.hash);
     return existsSync(file) ? file : null;
   }
   const file = paths.ramp(d.source, d.hash);
@@ -803,9 +900,10 @@ export async function makeBlurPlate(
   const r = Math.max(1, radius / 2);
   const weight = new Float32Array(size);
   const tmp = new Float32Array(size);
+  const base = [new Float32Array(size), new Float32Array(size), new Float32Array(size)];
   const planes = [new Float32Array(size), new Float32Array(size), new Float32Array(size)];
-  const wide = [new Float32Array(size), new Float32Array(size), new Float32Array(size)];
-  const weightWide = new Float32Array(size);
+  const den = new Float32Array(size);
+  const filled = new Uint8Array(size);
   const result = Buffer.alloc(size * 3);
   const mattes = framesOf(matte, size);
   for await (const frame of framesOf(picture, size * 3)) {
@@ -815,24 +913,42 @@ export async function makeBlurPlate(
     boxBlur(weight, tmp, w, h, 2);
     for (let i = 0; i < size; i++) weight[i] = weight[i]! < 0.02 ? 1 : Math.max(0, 1 - weight[i]! / 0.08);
     for (let c = 0; c < 3; c++) {
-      const p = planes[c]!;
-      for (let i = 0; i < size; i++) p[i] = (frame[i * 3 + c]! / 255) * weight[i]!;
-      wide[c]!.set(p);
-      gaussian(p, tmp, w, h, r);
-      gaussian(wide[c]!, tmp, w, h, r * 4);
+      const b = base[c]!;
+      for (let i = 0; i < size; i++) b[i] = (frame[i * 3 + c]! / 255) * weight[i]!;
     }
-    weightWide.set(weight);
-    const den = weight;
-    gaussian(den, tmp, w, h, r);
-    gaussian(weightWide, tmp, w, h, r * 4);
-    for (let i = 0; i < size; i++) {
-      // Where the person covers a wide area, the near blur has no background to average: reach further.
-      const near = den[i]!;
-      const far = weightWide[i]!;
+    // The blur asked for; where the person covers more than it reaches, wider and wider until every
+    // pixel has background to average. The person never shows through their own background.
+    filled.fill(0);
+    let left = size;
+    for (let reach = r, first = true; left > 0 && reach < 4 * Math.max(w, h); reach *= 4, first = false) {
+      den.set(weight);
+      gaussian(den, tmp, w, h, reach);
       for (let c = 0; c < 3; c++) {
-        const v =
-          near > 0.05 ? planes[c]![i]! / near : far > 1e-3 ? wide[c]![i]! / far : frame[i * 3 + c]! / 255;
-        result[i * 3 + c] = Math.max(0, Math.min(255, Math.round(v * 255)));
+        planes[c]!.set(base[c]!);
+        gaussian(planes[c]!, tmp, w, h, reach);
+      }
+      const enough = first ? 0.05 : 1e-3;
+      for (let i = 0; i < size; i++) {
+        if (filled[i] || den[i]! <= enough) continue;
+        for (let c = 0; c < 3; c++)
+          result[i * 3 + c] = Math.max(0, Math.min(255, Math.round((planes[c]![i]! / den[i]!) * 255)));
+        filled[i] = 1;
+        left--;
+      }
+    }
+    if (left > 0) {
+      // Still some (the person fills the frame): the background's average colour, or the frame itself
+      // when there's no background at all.
+      let total = 0;
+      const sum = [0, 0, 0];
+      for (let i = 0; i < size; i++) {
+        total += weight[i]!;
+        for (let c = 0; c < 3; c++) sum[c]! += base[c]![i]!;
+      }
+      for (let i = 0; i < size; i++) {
+        if (filled[i]) continue;
+        for (let c = 0; c < 3; c++)
+          result[i * 3 + c] = total > 1 ? Math.round((sum[c]! / total) * 255) : frame[i * 3 + c]!;
       }
     }
     if (!encode.stdin.write(result)) await new Promise((r2) => encode.stdin.once("drain", r2));

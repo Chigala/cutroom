@@ -45,6 +45,7 @@ import {
   isMedia,
   measureJoins,
   type Probed,
+  playableCopy,
   probe,
   resolveDerived,
   STOCK_LICENSE,
@@ -101,6 +102,7 @@ import { claudeStatus, claudeTasks } from "./claude.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
+import { makeNeededFootage } from "./footage.ts";
 import { History } from "./history.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { InspirationStore } from "./inspirations.ts";
@@ -334,6 +336,7 @@ export class ProjectService {
     this.store = next;
     next.watch();
     await this.rescueTemporary(next);
+    void this.convertUnplayable(next);
     // Built-ins added to the app since this project last opened: written in as its own files.
     const starters = starterOps(next.doc);
     if (starters.length)
@@ -873,6 +876,33 @@ export class ProjectService {
       store.commitAndBroadcast({ author: "index", message: "Kept copies of temporary files", ops });
   }
 
+  /**
+   * Photos and sounds the app can't show or play, from before it converted them on the way in (an
+   * iPhone's HEIC, AIFF): converted now, in the background, and the clips pointed at the copies.
+   */
+  private async convertUnplayable(store: ProjectStore): Promise<void> {
+    const ops: Op[] = [];
+    for (const s of store.doc.sources) {
+      if (!s.path || (s.kind !== "image" && s.kind !== "audio") || !existsSync(s.path)) continue;
+      try {
+        const file = await playableCopy(s.path, path.join(store.dir, CONVERTED_DIR));
+        if (file === s.path) continue;
+        const p = await probe(file);
+        ops.push({
+          op: "update",
+          coll: "sources",
+          id: s.id,
+          patch: { path: file, ...(p.width && p.height && { width: p.width, height: p.height }) },
+        });
+      } catch (err) {
+        console.warn(`[convert] ${s.id}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    // Still open (on screen, or working in the background).
+    if (ops.length && (this.store === store || this.background.get(store.dir) === store))
+      store.commitAndBroadcast({ author: "index", message: "Converted photos and sounds to play here", ops });
+  }
+
   /** The system file picker for clips (video, audio, photos), then an ordinary import. */
   async pickAndImport(): Promise<CommitResult | null> {
     this.requireStore();
@@ -971,7 +1001,7 @@ export class ProjectService {
     const origin = { url: "", provider: "library", license: "", author: "" };
     const made = fetchedSourceOps(
       doc,
-      await probe(target),
+      await probeIn(target, store.dir),
       asset.name,
       origin,
       asset.description || asset.name,
@@ -1042,7 +1072,7 @@ export class ProjectService {
       ).map((f) => keepCopy(f, store.dir)),
     );
     if (!files.length) return { ok: false, error: "No video, photo or audio files in that drop." };
-    const probed = await Promise.all(files.map((f) => probe(f).catch((err: Error) => err)));
+    const probed = await Promise.all(files.map((f) => probeIn(f, store.dir).catch((err: Error) => err)));
     const ok = probed.filter((p): p is Probed => !(p instanceof Error));
     const failures = probed.filter((p): p is Error => p instanceof Error);
     if (!ok.length) return { ok: false, error: failures[0]?.message ?? "Could not read those files." };
@@ -1129,7 +1159,7 @@ export class ProjectService {
   private async attachTo(store: ProjectStore, files: string[]): Promise<AttachResult> {
     if (!files.length) return { ok: false, error: "Nothing to attach." };
     for (let i = 0; i < files.length; i++) files[i] = await keepCopy(files[i]!, store.dir);
-    const probed = await Promise.all(files.map((f) => probe(f).catch((err: Error) => err)));
+    const probed = await Promise.all(files.map((f) => probeIn(f, store.dir).catch((err: Error) => err)));
     const failed = probed.find((p): p is Error => p instanceof Error);
     if (failed) return { ok: false, error: `Couldn't read that file: ${failed.message}` };
     const doc = store.doc;
@@ -1387,6 +1417,7 @@ export class ProjectService {
       ...(cutoutsAvailable() && {
         cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
+      footage: async (doc: ProjectDoc) => makeNeededFootage(store.dir, doc),
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
         const keys = {
@@ -1408,7 +1439,11 @@ export class ProjectService {
           license: c.license,
           author: c.credit ? c.author : "",
         };
-        return { ...fetchedSourceOps(doc, await probe(file), label, origin, c.title), hit, tail };
+        return {
+          ...fetchedSourceOps(doc, await probeIn(file, store.dir), label, origin, c.title),
+          hit,
+          tail,
+        };
       },
       addStock: async (c, label, doc) => {
         const file = await downloadStock(c, path.join(store.dir, "media", "stock"));
@@ -1418,7 +1453,7 @@ export class ProjectService {
           license: STOCK_LICENSE[c.provider],
           author: c.author,
         };
-        return fetchedSourceOps(doc, await probe(file), label, origin, c.about);
+        return fetchedSourceOps(doc, await probeIn(file, store.dir), label, origin, c.about);
       },
       findMemes: async (query, kind) => {
         const settings = await getSettings();
@@ -1453,7 +1488,8 @@ export class ProjectService {
 
   /**
    * After edits settle: make any cutout the project now needs (a background change, something behind
-   * the subject), one job at a time, and record it so the subject layer switches on.
+   * the subject), then any steadied or slowed shot's footage, one job at a time, and record them so they
+   * switch on.
    */
   private scheduleCutouts(): void {
     clearTimeout(this.cutoutTimer);
@@ -1474,6 +1510,24 @@ export class ProjectService {
         } catch (err) {
           console.error("[cutout] failed:", err);
           this.emit("error", { message: `Couldn't cut out the person: ${(err as Error).message}` });
+        }
+        // Then steadied and slowed shots (after the cutouts' record, so each sees the other's).
+        if (this.store !== store) return;
+        try {
+          const touched = new Set<string>();
+          const ops = await makeNeededFootage(store.dir, store.doc, {
+            onProgress: (source, fraction, label) => {
+              touched.add(source);
+              this.emit("index", { source, stage: "analyze", fraction, label });
+            },
+          });
+          for (const id of touched)
+            this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
+          if (ops.length && this.store === store)
+            store.commitAndBroadcast({ author: "index", message: "Steadied and smoothed shots", ops });
+        } catch (err) {
+          console.error("[footage] failed:", err);
+          this.emit("error", { message: `Couldn't steady or smooth a shot: ${(err as Error).message}` });
         }
       });
     }, 800);
@@ -1827,6 +1881,13 @@ const inside = (root: string, file: string) => {
 const isTemporary = (file: string) =>
   file.split(/[\\/]/).includes("TemporaryItems") || TEMP_ROOTS.some((r) => inside(r, file));
 
+/** Photos and sounds converted for the app (playable.ts): in the project, beside its other media. */
+const CONVERTED_DIR = "media/converted";
+
+/** A file coming into the project, read once it's in a form the app can show or play. */
+const probeIn = async (file: string, projectDir: string): Promise<Probed> =>
+  probe(await playableCopy(file, path.join(projectDir, CONVERTED_DIR)));
+
 async function keepCopy(file: string, projectDir: string): Promise<string> {
   if (!isTemporary(file)) return file;
   const dir = path.join(projectDir, ATTACHMENTS_DIR);
@@ -1867,6 +1928,9 @@ const MEDIA_EXTENSIONS = [
   "png",
   "heic",
   "heif",
+  "hif",
+  "avif",
+  "bmp",
   "webp",
   "gif",
   "tif",

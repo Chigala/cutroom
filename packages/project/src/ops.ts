@@ -52,23 +52,31 @@ const Patch = z
  * Runtime schema for one op. Built per collection so the agent sees the exact item shape it must insert,
  * and so ops crossing a process boundary (IPC, files, the model) are checked before they touch a doc.
  */
-export const OpSchema: z.ZodType<Op> = z.union([
-  ...COLLECTIONS.flatMap((c) => [
-    z.object({
-      op: z.literal("insert"),
-      coll: z.literal(c),
-      item: CollectionSchemas[c],
-      index: Index.optional().describe("Position to insert at; appends when omitted"),
-    }),
-    z.object({ op: z.literal("update"), coll: z.literal(c), id: idOf(c), patch: Patch }),
-    z.object({ op: z.literal("remove"), coll: z.literal(c), id: idOf(c) }),
-    z.object({ op: z.literal("move"), coll: z.literal(c), id: idOf(c), index: Index }),
-  ]),
-  ...SINGLETONS.flatMap((key) => [
-    z.object({ op: z.literal("set"), key: z.literal(key), value: SingletonSchemas[key] }),
-    ...(key === "style" ? [] : [z.object({ op: z.literal("merge"), key: z.literal(key), patch: Patch })]),
-  ]),
-] as unknown as [z.ZodType<Op>, ...z.ZodType<Op>[]]);
+/** An op schema over some collections and singletons: what a caller (like the agent) may change. */
+export function opSchemaFor(
+  colls: readonly Collection[],
+  singletons: readonly Singleton[] = SINGLETONS,
+): z.ZodType<Op> {
+  return z.union([
+    ...colls.flatMap((c) => [
+      z.object({
+        op: z.literal("insert"),
+        coll: z.literal(c),
+        item: CollectionSchemas[c],
+        index: Index.optional().describe("Position to insert at; appends when omitted"),
+      }),
+      z.object({ op: z.literal("update"), coll: z.literal(c), id: idOf(c), patch: Patch }),
+      z.object({ op: z.literal("remove"), coll: z.literal(c), id: idOf(c) }),
+      z.object({ op: z.literal("move"), coll: z.literal(c), id: idOf(c), index: Index }),
+    ]),
+    ...singletons.flatMap((key) => [
+      z.object({ op: z.literal("set"), key: z.literal(key), value: SingletonSchemas[key] }),
+      ...(key === "style" ? [] : [z.object({ op: z.literal("merge"), key: z.literal(key), patch: Patch })]),
+    ]),
+  ] as unknown as [z.ZodType<Op>, ...z.ZodType<Op>[]]);
+}
+
+export const OpSchema: z.ZodType<Op> = opSchemaFor(COLLECTIONS);
 
 export interface Applied {
   readonly doc: ProjectDoc;

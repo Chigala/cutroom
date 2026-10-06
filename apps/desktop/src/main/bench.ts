@@ -26,6 +26,8 @@ const BenchSpec = z.object({
         name: z.string().regex(/^[a-z0-9-]{1,40}$/, "lower-case letters, digits and dashes"),
         clips: z.array(z.string()).min(1),
         brief: z.string().min(1).max(8000),
+        /** An inspiration the project follows before the brief: built in or the user's own. */
+        inspiration: z.string().max(64).optional(),
         /** Follow-up requests after the first cut, in order (a revision round). */
         followUps: z.array(z.string().max(8000)).default([]),
       }),
@@ -65,6 +67,11 @@ export async function runBench(service: ProjectService, file: string): Promise<s
       await service.benchProject(dir, c.clips.map(home));
       await imported;
       indexMs = Date.now() - t0;
+      if (c.inspiration) {
+        const applied = await service.applyInspiration(c.inspiration, false);
+        if (!applied.ok) throw new Error(`inspiration ${c.inspiration}: ${applied.error}`);
+        console.log(`[bench] ${c.name}: following ${c.inspiration}`);
+      }
       for (const [i, prompt] of [c.brief, ...c.followUps].entries()) {
         console.log(`[bench] ${c.name}: request ${i + 1}`);
         const t1 = Date.now();

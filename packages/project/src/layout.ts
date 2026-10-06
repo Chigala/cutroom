@@ -25,6 +25,7 @@
 import { z } from "zod";
 import { captionLookMeta, STARTER_CAPTION_LOOKS } from "./caption-looks.ts";
 import { FONTS_DIR } from "./fonts.ts";
+import { inspirationMeta } from "./inspiration.ts";
 import {
   Analysis,
   Caption,
@@ -36,6 +37,7 @@ import {
   Effect,
   ExportSettings,
   Graphic,
+  Inspiration,
   type ItemOf,
   Look,
   Meta,
@@ -164,7 +166,13 @@ export const PROJECT_FILES: readonly ProjectFile[] = [
  * A folder where every file is one item of a collection: graphics/<id>.html. Folders, not one big JSON
  * file, because these are documents people open and edit one at a time, like pages of a website.
  */
-export type DirSection = "graphics" | "captionLooks" | "effectKinds" | "transitionKinds" | "grades";
+export type DirSection =
+  | "graphics"
+  | "captionLooks"
+  | "effectKinds"
+  | "transitionKinds"
+  | "grades"
+  | "inspirations";
 
 export interface ProjectDir<S extends DirSection = DirSection> {
   readonly dir: string;
@@ -227,6 +235,17 @@ export const PROJECT_DIRS: readonly ProjectDir[] = [
   styleDir("effects", "effectKinds", "Effects, as CSS", STARTER_EFFECTS),
   styleDir("transitions", "transitionKinds", "Transitions between shots, as CSS", STARTER_TRANSITIONS),
   styleDir("grades", "grades", "Colour grades, as CSS", STARTER_GRADES),
+  dir({
+    dir: "inspirations",
+    ext: ".md",
+    section: "inspirations",
+    describe: "Editing styles this video follows: the recipe in words, with its settings",
+    serialize: (i) => withNewline(i.md),
+    parse: (id, text) => Inspiration.parse({ id, md: text }),
+    name: (i) => inspirationMeta(i.md)?.name,
+    // Only the ones applied to it: the library is the user's, not each project's.
+    starters: [],
+  }),
 ];
 
 /** "graphics/callout.html" -> its folder and item id, if the path is an item of a project folder. */

@@ -11,7 +11,21 @@ import type {
   ProjectSnapshot,
   Settings,
 } from "@vedit/bridge";
-import { type Commit, demoProject, makeCommit, OpError, type ProjectDoc } from "@vedit/project";
+import {
+  type Commit,
+  demoProject,
+  type InspirationInfo,
+  inspirationInfo,
+  inspirationMeta,
+  inspirationOps,
+  makeCommit,
+  type Op,
+  OpError,
+  type ProjectDoc,
+  packFromProject,
+  STARTER_INSPIRATIONS,
+  stopInspirationOps,
+} from "@vedit/project";
 
 type Listeners = { [E in keyof EditorEvents]: Set<(p: EditorEvents[E]) => void> };
 
@@ -68,6 +82,25 @@ export function createWebHost(): EditorApi {
     for (const l of listeners[e]) (l as (p: EditorEvents[E]) => void)(p);
   };
   const snapshot = (): ProjectSnapshot => ({ dir: "(in memory)", doc, head, commits });
+  /** A change made here rather than by the renderer: committed, then broadcast like the desktop app does. */
+  const local = (message: string, ops: Op[]) => {
+    if (!ops.length) return Promise.resolve({ ok: false as const, error: "Nothing to change." });
+    try {
+      const result = makeCommit(doc, head, {
+        author: "user",
+        ops,
+        message,
+        groups: [{ label: message, ops: ops.map((_, i) => i) }],
+      });
+      doc = result.doc;
+      head = result.commit.id;
+      commits.push(result.commit);
+      emit("commit", { commit: result.commit, head: result.commit.id });
+      return Promise.resolve({ ok: true as const, commit: result.commit });
+    } catch (err) {
+      return Promise.resolve({ ok: false as const, error: (err as Error).message });
+    }
+  };
 
   return {
     kind: "web",
@@ -172,6 +205,38 @@ export function createWebHost(): EditorApi {
         throw new Error(DESKTOP_ONLY);
       },
       cancel: async () => {},
+    },
+    // Built-in inspirations work here (they're pure); the user's own live in the desktop app's library.
+    inspirations: {
+      list: async () =>
+        [
+          ...STARTER_INSPIRATIONS.flatMap((p) => {
+            const info = inspirationInfo(p.id, p.md, "builtin");
+            return info ? [info] : [];
+          }),
+          ...doc.inspirations.flatMap((i) => {
+            const info = STARTER_INSPIRATIONS.some((p) => p.id === i.id)
+              ? null
+              : inspirationInfo(i.id, i.md, "project");
+            return info ? [info] : [];
+          }),
+        ] satisfies InspirationInfo[],
+      read: async (id) =>
+        STARTER_INSPIRATIONS.find((p) => p.id === id)?.md ?? packFromProject(doc, id)?.md ?? null,
+      apply: async (id, keepLook) => {
+        const pack = STARTER_INSPIRATIONS.find((p) => p.id === id) ?? packFromProject(doc, id);
+        if (!pack) return { ok: false, error: "That inspiration is gone." };
+        return local(
+          `Inspiration: ${inspirationMeta(pack.md)?.name ?? id}`,
+          inspirationOps(doc, pack, { keepLook }),
+        );
+      },
+      stop: async () => local("Stopped following the inspiration", stopInspirationOps(doc)),
+      save: async () => {
+        throw new Error(DESKTOP_ONLY);
+      },
+      remove: async () => {},
+      reveal: async () => {},
     },
     kits: {
       list: async () => [],

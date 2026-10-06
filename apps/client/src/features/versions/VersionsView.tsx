@@ -54,6 +54,7 @@ const ALL: readonly (Collection | Singleton)[] = [
 
 /** Starting points for the prompt: what to vary between the versions. */
 const IDEAS = [
+  "Three editing styles: pick the inspirations that fit this video best, one each",
   "Different vibes: punchy, calm, cinematic",
   "Three different hooks",
   "Same cut, different music",

@@ -13,12 +13,13 @@ import {
   ListPlusIcon,
   MusicNotesIcon,
   PaperclipIcon,
+  SparkleIcon,
   StopIcon,
   WarningIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import type { AgentContext, WorkEntry } from "@vedit/bridge";
-import { formatTime } from "@vedit/project";
+import { activeInspiration, formatTime, inspirationMeta } from "@vedit/project";
 import { clsx } from "clsx";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "../../components/Markdown.tsx";
@@ -32,7 +33,7 @@ import {
   type ChangeNote,
   type ChatItem,
   discardWork,
-  FIRST_CUT_PROMPT,
+  firstCutPrompt,
   keepWork,
   removeQueued,
   retry,
@@ -537,7 +538,11 @@ function Note({ commitId, imported }: { commitId: string; imported?: ChangeNote[
   return (
     <div className="flex flex-col gap-2 animate-rise">
       <div className="font-mono text-xs text-muted">
-        {commit.author === "file" ? "Edited outside the app" : "Imported"}
+        {commit.author === "file"
+          ? "Edited outside the app"
+          : commit.ops.some((o) => o.op === "insert" && o.coll === "sources")
+            ? "Imported"
+            : "Changed"}
       </div>
       <div className="text-[13px] text-fg-2">{commit.message}</div>
       <div className="flex flex-wrap gap-1.5">
@@ -613,7 +618,7 @@ function ImportStatus({ imported }: { imported: NonNullable<ChangeNote["import"]
               key={st.label}
               type="button"
               disabled={busy}
-              onClick={() => void send(st.prompt || FIRST_CUT_PROMPT, {}, st.thorough ? "thorough" : "quick")}
+              onClick={() => void send(st.prompt || firstCutPrompt(), {}, st.thorough ? "thorough" : "quick")}
               className="rounded-full border border-line-strong bg-button px-2.5 py-1 text-xs text-fg-2 hover:bg-chip disabled:opacity-40"
             >
               {st.label}
@@ -857,6 +862,7 @@ function Composer() {
               <span className="hidden @[400px]:inline">Point</span>
             </button>
             <ThinkingPicker />
+            <InspirationChip />
           </div>
           <div className="flex items-center gap-2.5">
             <UsageMeter />
@@ -1000,5 +1006,27 @@ function AttachmentChip({ a, onRemove }: { a: Attachment; onRemove: () => void }
         <XIcon size={10} />
       </button>
     </div>
+  );
+}
+
+/** The editing style the video follows, one click from the library: its name when there's room. */
+function InspirationChip() {
+  const active = useDoc((d) => activeInspiration(d));
+  const name = active ? (inspirationMeta(active.md)?.name ?? active.id) : null;
+  return (
+    <button
+      type="button"
+      title={name ? `Edits follow the ${name} inspiration` : "Edit it like a style you love"}
+      onClick={() => setUi({ view: "inspirations" })}
+      aria-label={name ? `Inspiration: ${name}` : "Inspirations"}
+      className={clsx(
+        "inline-flex h-[30px] min-w-[30px] shrink items-center justify-center gap-1.5 rounded-lg px-2 text-xs",
+        name ? "bg-accent/12 text-accent" : "bg-control text-fg-2 hover:bg-selected",
+      )}
+    >
+      <SparkleIcon size={13} weight={name ? "fill" : "regular"} className="shrink-0" />
+      {/* The name only when the bar has room for it. */}
+      {name && <span className="hidden max-w-[120px] truncate @[420px]:inline">{name}</span>}
+    </button>
   );
 }

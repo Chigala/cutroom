@@ -8,7 +8,8 @@
  */
 import type { Graphic } from "./schema.ts";
 
-const BASE = `
+/** The shared base every built-in graphic starts from (stage, exits, masks, scrims). */
+export const GRAPHIC_BASE = `
   .stage { position: absolute; inset: 0; container: stage / size; font-family: var(--font); color: #fff;
            -webkit-font-smoothing: antialiased; }
   .out { position: absolute; inset: 0; --s: 1; animation: leave .35s cubic-bezier(.7,0,.84,0) var(--exit) both; }
@@ -33,9 +34,10 @@ const BASE = `
            box-shadow: 0 4cqw 10cqw rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08); }
 `;
 
-const graphic = (id: string, meta: object, css: string, html: string): Graphic => ({
+/** A graphic file from its header, its own CSS (over the base) and its markup. */
+export const graphic = (id: string, meta: object, css: string, html: string): Graphic => ({
   id,
-  html: `<!-- graphic ${JSON.stringify(meta)} -->\n<style>${BASE}${css}</style>\n${html.trim()}\n`,
+  html: `<!-- graphic ${JSON.stringify(meta)} -->\n<style>${GRAPHIC_BASE}${css}</style>\n${html.trim()}\n`,
 });
 
 const STARS = "Wrap words in *stars* to color them with the accent.";

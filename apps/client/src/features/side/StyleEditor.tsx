@@ -2,9 +2,11 @@ import { CaretRightIcon, PencilSimpleIcon } from "@phosphor-icons/react";
 import { Thumbnail } from "@remotion/player";
 import { compositionMeta, VideoComposition } from "@vedit/composition";
 import {
+  activeInspiration,
   BUNDLED_FONTS,
   type CaptionLook,
   type CaptionStyle,
+  inspirationMeta,
   lookDefaults,
   type Singleton,
 } from "@vedit/project";
@@ -13,8 +15,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FieldInput, FieldRow } from "../../components/FieldInput.tsx";
 import { captionWindow, lookName, lookPreviewDoc } from "../../lib/caption-preview.ts";
 import { fieldsForSingleton } from "../../lib/fields.ts";
-import { MEDIA_BASE } from "../../lib/host.ts";
-import { edit, useDoc, useProject } from "../../state/project.ts";
+import { host, MEDIA_BASE } from "../../lib/host.ts";
+import { edit, receive, useDoc, useProject } from "../../state/project.ts";
+import { toast } from "../../state/toast.ts";
 import { setUi } from "../../state/ui.ts";
 import { applyLook } from "../looks/LookEditor.tsx";
 import { BrandKits } from "./BrandKits.tsx";
@@ -27,6 +30,7 @@ import { MusicPart } from "./MusicPart.tsx";
 export function StyleEditor() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+      <InspirationSection />
       <Section title="Brand kit" file="kits">
         <BrandKits />
       </Section>
@@ -351,5 +355,54 @@ function StyleMd() {
         className="min-h-0 flex-1 resize-none rounded-lg border border-line bg-raised p-3 font-mono text-xs leading-relaxed text-fg-2 outline-none focus:border-edge"
       />
     </div>
+  );
+}
+
+/** The editing style this video follows, if any: change it, stop following it, or pick one. */
+function InspirationSection() {
+  const active = useDoc((d) => activeInspiration(d));
+  const meta = active ? inspirationMeta(active.md) : null;
+  const stop = async () => {
+    const r = await host.inspirations.stop();
+    if (r.ok) receive(r.commit);
+    else toast(r.error, "warn");
+  };
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border border-line p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium">Inspiration</span>
+        <span className="font-mono text-[10px] text-faint">
+          {active ? `inspirations/${active.id}.md` : ""}
+        </span>
+      </div>
+      {meta ? (
+        <>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px] text-fg">{meta.name}</span>
+            <span className="text-[11.5px] leading-snug text-muted">{meta.description}</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setUi({ view: "inspirations" })}
+              className="text-[12px] text-accent hover:underline"
+            >
+              Change
+            </button>
+            <button type="button" onClick={stop} className="text-[12px] text-muted hover:text-fg">
+              Stop following
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setUi({ view: "inspirations" })}
+          className="self-start text-[12.5px] text-accent hover:underline"
+        >
+          Edit it like a style you love
+        </button>
+      )}
+    </section>
   );
 }

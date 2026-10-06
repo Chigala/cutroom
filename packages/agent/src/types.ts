@@ -126,6 +126,7 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   add_sound: "Downloading the sound",
   remember: "Remembering that",
   brand_kit: "Working on the brand kit",
+  inspiration: "Working on the inspiration",
   WebSearch: "Searching the web",
   WebFetch: "Reading a page",
   web_search: "Searching the web",

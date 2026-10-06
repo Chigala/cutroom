@@ -46,6 +46,7 @@ export function emptyProject(name: string, style = DEFAULT_STYLE): ProjectDoc {
     titles: [],
     graphics: [...STARTER_GRAPHICS],
     captionLooks: [...STARTER_CAPTION_LOOKS],
+    inspirations: [],
     effectKinds: [...STARTER_EFFECTS],
     transitionKinds: [...STARTER_TRANSITIONS],
     grades: [...STARTER_GRADES],

@@ -88,6 +88,15 @@ const api: EditorApi = {
     apply: (id) => invoke(Channel.kitsApply, id),
     remove: (id) => invoke(Channel.kitsRemove, id),
   },
+  inspirations: {
+    list: () => invoke(Channel.inspirationsList),
+    read: (id) => invoke(Channel.inspirationsRead, id),
+    apply: (id, keepLook) => invoke(Channel.inspirationsApply, id, keepLook),
+    stop: () => invoke(Channel.inspirationsStop),
+    save: (id) => invoke(Channel.inspirationsSave, id),
+    remove: (id) => invoke(Channel.inspirationsRemove, id),
+    reveal: () => invoke(Channel.inspirationsReveal),
+  },
   settings: {
     get: () => invoke(Channel.settingsGet),
     set: (patch) => invoke(Channel.settingsSet, patch),

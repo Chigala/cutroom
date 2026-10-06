@@ -69,6 +69,7 @@ export function Header() {
         <IconButton label="Settings" onClick={() => setUi({ dialog: "settings" })}>
           <GearSixIcon size={16} />
         </IconButton>
+        <Button onClick={() => setUi({ view: "inspirations" })}>Inspirations</Button>
         <Button onClick={() => setUi({ view: "versions" })}>Versions</Button>
         <Button variant="accent" onClick={() => setUi({ dialog: "export" })} className="min-w-[78px]">
           {exporting === null ? "Export" : `${Math.round(exporting * 100)}%`}

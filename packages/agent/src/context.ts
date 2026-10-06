@@ -1,8 +1,11 @@
 import type { AgentContext } from "@vedit/bridge";
 import {
+  activeInspiration,
   type Commit,
   DERIVED,
   formatTime,
+  inspirationBrief,
+  inspirationMeta,
   type Op,
   type ProjectDoc,
   type Source,
@@ -126,10 +129,17 @@ export function buildPrompt(
   hand: readonly string[] = [],
 ): string {
   const words = doc.transcripts.reduce((n, t) => n + t.words.length, 0);
-  const parts = [
-    `<style_md>\n${doc.style.trim() || "(empty)"}\n</style_md>`,
-    `<project>\n${projectView(doc)}\n</project>`,
-  ];
+  const parts = [`<style_md>\n${doc.style.trim() || "(empty)"}\n</style_md>`];
+  // The editing style this video follows: its recipe, under the user's taste and their request.
+  const inspiration = activeInspiration(doc);
+  if (inspiration) {
+    const meta = inspirationMeta(inspiration.md);
+    const length = meta?.length ? `\nUsual length: ${meta.length}.` : "";
+    parts.push(
+      `<inspiration id="${inspiration.id}" name="${meta?.name ?? inspiration.id}">\n${inspirationBrief(inspiration.md)}${length}\n</inspiration>`,
+    );
+  }
+  parts.push(`<project>\n${projectView(doc)}\n</project>`);
   if (words > 0 && words <= INLINE_WORDS)
     parts.push(
       `<transcripts>\n${doc.transcripts

@@ -5,7 +5,15 @@
  *
  * Invoke payloads are validated with zod on the host side, since the renderer is untrusted.
  */
-import type { AssetEntry, ChangeGroup, Commit, KitInfo, Op, ProjectDoc } from "@vedit/project";
+import type {
+  AssetEntry,
+  ChangeGroup,
+  Commit,
+  InspirationInfo,
+  KitInfo,
+  Op,
+  ProjectDoc,
+} from "@vedit/project";
 import { OpSchema } from "@vedit/project";
 import { z } from "zod";
 
@@ -513,6 +521,24 @@ export interface EditorApi {
     /** Brings a kit's taste into this project (one undoable commit). */
     apply(id: string): Promise<CommitResult>;
     remove(id: string): Promise<void>;
+  };
+  /** Editing styles to follow: built in, the user's own (their library folder), or only in this project. */
+  readonly inspirations: {
+    list(): Promise<InspirationInfo[]>;
+    /** The full brief (markdown, header included), for reading one before using it. */
+    read(id: string): Promise<string | null>;
+    /**
+     * Makes this project follow one (one undoable commit). keepLook keeps the project's caption look,
+     * colours and grade (a brand kit's), so only the pattern applies.
+     */
+    apply(id: string, keepLook: boolean): Promise<CommitResult>;
+    /** Stops following one; what it set stays. */
+    stop(): Promise<CommitResult>;
+    /** Saves the project's copy (with any changes) as one of the user's own. */
+    save(id: string): Promise<InspirationInfo>;
+    remove(id: string): Promise<void>;
+    /** Shows the user's inspirations folder. */
+    reveal(): Promise<void>;
   };
   readonly exporter: {
     start(): Promise<{ jobId: string }>;

@@ -68,6 +68,11 @@ import {
   demoProject,
   emptyProject,
   FONTS_DIR,
+  type InspirationInfo,
+  type InspirationPack,
+  inspirationInfo,
+  inspirationMeta,
+  inspirationOps,
   type KitInfo,
   keepable,
   kitOps,
@@ -76,12 +81,15 @@ import {
   type Op,
   OpError,
   type ProjectDoc,
+  packFromProject,
   round,
   type Scene,
   SFX_NAMES,
   type SfxName,
   type Source,
+  STARTER_INSPIRATIONS,
   starterOps,
+  stopInspirationOps,
   timelineOf,
 } from "@vedit/project";
 import { ProjectStore, readLog } from "@vedit/project/node";
@@ -94,6 +102,7 @@ import { makeNeededCutouts } from "./cutouts.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
+import { InspirationStore } from "./inspirations.ts";
 import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
 import { onWindowsDrive } from "./platform.ts";
@@ -128,6 +137,15 @@ export class ProjectService {
   readonly versions: Versions;
   /** The asset library: the shared folder and the open project's assets/. */
   readonly library = new Library((state) => this.emit("library", state));
+  /** The user's own inspirations, in the library folder. */
+  readonly inspirations = new InspirationStore(() =>
+    // When the library isn't running (headless runs, a library that failed to start), the app's own
+    // data folder keeps them.
+    this.library.folder("library").catch((err: unknown) => {
+      console.warn(`[inspirations] library unavailable (${(err as Error).message}); using app data`);
+      return app.getPath("userData");
+    }),
+  );
   readonly downloads = new Downloads((list) => this.emit("downloads", list));
   /** Installing, signing in to and updating Claude Code. */
   readonly claude = claudeTasks((t) => this.emit("claude", t));
@@ -453,6 +471,93 @@ export class ProjectService {
     await removeKit(id);
     const settings = await getSettings();
     if (settings.kit === id) await setSettings({ kit: "" });
+  }
+
+  // --- Inspirations ---------------------------------------------------------------------------------
+
+  /** Built in, the user's own (theirs win over a built-in with the same id), and copies only this project has. */
+  async listInspirations(): Promise<InspirationInfo[]> {
+    const mine = await this.inspirations.list().catch((err) => {
+      console.warn(`[inspirations] couldn't read the folder: ${(err as Error).message}`);
+      return [] as InspirationInfo[];
+    });
+    const have = new Set(mine.map((i) => i.id));
+    const builtin = STARTER_INSPIRATIONS.flatMap((p) => {
+      const info = have.has(p.id) ? null : inspirationInfo(p.id, p.md, "builtin");
+      if (info) have.add(p.id);
+      return info ? [info] : [];
+    });
+    const project = (this.store?.doc.inspirations ?? []).flatMap((i) => {
+      const info = have.has(i.id) ? null : inspirationInfo(i.id, i.md, "project");
+      return info ? [info] : [];
+    });
+    return [...mine, ...builtin, ...project];
+  }
+
+  /** One by id: the user's own first, then a built-in, then the project's copy. */
+  private async findInspiration(id: string): Promise<InspirationPack | null> {
+    return (
+      (await this.inspirations.get(id).catch(() => null)) ??
+      STARTER_INSPIRATIONS.find((p) => p.id === id) ??
+      (this.store ? packFromProject(this.store.doc, id) : null)
+    );
+  }
+
+  async readInspiration(id: string): Promise<string | null> {
+    return (await this.findInspiration(id))?.md ?? null;
+  }
+
+  async applyInspiration(id: string, keepLook: boolean): Promise<CommitResult> {
+    const store = this.requireStore();
+    const pack = await this.findInspiration(id);
+    if (!pack) return { ok: false, error: "That inspiration is gone." };
+    try {
+      const label = `Inspiration: ${inspirationMeta(pack.md)?.name ?? id}`;
+      const ops = inspirationOps(store.doc, pack, { keepLook });
+      // One change the user can undo as a whole, not a chip per setting.
+      const commit = store.commitAndBroadcast({
+        author: "user",
+        message: label,
+        ops,
+        groups: [{ label, ops: ops.map((_, i) => i) }],
+      });
+      return { ok: true, commit };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  async stopInspiration(): Promise<CommitResult> {
+    const store = this.requireStore();
+    const ops = stopInspirationOps(store.doc);
+    if (!ops.length) return { ok: false, error: "This project doesn't follow an inspiration." };
+    try {
+      return {
+        ok: true,
+        commit: store.commitAndBroadcast({
+          author: "user",
+          message: "Stopped following the inspiration",
+          ops,
+          groups: [{ label: "Stopped following the inspiration", ops: ops.map((_, i) => i) }],
+        }),
+      };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+
+  async saveInspiration(id: string): Promise<InspirationInfo> {
+    const pack = packFromProject(this.requireStore().doc, id);
+    if (!pack) throw new Error("This project has no copy of that inspiration.");
+    return this.inspirations.save(pack);
+  }
+
+  async removeInspiration(id: string): Promise<void> {
+    await this.inspirations.remove(id);
+  }
+
+  async revealInspirations(): Promise<void> {
+    await shell.openPath(await this.inspirations.dir());
   }
 
   async openDemo(): Promise<ProjectSnapshot> {
@@ -1003,6 +1108,11 @@ export class ProjectService {
           return { ops: kitOps(doc, kit), name: kit.name };
         },
         remember: (id, note) => rememberInKit(id, note),
+      },
+      inspirations: {
+        list: () => this.inspirations.list(),
+        get: (id) => this.inspirations.get(id),
+        save: (pack) => this.inspirations.save(pack),
       },
       // Off macOS the agent's cutout tool says they aren't available here.
       ...(cutoutsAvailable() && {

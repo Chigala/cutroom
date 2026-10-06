@@ -110,6 +110,13 @@ export function registerIpc(service: ProjectService): void {
     [Channel.kitsSave]: (name, id) => service.saveKit(str(name), typeof id === "string" ? id : undefined),
     [Channel.kitsApply]: (id) => service.applyKit(str(id)),
     [Channel.kitsRemove]: (id) => service.removeKit(str(id)),
+    [Channel.inspirationsList]: () => service.listInspirations(),
+    [Channel.inspirationsRead]: (id) => service.readInspiration(str(id)),
+    [Channel.inspirationsApply]: (id, keepLook) => service.applyInspiration(str(id), keepLook === true),
+    [Channel.inspirationsStop]: () => service.stopInspiration(),
+    [Channel.inspirationsSave]: (id) => service.saveInspiration(str(id)),
+    [Channel.inspirationsRemove]: (id) => service.removeInspiration(str(id)),
+    [Channel.inspirationsReveal]: () => service.revealInspirations(),
     // The window never gets the API keys back (see publicSettings).
     [Channel.settingsGet]: async () => publicSettings(await getSettings()),
     // A new backend or key may make Claude reachable: describe what it couldn't before.

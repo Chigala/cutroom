@@ -6,6 +6,7 @@ import { ChatPanel } from "./features/chat/ChatPanel.tsx";
 import { ExportDialog } from "./features/export/ExportDialog.tsx";
 import { GraphicEditor } from "./features/graphics/GraphicEditor.tsx";
 import { Header } from "./features/header/Header.tsx";
+import { InspirationsView } from "./features/inspirations/InspirationsView.tsx";
 import { LookEditor } from "./features/looks/LookEditor.tsx";
 import { Onboarding } from "./features/onboarding/Onboarding.tsx";
 import { Preview } from "./features/preview/Preview.tsx";
@@ -70,6 +71,7 @@ export function App() {
           <Timeline />
           <DropTarget />
           {view === "versions" && <VersionsView />}
+          {view === "inspirations" && <InspirationsView />}
           {editingGraphic && <GraphicEditor key="graphic-editor" />}
           {editingLook && <LookEditor key="look-editor" />}
           {editingStyle && <KindEditor key="kind-editor" />}

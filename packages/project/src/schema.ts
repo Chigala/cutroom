@@ -52,6 +52,9 @@ export const Meta = z.object({
   format: Format,
   createdAt: z.string(),
   kit: Id.optional().describe("The brand kit this project uses: what it learns goes into the kit too"),
+  inspiration: Id.optional().describe(
+    "The inspiration this edit follows (inspirations/<id>.md): its recipe for structure, pacing and style",
+  ),
   starters: z
     .number()
     .int()
@@ -535,6 +538,17 @@ export const CaptionLook = z.object({
   css: z.string().max(60_000),
 });
 export type CaptionLook = z.infer<typeof CaptionLook>;
+
+/**
+ * inspirations/<id>.md: an editing style to follow, the way an editor is told "cut it like this". A
+ * brief in markdown (structure, pacing, captions, motion, sound, look) under a JSON header with the
+ * settings it applies and the files it brings. See inspiration.ts.
+ */
+export const Inspiration = z.object({
+  id: Id,
+  md: z.string().max(40_000),
+});
+export type Inspiration = z.infer<typeof Inspiration>;
 
 /** overlays/titles.json */
 export const Title = z.object({
@@ -1281,6 +1295,7 @@ export const CollectionSchemas = {
   titles: Title,
   graphics: Graphic,
   captionLooks: CaptionLook,
+  inspirations: Inspiration,
   effectKinds: StyleFile,
   transitionKinds: StyleFile,
   grades: StyleFile,

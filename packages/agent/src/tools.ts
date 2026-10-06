@@ -21,34 +21,47 @@ import {
   assetLine,
   bestStretch,
   type ChangeGroup,
+  COLLECTIONS,
   cleanCutOps,
   cutReport,
   DERIVED,
   describeSound,
   graphicPreviewDoc,
+  type InspirationInfo,
+  type InspirationPack,
+  inspirationBrief,
+  inspirationInfo,
+  inspirationMeta,
+  inspirationOps,
   type KitInfo,
   lookDefaults,
   type MotionTrack,
+  measureReference,
   type Op,
   OpError,
-  OpSchema,
+  opSchemaFor,
   type ProjectDoc,
+  packFromProject,
   parseWordRef,
   rangesFromKeeps,
+  referenceText,
   rememberIn,
   replaceTimelineOps,
   replaceWordsOps,
   SHAPES,
+  STARTER_INSPIRATIONS,
   sceneAt,
   searchAssets,
   shapeSize,
   soundShape,
   sourceTime,
   spokenWords,
+  stopInspirationOps,
   type TimedWord,
   timelineOf,
   validateCaptionLook,
   validateGraphic,
+  validateInspiration,
   validateStyle,
 } from "@vedit/project";
 import { z } from "zod";
@@ -148,6 +161,13 @@ export interface AgentHost {
     /** Adds a learned preference to a kit's STYLE.md. */
     remember(id: string, note: string): Promise<boolean>;
   };
+  /** The user's own inspirations (the built-in ones come with the project package). */
+  inspirations?: {
+    list(): Promise<InspirationInfo[]>;
+    get(id: string): Promise<InspirationPack | null>;
+    /** Saves one to the user's inspirations (replacing one with the same id). */
+    save(pack: InspirationPack): Promise<InspirationInfo>;
+  };
   /** Keeps a picture the agent saw for the chat to show; its media key. */
   keepPicture?(jpeg: Buffer): Promise<string>;
   /** Screenshots a web page into the project; the ops add it as a source. */
@@ -232,6 +252,12 @@ export interface AgentTool<S extends z.ZodObject = z.ZodObject> {
 }
 
 const tool = <S extends z.ZodObject>(t: AgentTool<S>) => t as unknown as AgentTool;
+
+/**
+ * The ops apply_ops takes: everything but what indexing writes and the inspirations (the inspiration
+ * tool manages those), so the model sees only shapes it may use.
+ */
+const AGENT_OPS = opSchemaFor(COLLECTIONS.filter((c) => !DERIVED.includes(c) && c !== "inspirations"));
 
 const STYLE_COLLECTION = { effect: "effectKinds", transition: "transitionKinds", grade: "grades" } as const;
 const STYLE_DIR = { effect: "effects", transition: "transitions", grade: "grades" } as const;
@@ -624,7 +650,7 @@ export const TOOLS: readonly AgentTool[] = [
     name: "apply_ops",
     description:
       "Apply a group of edits to the project (scenes, zooms, titles, captions, sfx, music, look, captionStyle, comments). All ops apply or none do. Returns the updated project, or an error to fix and retry. Each call is one change the user can undo on its own.",
-    input: z.object({ label: Label, ops: z.array(OpSchema).min(1).max(400) }),
+    input: z.object({ label: Label, ops: z.array(AGENT_OPS).min(1).max(400) }),
     async run({ label, ops }, ctx) {
       const derived = ops.find((o) => "coll" in o && DERIVED.includes(o.coll));
       if (derived)
@@ -795,6 +821,121 @@ export const TOOLS: readonly AgentTool[] = [
       const result = commit(ctx, `Applied brand kit ${applied.name}`, applied.ops);
       if (result.isError) return result;
       return { text: `Applied "${applied.name}": look, captions, graphics, effects, mix and STYLE.md.` };
+    },
+  }),
+  tool({
+    name: "inspiration",
+    description:
+      "Editing styles to follow, built in or the user's own. list; read: one's brief; use: this project follows it (settings and files come in; keepLook keeps the project's look, the default with a brand kit); stop; save: this project's copy as the user's own; measure: study a reference video's style (source) before writing one; write: save md as the user's own (use: follow it now). md starts <!-- inspiration {name, description, bestFor, energy 1-5, length, tags, reference, settings {captionStyle, checkRules, mix, music, look: only what the style decides}, files [\"captionLooks/<id>\"...] from the project} --> then the built-in ones' sections (read one first).",
+    input: z.object({
+      action: z.enum(["list", "read", "use", "stop", "save", "measure", "write"]),
+      id: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]{0,47}$/)
+        .optional(),
+      keepLook: z.boolean().optional(),
+      source: z.string().max(64).optional().describe("measure: the reference clip"),
+      md: z.string().min(200).max(40_000).optional().describe("write"),
+      use: z.boolean().optional().describe("write"),
+    }),
+    async run({ action, id, keepLook, source, md, use }, ctx) {
+      const doc = ctx.scratch.doc;
+      const store = ctx.host.inspirations;
+      const keep = keepLook ?? Boolean(doc.meta.kit);
+      const follow = (pack: InspirationPack) =>
+        commit(
+          ctx,
+          `Inspiration: ${inspirationMeta(pack.md)?.name ?? pack.id}`,
+          inspirationOps(doc, pack, { keepLook: keep }),
+        );
+      if (action === "measure") {
+        const clip = doc.sources.find((s) => s.id === source);
+        if (!clip) return { text: `No clip "${source ?? ""}".`, isError: true };
+        if (clip.status === "pending" || clip.status === "indexing")
+          return { text: `${clip.id} is still being indexed; measure it once it's ready.`, isError: true };
+        const report = measureReference(doc, clip.id);
+        return report
+          ? { text: referenceText(report) }
+          : { text: `${clip.id} isn't a video.`, isError: true };
+      }
+      if (action === "list") {
+        const mine = (await store?.list().catch(() => [])) ?? [];
+        const all = [
+          ...mine,
+          ...STARTER_INSPIRATIONS.flatMap((p) => {
+            const info = inspirationInfo(p.id, p.md, "builtin");
+            return info && !mine.some((m) => m.id === p.id) ? [info] : [];
+          }),
+        ];
+        return {
+          text:
+            all
+              .map(
+                (i) =>
+                  `${i.id}${i.id === doc.meta.inspiration ? " (followed)" : ""}: ${i.name} (${i.origin === "mine" ? "the user's" : "built in"}). ${i.description} For: ${i.bestFor.join(", ")}. Energy ${i.energy}/5. ${i.traits.join("; ")}.`,
+              )
+              .join("\n") || "No inspirations.",
+        };
+      }
+      if (action === "stop") {
+        const result = commit(ctx, "Stopped following the inspiration", stopInspirationOps(doc));
+        return result.isError ? result : { text: "No longer following an inspiration; its settings stay." };
+      }
+      if (!id) return { text: "Give the inspiration's id.", isError: true };
+      if (action === "write") {
+        if (!md) return { text: "Give the md.", isError: true };
+        const files: Record<string, { id: string }[]> = {};
+        for (const ref of inspirationMeta(md)?.files ?? []) {
+          const [coll, fileId] = ref.split("/") as [keyof ProjectDoc, string];
+          const item = (doc[coll] as readonly { id: string }[]).find((x) => x.id === fileId);
+          if (item) files[coll] = [...(files[coll] ?? []), item];
+        }
+        const pack: InspirationPack = { id, md, files: files as InspirationPack["files"] };
+        const problem = validateInspiration(md, pack.files);
+        if (problem) return { text: `Not saved: ${problem}`, isError: true };
+        // The library can be unavailable (not started, a folder that moved): the project still gets it,
+        // so the work is never lost, and it can be saved to the library later.
+        let unsaved = store ? null : "saving inspirations isn't available here";
+        if (store)
+          await store.save(pack).catch((err: unknown) => {
+            unsaved = (err as Error).message;
+          });
+        if (use || unsaved) {
+          const result = follow(pack);
+          if (result.isError) return result;
+        } else ctx.step(`Saved inspiration "${inspirationMeta(md)!.name}"`);
+        return {
+          text: unsaved
+            ? `Couldn't save it to the user's inspirations (${unsaved}). It's in this project (inspirations/${id}.md) and the project follows it; it can be saved to the library from the Inspirations view.`
+            : `Saved to the user's inspirations${use ? "; this project follows it now" : ""}.`,
+        };
+      }
+      const pack =
+        (await store?.get(id).catch(() => null)) ??
+        STARTER_INSPIRATIONS.find((p) => p.id === id) ??
+        packFromProject(doc, id);
+      if (!pack) return { text: `No inspiration "${id}".`, isError: true };
+      if (action === "read") {
+        const meta = inspirationMeta(pack.md);
+        return {
+          text: `${inspirationBrief(pack.md)}\n\nSettings: ${JSON.stringify(meta?.settings ?? {})}\nFiles: ${meta?.files.join(", ") || "none"}`,
+        };
+      }
+      if (action === "save") {
+        if (!store) return { text: "Saving inspirations isn't available here.", isError: true };
+        const own = packFromProject(doc, id);
+        if (!own) return { text: `This project has no copy of "${id}".`, isError: true };
+        const problem = validateInspiration(own.md, own.files);
+        if (problem) return { text: `Not saved: ${problem}`, isError: true };
+        const info = await store.save(own);
+        ctx.step(`Saved inspiration "${info.name}"`);
+        return { text: `Saved "${info.name}" to the user's inspirations.` };
+      }
+      const result = follow(pack);
+      if (result.isError) return result;
+      return {
+        text: `Following "${inspirationMeta(pack.md)?.name ?? id}"${keep ? " (its pattern; the project's look kept)" : ""}; its settings are applied. Edit to its brief:\n\n${inspirationBrief(pack.md)}`,
+      };
     },
   }),
   tool({

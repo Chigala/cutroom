@@ -4,7 +4,7 @@
  * "shorter" or "bring the zooms back" make sense.
  */
 import type { AgentContext, AgentEvent, AgentUsage, Backend, ChatRecord, WorkEntry } from "@vedit/bridge";
-import type { Commit } from "@vedit/project";
+import { activeInspiration, type Commit, inspirationMeta } from "@vedit/project";
 import { create } from "zustand";
 import { host } from "../lib/host.ts";
 import { addDraft, endDraft, holdDraft, receive, useProject } from "./project.ts";
@@ -489,6 +489,15 @@ async function resumeRunning(): Promise<void> {
 export const FIRST_CUT_PROMPT =
   "Make a first cut from these clips. Cut retakes, stumbles and dead air, keep the best takes in a strong order, add a hook title, caption emphasis and a few punch-in zooms. Use music if there is a track.";
 
+/** The first cut's request: the house recipe, or the inspiration's when the project follows one. */
+export function firstCutPrompt(): string {
+  const doc = useProject.getState().doc;
+  const inspiration = doc && activeInspiration(doc);
+  if (!inspiration) return FIRST_CUT_PROMPT;
+  const name = inspirationMeta(inspiration.md)?.name ?? inspiration.id;
+  return `Make a first cut from these clips following the "${name}" inspiration: its structure, pacing, captions, motion, visuals and sound. Cut retakes, stumbles and dead air and keep the best takes. Check it against its "How to tell it's working" before you finish.`;
+}
+
 export function connectChat(): () => void {
   const offAgent = host.on("agent", (e) => {
     if (e.type === "start") set({ backend: e.backend });
@@ -530,7 +539,7 @@ export function connectChat(): () => void {
     }));
     if (!e.firstImport || useChat.getState().activeRun) return;
     const settings = await host.settings.get();
-    if (settings.autoFirstCut) void send(FIRST_CUT_PROMPT, {}, "thorough");
+    if (settings.autoFirstCut) void send(firstCutPrompt(), {}, "thorough");
   });
   void host.agent.status().then((s) => set({ backend: s.backend }));
   void host.settings.get().then((s) => set({ autoFirstCut: s.autoFirstCut }));

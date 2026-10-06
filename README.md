@@ -130,6 +130,12 @@ the environment.
   to the measured silences, shot changes detected, and for music a beat map.
 - **First cut**: drop clips into an empty project and the agent makes a draft as soon as indexing is
   done: retakes and dead air cut, best takes kept, hook title, caption emphasis, zooms.
+- **Inspirations**: editing styles to follow ("Edit it like…"): punchy explainer, podcast clip,
+  storytime, tutorial, news commentary, creator product ad, hype montage, calm vlog. Each is a brief the
+  agent edits to (structure, pacing, captions, motion, sound, look) plus the settings that make it
+  concrete; every card previews your own footage in that style. Learn a new one from a video you love:
+  the agent measures its rhythm, studies its frames and writes the brief into your library
+  (`Cutroom Library/Inspirations/`). A brand kit is who you are; an inspiration is how this video is cut.
 - **Chat**: ask for changes. The agent reads transcripts, looks at frames of the footage, cuts by word
   ranges, fixes misheard words, finds music, and runs the checks before it hands work back.
 - **Words tab**: edit the video by editing its text. Select words and press Delete to cut them, E to
@@ -154,6 +160,7 @@ one mechanism. Edit any file by hand and the change appears in the app as an und
 My Video/
   project.json              name, format
   STYLE.md                  your taste in plain words; the agent follows it
+  inspirations/<id>.md      the editing style this video follows: its brief and settings
   look.json                 color grade
   sources/index.json        imported clips (paths, not copies)
   sources/transcripts.json  every word said, with timings

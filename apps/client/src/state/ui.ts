@@ -38,7 +38,7 @@ interface UiState {
   /** Files are being dragged over the window (to import, or to attach on the text bar). */
   fileDrag: boolean;
   /** Full-screen views over the editor. */
-  view: "editor" | "versions";
+  view: "editor" | "versions" | "inspirations";
   dialog: "export" | "settings" | "projects" | null;
   /** The Settings section to open on (Help → Diagnostics opens on its own), or null for the first. */
   settingsSection: "diagnostics" | null;

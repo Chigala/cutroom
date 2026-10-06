@@ -1,77 +1,61 @@
 import {
   ArrowUUpLeftIcon,
   ArrowUUpRightIcon,
-  CaretDownIcon,
   CircleNotchIcon,
   DownloadSimpleIcon,
-  FilmStripIcon,
-  FolderOpenIcon,
-  GearSixIcon,
-  MagnifyingGlassIcon,
-  PencilSimpleIcon,
-  PlusIcon,
-  SparkleIcon,
-  SquaresFourIcon,
-  UploadSimpleIcon,
+  SidebarSimpleIcon,
 } from "@phosphor-icons/react";
-import type { RecentProject } from "@vedit/bridge";
-import { formatTime, timelineOf } from "@vedit/project";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { Button, IconButton } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
-import { importClips } from "../../lib/import.ts";
 import { isMac } from "../../lib/keys.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { useJobs } from "../../state/jobs.ts";
 import { edit, redo, undo, useDoc, useProject } from "../../state/project.ts";
-import { setUi } from "../../state/ui.ts";
-import { ago, matching, openProject } from "../projects/ProjectsDialog.tsx";
+import { setUi, toggleRail, toggleSide, useUi } from "../../state/ui.ts";
 
+/** The title bar: the rail's switch, the project's name, what's running, undo and redo, and Export. */
 export function Header() {
-  const format = useDoc((d) => d.meta.format);
-  const clips = useDoc((d) => d.sources.filter((s) => s.kind !== "solid").length || d.sources.length);
-  const duration = useDoc((d) => timelineOf(d).duration);
   const canUndo = useProject((s) => s.undoStack.length > 0);
   const canRedo = useProject((s) => s.redoStack.length > 0);
-  const version = useProject((s) => s.commits.filter((c) => c.author !== "index").length);
   const exporting = useJobs((s) => (s.export?.status === "running" ? s.export.fraction : null));
+  const railOpen = useUi((s) => s.railOpen);
+  const sideOpen = useUi((s) => s.sideOpen);
+  const mod = isMac ? "⌘" : "Ctrl+";
 
   return (
     <header
-      className={`drag-region flex h-[52px] shrink-0 items-center justify-between border-b border-line pr-4 ${
-        isMac && host.kind === "desktop" ? "pl-[84px]" : "pl-5"
+      className={`drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-line pr-4 ${
+        isMac && host.kind === "desktop" ? "pl-[84px]" : "pl-3"
       }`}
     >
-      {/* The project is the title (and switches projects), as in a document app. */}
-      <div className="flex min-w-0 flex-1 basis-0 items-center">
-        <ProjectMenu />
-      </div>
-
-      <div className="flex items-center gap-2.5 font-mono text-xs text-muted tabular">
-        <span className="rounded-full border border-line-strong px-2.5 py-1 text-fg">
-          main · v{version + 1}
-        </span>
-        <span>
-          {clips} clips · {formatTime(duration)} ·{" "}
-          {format.width > format.height ? "16:9" : format.width === format.height ? "1:1" : "9:16"}
-        </span>
+      <IconButton
+        label={`${railOpen ? "Hide" : "Show"} project names (${mod}B)`}
+        onClick={toggleRail}
+        className="no-drag"
+      >
+        <SidebarSimpleIcon size={17} />
+      </IconButton>
+      <ProjectTitle />
+      <div className="flex min-w-0 items-center gap-2 font-mono text-xs text-muted tabular">
         <IndexingPill />
         <DownloadsPill />
       </div>
-
-      <div className="no-drag flex flex-1 basis-0 items-center justify-end gap-2">
+      <div className="no-drag ml-auto flex items-center gap-1.5">
+        <IconButton
+          label={`${sideOpen ? "Hide" : "Show"} the side panel (${isMac ? "⇧⌘" : "Ctrl+Shift+"}B)`}
+          onClick={toggleSide}
+          className={sideOpen ? undefined : "text-faint"}
+        >
+          <SidebarSimpleIcon size={17} mirrored />
+        </IconButton>
         <IconButton label={`Undo (${isMac ? "⌘" : "Ctrl+"}Z)`} disabled={!canUndo} onClick={undo}>
           <ArrowUUpLeftIcon size={16} />
         </IconButton>
         <IconButton label={`Redo (${isMac ? "⇧⌘" : "Ctrl+Shift+"}Z)`} disabled={!canRedo} onClick={redo}>
           <ArrowUUpRightIcon size={16} />
         </IconButton>
-        <IconButton label="Settings" onClick={() => setUi({ dialog: "settings" })}>
-          <GearSixIcon size={16} />
-        </IconButton>
-        <Button onClick={() => setUi({ view: "inspirations" })}>Inspirations</Button>
-        <Button onClick={() => setUi({ view: "versions" })}>Versions</Button>
-        <Button variant="accent" onClick={() => setUi({ dialog: "export" })} className="min-w-[78px]">
+        <Button variant="accent" onClick={() => setUi({ dialog: "export" })} className="ml-1.5 min-w-[78px]">
           {exporting === null ? "Export" : `${Math.round(exporting * 100)}%`}
         </Button>
       </div>
@@ -123,37 +107,13 @@ function IndexingPill() {
   );
 }
 
-function ProjectMenu() {
+/** The project's name; double-click (or Rename in its menu) to change it. */
+function ProjectTitle() {
   const name = useDoc((d) => d.meta.name);
   const dir = useProject((s) => s.dir);
-  const [open, setOpen] = useState(false);
-  const [recent, setRecent] = useState<RecentProject[]>([]);
-  const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-  const others = matching(
-    recent.filter((r) => r.dir !== dir),
-    query,
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    void host.project.recent().then(setRecent);
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [open]);
-
-  const go = (fn: Parameters<typeof openProject>[0]) => {
-    setOpen(false);
-    return openProject(fn);
-  };
-
-  const [renaming, setRenaming] = useState(false);
+  const renaming = useUi((s) => s.renaming);
   const rename = (next: string) => {
-    setRenaming(false);
+    setUi({ renaming: false });
     const clean = next.trim().slice(0, 120);
     // The project's name (project.json), not its folder: one undoable edit.
     if (clean && clean !== name)
@@ -161,144 +121,37 @@ function ProjectMenu() {
         message: `Renamed the project to ${clean}`,
       });
   };
-
-  return (
-    <div ref={ref} className="no-drag relative">
-      {renaming ? (
-        <input
-          // biome-ignore lint/a11y/noAutofocus: renaming starts typing at once
-          autoFocus
-          defaultValue={name}
-          aria-label="Project name"
-          onFocus={(e) => e.currentTarget.select()}
-          onBlur={(e) => rename(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") rename(e.currentTarget.value);
-            if (e.key === "Escape") setRenaming(false);
-          }}
-          className="w-[320px] rounded-lg border border-edge bg-sunken px-2 py-1 text-[14px] font-semibold text-fg outline-none"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          onDoubleClick={() => {
-            setOpen(false);
-            setRenaming(true);
-          }}
-          aria-expanded={open}
-          title={`${dir ?? ""}\nDouble-click to rename`}
-          className="flex max-w-[320px] items-center gap-1.5 rounded-lg px-2 py-1 text-fg hover:bg-button"
-        >
-          <span className="truncate text-[14px] font-semibold">{name}</span>
-          <CaretDownIcon size={14} className="shrink-0 text-muted" />
-        </button>
-      )}
-      {open && (
-        <div className="absolute top-9 left-0 z-50 w-72 rounded-xl border border-line-strong bg-panel p-1.5 shadow-2xl animate-rise">
-          {dir && (
-            <MenuItem
-              icon={<PencilSimpleIcon size={14} />}
-              onClick={() => {
-                setOpen(false);
-                setRenaming(true);
-              }}
-            >
-              Rename…
-            </MenuItem>
-          )}
-          {dir && (
-            <MenuItem
-              icon={<UploadSimpleIcon size={14} />}
-              onClick={() => {
-                setOpen(false);
-                void importClips();
-              }}
-            >
-              Import clips into this project…
-            </MenuItem>
-          )}
-          <MenuItem
-            icon={<FilmStripIcon size={14} />}
-            onClick={() => void go(() => host.project.newFromVideos())}
-          >
-            New project from videos…
-          </MenuItem>
-          <MenuItem
-            icon={<PlusIcon size={14} />}
-            onClick={() => void go(() => host.project.create("Untitled"))}
-          >
-            New empty project
-          </MenuItem>
-          <MenuItem icon={<FolderOpenIcon size={14} />} onClick={() => void go(() => host.project.open())}>
-            Open…
-          </MenuItem>
-          <MenuItem icon={<SparkleIcon size={14} />} onClick={() => void go(() => host.project.openDemo())}>
-            Demo project
-          </MenuItem>
-          {recent.some((r) => r.dir !== dir) && (
-            <>
-              <div className="mx-2 my-1.5 border-t border-line" />
-              {/* Many projects: type to find one; the full list is a click away. */}
-              <label className="mx-1 mb-1 flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-1.5">
-                <MagnifyingGlassIcon size={13} className="shrink-0 text-faint" />
-                <input
-                  // biome-ignore lint/a11y/noAutofocus: the menu opened to switch projects
-                  autoFocus
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Escape") setOpen(false);
-                    if (e.key === "Enter" && others[0]) {
-                      const first = others[0];
-                      void go(() => host.project.open(first.dir));
-                    }
-                  }}
-                  placeholder="Find a project"
-                  aria-label="Find a project"
-                  className="min-w-0 flex-1 bg-transparent text-[13px] text-fg outline-none placeholder:text-faint"
-                />
-              </label>
-              {others.slice(0, 6).map((r) => (
-                <MenuItem key={r.dir} onClick={() => void go(() => host.project.open(r.dir))} title={r.dir}>
-                  <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                  <span className="shrink-0 text-[11px] text-faint">{ago(r.openedAt)}</span>
-                </MenuItem>
-              ))}
-              {query && !others.length && <div className="px-2.5 py-2 text-xs text-faint">No matches</div>}
-              <MenuItem
-                icon={<SquaresFourIcon size={14} />}
-                onClick={() => {
-                  setOpen(false);
-                  setUi({ dialog: "projects" });
-                }}
-              >
-                <span className="flex-1">All projects</span>
-                <span className="text-[11px] text-faint">{recent.length}</span>
-              </MenuItem>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MenuItem({
-  icon,
-  children,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: React.ReactNode }) {
-  return (
+  return renaming ? (
+    <input
+      // biome-ignore lint/a11y/noAutofocus: renaming starts typing at once
+      autoFocus
+      defaultValue={name}
+      aria-label="Project name"
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={(e) => rename(e.currentTarget.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") rename(e.currentTarget.value);
+        if (e.key === "Escape") setUi({ renaming: false });
+      }}
+      className="no-drag w-[320px] rounded-lg border border-edge bg-sunken px-2 py-1 text-[14px] font-semibold text-fg outline-none"
+    />
+  ) : (
     <button
       type="button"
-      {...props}
-      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-fg-2 hover:bg-raised hover:text-fg"
+      onDoubleClick={() => setUi({ renaming: true })}
+      // By keyboard: Enter or F2, as in the Finder.
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "F2") {
+          e.preventDefault();
+          setUi({ renaming: true });
+        }
+      }}
+      aria-label={`${name}, press Enter to rename`}
+      title={`${dir ?? ""}\nDouble-click to rename`}
+      className="no-drag max-w-[360px] truncate rounded-lg px-2 py-1 text-[14px] font-semibold text-fg hover:bg-button"
     >
-      {icon && <span className="text-muted">{icon}</span>}
-      {children}
+      {name}
     </button>
   );
 }

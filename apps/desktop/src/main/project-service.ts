@@ -101,13 +101,22 @@ import { claudeStatus, claudeTasks } from "./claude.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
+import { History } from "./history.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { InspirationStore } from "./inspirations.ts";
 import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
 import { onWindowsDrive } from "./platform.ts";
+import {
+  copyProject,
+  footageOps,
+  makeThumbnail,
+  readTimeline,
+  relinked,
+  relinkOps,
+  thumbFile,
+} from "./projects.ts";
 import { getSettings, paths, setSettings, whisperSetup } from "./settings.ts";
-import { Versions } from "./versions.ts";
 
 const SWATCHES = ["#355761", "#2B4F63", "#5A4A36", "#45603F", "#3A3552", "#2F5A6B", "#5E4632", "#4C5A3A"];
 
@@ -134,7 +143,8 @@ export class ProjectService {
   private asked = new Map<string, { dir: string; prompt: string; startedAt: number }>();
   readonly indexer: Indexer;
   readonly exporter: Exporter;
-  readonly versions: Versions;
+  /** Restore points: every request and edit, from the project's log. */
+  readonly history = new History(() => this.store);
   /** The asset library: the shared folder and the open project's assets/. */
   readonly library = new Library((state) => this.emit("library", state));
   /** The user's own inspirations, in the library folder. */
@@ -158,11 +168,6 @@ export class ProjectService {
       emitImportDone: (e) => this.emit("importDone", e),
     });
     this.exporter = new Exporter(store, (e) => this.emit("export", e));
-    this.versions = new Versions(
-      store,
-      (e) => this.emit("versions", e),
-      async () => ({ ...(await this.agentSettings()), host: this.agentHost() }),
-    );
   }
 
   private emit<E extends keyof EditorEvents>(event: E, payload: EditorEvents[E]): void {
@@ -295,7 +300,19 @@ export class ProjectService {
     return { dir: store.dir, doc: store.doc, head: store.head, commits: log.slice(-200) };
   }
 
-  private async switchTo(next: ProjectStore): Promise<ProjectSnapshot> {
+  /** Switches run one at a time, so each closes the store before it (none is left watching a folder). */
+  private switching: Promise<unknown> = Promise.resolve();
+
+  private switchTo(next: ProjectStore): Promise<ProjectSnapshot> {
+    const run = this.switching.then(
+      () => this.doSwitch(next),
+      () => this.doSwitch(next),
+    );
+    this.switching = run.catch(() => undefined);
+    return run;
+  }
+
+  private async doSwitch(next: ProjectStore): Promise<ProjectSnapshot> {
     for (const ctrl of this.runs.values()) ctrl.abort();
     this.indexer.reset();
     this.exporter.stop();
@@ -308,6 +325,7 @@ export class ProjectService {
     if (starters.length)
       next.commitAndBroadcast({ author: "index", message: "Added the new built-in effects", ops: starters });
     await this.remember(next.dir, next.doc.meta.name);
+    this.refreshThumbnail(0);
     this.indexer.resume();
     void this.library.setProject(next.dir);
     if (onWindowsDrive(next.dir))
@@ -327,12 +345,11 @@ export class ProjectService {
     return {
       onCommit: (commit: Commit) => {
         this.emit("commit", { commit, head: commit.id });
-        // A rename: the projects list shows the new name.
-        const renamed = commit.ops.some((op) => op.op === "merge" && op.key === "meta" && "name" in op.patch);
-        if (renamed && this.store) void this.remember(this.store.dir, this.store.doc.meta.name);
+        this.renamed(commit);
         // Clips removed (or imports undone) stop indexing.
         if (this.store) this.indexer.prune(this.store.doc);
         this.scheduleCutouts();
+        this.shotsChanged(commit);
       },
       onError: (error: Error) => this.emit("error", { message: error.message }),
     };
@@ -340,7 +357,11 @@ export class ProjectService {
 
   async restore(): Promise<ProjectSnapshot> {
     if (this.store) return this.snapshot();
-    const [last] = await this.recent();
+    // The one opened last, wherever it sits in the list.
+    const last = (await this.recent()).reduce<RecentProject | undefined>(
+      (best, r) => (!best || r.openedAt > best.openedAt ? r : best),
+      undefined,
+    );
     if (last) {
       try {
         return await this.switchTo(await ProjectStore.open(last.dir, this.events()));
@@ -579,12 +600,157 @@ export class ProjectService {
     }
   }
 
-  private async remember(dir: string, name: string): Promise<void> {
-    const list = [
-      { dir, name, openedAt: Date.now() },
-      ...(await this.recent()).filter((r) => r.dir !== dir),
-    ].slice(0, 300);
-    await writeFile(paths.recent(), JSON.stringify(list, null, 2));
+  /**
+   * Notes a project as opened. A new one goes to the top of the list; one already in it keeps its place
+   * (the rail stays put as you switch around), with its time updated.
+   */
+  private remember(dir: string, name: string): Promise<void> {
+    return this.updateRecent((list) => {
+      const entry = { dir, name, openedAt: Date.now() };
+      const at = list.findIndex((r) => r.dir === dir);
+      if (at >= 0) list[at] = entry;
+      else list.unshift(entry);
+      return list.slice(0, 300);
+    });
+  }
+
+  private recentWrites: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Changes the project list one change at a time (two at once would each drop the other's), written
+   * whole to a temporary file and renamed into place, so a read never sees half of it.
+   */
+  private updateRecent(change: (list: RecentProject[]) => RecentProject[]): Promise<void> {
+    const run = this.recentWrites.then(async () => {
+      const list = change(await this.recent());
+      const tmp = `${paths.recent()}.${process.pid}.tmp`;
+      await writeFile(tmp, JSON.stringify(list, null, 2));
+      await rename(tmp, paths.recent());
+    });
+    this.recentWrites = run.catch(() => undefined);
+    return run;
+  }
+
+  // --- The project list: thumbnails, copies, the Trash -----------------------------------------------
+
+  /** A project from the user's list (the window can't name any other folder). */
+  private async listed(raw: unknown): Promise<string> {
+    const dir = z.string().max(4096).parse(raw);
+    if (!(await this.recent()).some((r) => r.dir === dir))
+      throw new Error("That project isn't in your list.");
+    return dir;
+  }
+
+  private thumbs: Promise<unknown> = Promise.resolve();
+  private thumbTimer: NodeJS.Timeout | null = null;
+
+  /** One at a time: a list of projects asks for all of theirs at once. */
+  private queueThumb<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.thumbs.then(fn, fn);
+    this.thumbs = run.catch(() => undefined);
+    return run;
+  }
+
+  async thumbnail(raw: unknown): Promise<string | null> {
+    const dir = await this.listed(raw);
+    return this.queueThumb(async () => {
+      if (!existsSync(thumbFile(dir))) {
+        const doc = this.store?.dir === dir ? this.store.doc : await readTimeline(dir).catch(() => null);
+        if (!doc || !(await makeThumbnail(dir, doc).catch(() => false))) return null;
+      }
+      return `data:image/jpeg;base64,${(await readFile(thumbFile(dir))).toString("base64")}`;
+    });
+  }
+
+  /** The open project's thumbnail, made again a moment after its shots change. */
+  private refreshThumbnail(delayMs = 3000): void {
+    if (this.thumbTimer) clearTimeout(this.thumbTimer);
+    this.thumbTimer = setTimeout(() => {
+      const store = this.store;
+      if (!store) return;
+      void this.queueThumb(() => makeThumbnail(store.dir, store.doc))
+        .then((made) => {
+          if (made) this.emit("thumbnail", { dir: store.dir });
+        })
+        .catch((err: Error) => console.warn(`[thumbnail] ${err.message}`));
+    }, delayMs);
+  }
+
+  /** A rename (in the title bar, by Claude, in project.json): the project list takes the new name. */
+  private renamed(commit: Commit): void {
+    const renamed = commit.ops.some((op) => op.op === "merge" && op.key === "meta" && "name" in op.patch);
+    if (renamed && this.store) void this.remember(this.store.dir, this.store.doc.meta.name);
+  }
+
+  private shotsChanged(commit: Commit): void {
+    if (commit.ops.some((op) => "coll" in op && op.coll === "scenes")) this.refreshThumbnail();
+  }
+
+  /** A copy of a project beside it, opened: of its edit, or of just its footage to start again. */
+  async duplicate(rawDir: unknown, rawFrom: unknown): Promise<ProjectSnapshot> {
+    const dir = await this.listed(rawDir);
+    const from = z.enum(["edit", "footage"]).parse(rawFrom);
+    const open = this.store?.dir === dir ? this.store : null;
+    await open?.flush();
+    const name =
+      open?.doc.meta.name ?? (await this.recent()).find((r) => r.dir === dir)?.name ?? path.basename(dir);
+    // Names are at most 200 characters; the suffix always fits.
+    const label = `${name.slice(0, 160)}${from === "edit" ? " copy" : " from footage"}`;
+    const target = await freeDir(path.join(path.dirname(dir), sanitize(label)));
+    await copyProject(dir, target);
+    try {
+      const next = await ProjectStore.open(target, this.events());
+      const ops: Op[] = [
+        { op: "merge", key: "meta", patch: { name: label } },
+        // Files the project owns (attachments, stock, sounds) were copied with it: the copy uses its own.
+        ...relinkOps(next.doc, dir, target),
+        ...(from === "footage" ? footageOps(target, relinked(next.doc, dir, target)) : []),
+      ];
+      next.commit({
+        author: "user",
+        message: from === "edit" ? `Copied from ${name}` : `Started again from the footage of ${name}`,
+        ops,
+      });
+      // On disk before the window reads the history, so the change is in its undo.
+      await next.flush();
+      return await this.switchTo(next);
+    } catch (err) {
+      // Nothing half-made left behind, unlisted.
+      await rm(target, { recursive: true, force: true }).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /**
+   * Moves a project's folder to the Trash (the system's, so it can be put back) and drops it from the
+   * list. The open one is closed first, and the next most recent opens in its place.
+   */
+  async trash(raw: unknown): Promise<ProjectSnapshot | null> {
+    const dir = await this.listed(raw);
+    const wasOpen = this.store?.dir === dir;
+    if (wasOpen) {
+      for (const ctrl of this.runs.values()) ctrl.abort();
+      this.indexer.reset();
+      this.exporter.stop();
+      await this.store?.close();
+      this.store = null;
+      // What was writing into it (a proxy, a render, a thumbnail) winds down first, or it would make
+      // the folder again after it's gone.
+      await Promise.all([this.indexer.settled(), this.exporter.settled(), this.thumbs]);
+    }
+    try {
+      await shell.trashItem(dir);
+    } catch (err) {
+      // Not trashed (no Trash on that drive, no permission): the project stays open, as it was.
+      if (wasOpen) await this.switchTo(await ProjectStore.open(dir, this.events()));
+      throw err;
+    }
+    await this.updateRecent((list) => list.filter((r) => r.dir !== dir));
+    return wasOpen ? this.restore() : null;
+  }
+
+  async showProject(raw: unknown): Promise<void> {
+    await shell.openPath(await this.listed(raw));
   }
 
   async commit(raw: unknown): Promise<CommitResult> {
@@ -598,6 +764,8 @@ export class ProjectService {
         ...(req.groups && { groups: req.groups }),
         ...(req.reverts && { reverts: req.reverts }),
       });
+      this.shotsChanged(commit);
+      this.renamed(commit);
       return { ok: true, commit };
     } catch (err) {
       if (!(err instanceof OpError)) throw err;
@@ -794,6 +962,9 @@ export class ProjectService {
     const failures = probed.filter((p): p is Error => p instanceof Error);
     if (!ok.length) return { ok: false, error: failures[0]?.message ?? "Could not read those files." };
 
+    // Read and probed while another project may have opened: the clips go to the one they were dropped on.
+    if (this.store !== store)
+      return { ok: false, error: "The project changed while those clips were being read." };
     const doc = store.doc;
     const demo = doc.sources.length > 0 && doc.sources.every((s) => s.kind === "solid");
     const firstImport = doc.scenes.length === 0 || demo;
@@ -861,12 +1032,16 @@ export class ProjectService {
    * places it where the user says). A file already in the project is reused.
    */
   async attach(raw: unknown): Promise<AttachResult> {
-    const store = this.requireStore();
     const files = z
       .array(z.string())
       .max(10)
       .parse(raw)
       .filter((p) => path.isAbsolute(p));
+    return this.attachTo(this.requireStore(), files);
+  }
+
+  /** Attaches to the project the request came in for, never to one opened while the files were read. */
+  private async attachTo(store: ProjectStore, files: string[]): Promise<AttachResult> {
     if (!files.length) return { ok: false, error: "Nothing to attach." };
     for (let i = 0; i < files.length; i++) files[i] = await keepCopy(files[i]!, store.dir);
     const probed = await Promise.all(files.map((f) => probe(f).catch((err: Error) => err)));
@@ -897,6 +1072,8 @@ export class ProjectService {
       };
       ops.push({ op: "insert", coll: "sources", item: source });
     }
+    if (this.store !== store)
+      return { ok: false, error: "The project changed while that file was being added." };
     if (ops.length) {
       const n = ops.length;
       const label = n === 1 ? `Attached ${(probed[0] as Probed).label}` : `Attached ${n} files`;
@@ -930,7 +1107,7 @@ export class ProjectService {
     await mkdir(dir, { recursive: true });
     const file = path.join(dir, `${stem}-${Date.now().toString(36)}${ext}`);
     await writeFile(file, bytes);
-    return this.attach([file]);
+    return this.attachTo(store, [file]);
   }
 
   async reveal(relative?: unknown): Promise<void> {
@@ -999,6 +1176,7 @@ export class ProjectService {
     };
   }
 
+  /** What the agent can ask of the machine: frames of footage, and music from the web. */
   /** What the agent can ask of the machine: frames of footage, and music from the web. */
   private agentHost(): AgentHost {
     return {

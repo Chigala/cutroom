@@ -145,15 +145,18 @@ the environment.
 - **Timeline**: trim shots by their edges, S to split at the playhead, drag zooms, titles and captions.
 - **Checks**: hook timing, safe zones, beat sync, captions, dead air, shot lengths, ducking. Most have
   a one-click fix.
-- **Versions**: "make 3 versions" runs the agent three ways in parallel; watch them side by side, use
-  one, or take the cut from one and the music from another. History restores any earlier point.
+- **Projects and history**: every project you've opened sits down the left as a frame of its footage;
+  one click (or ⌘1-9) switches, ⌘K finds any of them, ⌘B shows their names. The chat is the history:
+  restore the edit to any request, or to your own edits in between, and undo the restore like anything
+  else. Duplicate a project to try another direction, or start over from its footage (already
+  analysed, so nothing is indexed twice).
 - **Export**: Remotion renders the same composition the preview plays, from full-quality masters; the
   voice is cut separately with ffmpeg, cleaned and levelled to -14 LUFS, then mixed under the picture.
 
 ## The project folder
 
 The video is a pure function of the folder. Everything the agent and the UI do is an op on these files,
-recorded in `.history/log.jsonl`, so undo, history, versions and "what did the AI change" all come from
+recorded in `.history/log.jsonl`, so undo, history, restore points and "what did the AI change" all come from
 one mechanism. Edit any file by hand and the change appears in the app as an undoable commit.
 
 ```
@@ -172,7 +175,6 @@ My Video/
   audio/music.json          music track, volume, ducking
   audio/sfx.json            sound effects (synthesized, nothing to license)
   comments/comments.json    notes pinned to moments
-  versions/                 saved alternatives
   exports/                  rendered videos
   .history/                 commit log and chat
   .cache/                   proxies, waveforms, masters (safe to delete)
@@ -182,7 +184,7 @@ My Video/
 
 ```
 apps/desktop        Electron main (project service, indexer, exporter, versions) and preload
-apps/client         React UI (Remotion Player preview, chat, timeline, words, versions)
+apps/client         React UI (Remotion Player preview, chat, timeline, words, project rail)
 packages/project    schemas, ops, commits, speech/caption maths, folder store
 packages/checks     quality checks with fixes
 packages/composition the Remotion composition: video = render(doc)

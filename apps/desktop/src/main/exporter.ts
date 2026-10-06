@@ -1,4 +1,5 @@
 /** Export jobs: one at a time per window, cancellable, progress streamed to the UI. */
+
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { ExportEvent } from "@vedit/bridge";
@@ -6,6 +7,7 @@ import { CancelledError } from "@vedit/media";
 import { newId } from "@vedit/project";
 import type { ProjectStore } from "@vedit/project/node";
 import { exportVideo } from "@vedit/render";
+import { settle } from "./indexer.ts";
 import { here } from "./protocols.ts";
 import { shotsToTrack, trackForReframe } from "./reframe.ts";
 import { paths } from "./settings.ts";
@@ -35,7 +37,7 @@ export class Exporter {
     const controller = new AbortController();
     this.job = { id, controller };
     const started = Date.now();
-    void store
+    this.running = store
       .flush()
       .then(async () => {
         // Other shapes are framed on the person in each shot: find them first (cheap, and kept).
@@ -90,6 +92,14 @@ export class Exporter {
         if (this.job?.id === id) this.job = null;
       });
     return { jobId: id };
+  }
+
+  /** The export under way, if any: what settled() waits for. */
+  private running: Promise<unknown> = Promise.resolve();
+
+  /** Resolves once a stopped export has wound down (before its project's folder goes away). */
+  settled(): Promise<void> {
+    return settle([this.running]);
   }
 
   cancel(jobId: unknown): void {

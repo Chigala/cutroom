@@ -14,7 +14,7 @@ import { useClaude } from "../../state/claude.ts";
 import { followLibrary, useLibrary } from "../../state/library.ts";
 import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
-import { setUi, useUi } from "../../state/ui.ts";
+import { setSideOpen, setUi, useUi } from "../../state/ui.ts";
 import { EffortSlider } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
@@ -671,7 +671,10 @@ function LibraryRow() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => setUi({ dialog: null, sideTab: "library", selection: null })}
+          onClick={() => {
+            setUi({ dialog: null, sideTab: "library", selection: null });
+            setSideOpen(true);
+          }}
         >
           Open the Library tab
         </Button>

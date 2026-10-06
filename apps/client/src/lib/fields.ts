@@ -1,11 +1,11 @@
 /**
- * Form fields generated from the project's own schemas. The inspector never hard-codes what a zoom or a
- * title has: it reads the zod schema (as JSON Schema) and builds an editor for each property. Add a field
- * to a schema and it shows up here, with its limits, options and description.
+ * Form fields generated from the project's own schemas (the export settings): nothing hard-codes what a
+ * settings file has. It reads the zod schema (as JSON Schema) and builds an editor for each property. Add a
+ * field to a schema and it shows up, with its limits, options and description.
  */
-import { CollectionSchemas, type Singleton, SingletonSchemas } from "@vedit/project";
+import { type Singleton, SingletonSchemas } from "@vedit/project";
 
-export type FieldKind =
+type FieldKind =
   | "text"
   | "longtext"
   | "number"
@@ -14,22 +14,7 @@ export type FieldKind =
   | "select"
   | "color"
   | "lines"
-  | "choices"
-  | "point"
-  | "time"
-  | "object"
-  | "ref";
-
-/** Collections of files a field can name by id: picked from what's in the project, not typed. */
-export type RefColl = "effectKinds" | "transitionKinds" | "grades" | "captionLooks" | "sources";
-
-/** A field described as "effects/<kind>.css" names a file in that folder. */
-const REF_FOLDERS: Record<string, RefColl> = {
-  effects: "effectKinds",
-  transitions: "transitionKinds",
-  grades: "grades",
-  "captions/looks": "captionLooks",
-};
+  | "choices";
 
 export interface Field {
   readonly key: string;
@@ -46,9 +31,6 @@ export interface Field {
   readonly optional?: boolean;
   /** What the schema fills in when the field is left out. */
   readonly default?: unknown;
-  readonly children?: readonly Field[];
-  /** For "ref" fields: the collection whose ids it takes. */
-  readonly ref?: RefColl;
 }
 
 interface JsonSchema {
@@ -58,8 +40,6 @@ interface JsonSchema {
   properties?: Record<string, JsonSchema>;
   required?: string[];
   default?: unknown;
-  /** Schema metadata: the field takes an id from this collection ("sources"). */
-  ref?: string;
   items?: JsonSchema;
   anyOf?: JsonSchema[];
   oneOf?: JsonSchema[];
@@ -72,7 +52,7 @@ interface JsonSchema {
 }
 
 /** "duckUnderSpeech" → "Duck under speech". */
-export const labelOf = (key: string) => {
+const labelOf = (key: string) => {
   const words = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
@@ -81,7 +61,7 @@ export const labelOf = (key: string) => {
   return label.replace(/\b(sfx|lufs|fps)\b/gi, (w) => w.toUpperCase()).replace(/\bjl\b/i, "J/L");
 };
 
-/** Fields the inspector shows elsewhere, or that only the system writes. */
+/** Fields shown elsewhere, or that only the system writes. */
 const HIDDEN = new Set(["id", "schema", "createdAt", "content", "source"]);
 
 function unwrap(s: JsonSchema): { schema: JsonSchema; nullable: boolean } {
@@ -101,9 +81,7 @@ function unwrap(s: JsonSchema): { schema: JsonSchema; nullable: boolean } {
 
 function fieldOf(key: string, raw: JsonSchema, required: boolean): Field | null {
   const { schema: s, nullable } = unwrap(raw);
-  // A clip from the library, picked by name (a shot's own source is shown elsewhere, so it has no ref).
-  const pickSource = (raw.ref ?? s.ref) === "sources";
-  if (HIDDEN.has(key) && !pickSource) return null;
+  if (HIDDEN.has(key)) return null;
   const fallback = raw.default ?? s.default;
   const base = {
     key,
@@ -113,14 +91,9 @@ function fieldOf(key: string, raw: JsonSchema, required: boolean): Field | null 
     ...(!required && { optional: true }),
     ...(fallback !== undefined && { default: fallback }),
   };
-  if (key === "anchor") return { ...base, label: "Starts at", kind: "time" };
   if (s.enum) return { ...base, kind: "select", options: s.enum.map(String) };
   if (s.type === "string") {
     if (s.pattern?.includes("[0-9a-fA-F]{6}")) return { ...base, kind: "color" };
-    if (pickSource) return { ...base, kind: "ref", ref: "sources" };
-    const folder = /\b([a-z]+(?:\/[a-z]+)?)\/<\w+>\.css/.exec(s.description ?? "")?.[1];
-    const ref = folder ? REF_FOLDERS[folder] : undefined;
-    if (ref) return { ...base, kind: "ref", ref };
     return { ...base, kind: (s.maxLength ?? 0) > 120 ? "longtext" : "text" };
   }
   if (s.type === "number" || s.type === "integer") {
@@ -140,12 +113,7 @@ function fieldOf(key: string, raw: JsonSchema, required: boolean): Field | null 
   if (s.type === "array" && unwrap(s.items ?? {}).schema.enum)
     return { ...base, kind: "choices", options: unwrap(s.items ?? {}).schema.enum!.map(String) };
   if (s.type === "array" && unwrap(s.items ?? {}).schema.type === "string") return { ...base, kind: "lines" };
-  if (s.type === "object" && s.properties) {
-    const keys = Object.keys(s.properties);
-    if (keys.length === 2 && keys.includes("x") && keys.includes("y")) return { ...base, kind: "point" };
-    const children = childFields(s);
-    return children.length ? { ...base, kind: "object", children } : null;
-  }
+  // Groups of settings have no control here: they're asked for in chat.
   return null;
 }
 
@@ -156,30 +124,11 @@ function childFields(s: JsonSchema): Field[] {
     .filter((f): f is Field => f !== null);
 }
 
-/** An object's value as the renderer sees it: the stored fields over each child's default. */
-export function withDefaults(
-  field: Field,
-  value: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const c of field.children ?? []) if (c.default !== undefined) out[c.key] = c.default;
-  return { ...out, ...value };
-}
-
 function fieldsOfSchema(schema: { toJSONSchema(opts?: object): unknown }): Field[] {
   return childFields(schema.toJSONSchema({ io: "input", unrepresentable: "any" }) as JsonSchema);
 }
 
 const cache = new Map<string, Field[]>();
-
-export function fieldsFor(coll: keyof typeof CollectionSchemas): Field[] {
-  let hit = cache.get(coll);
-  if (!hit) {
-    hit = fieldsOfSchema(CollectionSchemas[coll] as unknown as { toJSONSchema(opts?: object): unknown });
-    cache.set(coll, hit);
-  }
-  return hit;
-}
 
 export function fieldsForSingleton(key: Exclude<Singleton, "style">): Field[] {
   const k = `singleton:${key}`;

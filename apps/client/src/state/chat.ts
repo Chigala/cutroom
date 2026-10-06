@@ -576,6 +576,10 @@ function noteCommit(commit: Commit): void {
 }
 
 /** Each project has its own conversation. */
+let chatLoading: Promise<void> = Promise.resolve();
 useProject.subscribe((s, prev) => {
-  if (s.dir && s.dir !== prev.dir) void loadChat();
+  if (s.dir && s.dir !== prev.dir) chatLoading = loadChat();
 });
+
+/** Resolves once the open project's conversation is in (after a switch, before sending into it). */
+export const chatReady = (): Promise<void> => chatLoading;

@@ -17,9 +17,8 @@
  *     audio/music.json          the track, volume, ducking
  *     audio/sfx.json            sound effects
  *     comments/comments.json    notes pinned to moments
- *     versions/                 saved alternatives of the whole edit
  *     exports/                  rendered videos
- *     .history/log.jsonl        every commit, append-only
+ *     .history/log.jsonl        every commit, append-only (restore points)
  *     .cache/                   preview proxies, waveforms, render masters (safe to delete)
  */
 import { z } from "zod";
@@ -261,6 +260,7 @@ export function dirItem(rel: string): { dir: ProjectDir; id: string } | null {
 
 export const HISTORY_LOG = ".history/log.jsonl";
 export const CHAT_LOG = ".history/chat.json";
+/** Where older projects saved whole alternatives of the edit (no longer made; left out of copies). */
 export const VERSIONS_DIR = "versions";
 export const EXPORTS_DIR = "exports";
 export const CACHE_DIR = ".cache";

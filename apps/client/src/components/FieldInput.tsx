@@ -1,15 +1,11 @@
 /**
  * One editable field. Selects and toggles commit right away; text and numbers commit on blur or Enter;
- * sliders preview while dragging and commit once on release, so a drag is one undo step, not fifty.
+ * sliders commit once on release, so a drag is one undo step, not fifty.
  */
 
-import { PencilSimpleIcon } from "@phosphor-icons/react";
-import { captionLookMeta, styleMeta } from "@vedit/project";
 import { clsx } from "clsx";
 import { useEffect, useState } from "react";
-import { type Field, type RefColl, withDefaults } from "../lib/fields.ts";
-import { useDoc } from "../state/project.ts";
-import { setUi } from "../state/ui.ts";
+import type { Field } from "../lib/fields.ts";
 
 const box =
   "w-full rounded-md border border-line-strong bg-raised px-2 py-1.5 text-[13px] text-fg outline-none focus:border-edge";
@@ -35,23 +31,14 @@ export function FieldInput({
   field,
   value: stored,
   onCommit,
-  onPreview,
 }: {
   field: Field;
   value: unknown;
   onCommit: (value: unknown) => void;
-  /** Called while a slider drags, before the commit. */
-  onPreview?: (value: unknown) => void;
 }) {
   // A field that was left out shows what the schema fills in, not an empty control.
   const value = stored === undefined ? field.default : stored;
   switch (field.kind) {
-    case "ref":
-      return field.ref === "sources" ? (
-        <SourceSelect value={typeof value === "string" ? value : ""} onCommit={onCommit} />
-      ) : (
-        <RefSelect field={field} value={typeof value === "string" ? value : ""} onCommit={onCommit} />
-      );
     case "select":
       return (
         <select
@@ -93,7 +80,6 @@ export function FieldInput({
           <input
             type="color"
             value={typeof value === "string" ? value : "#ffffff"}
-            onChange={(e) => onPreview?.(e.target.value)}
             onBlur={(e) => onCommit(e.target.value)}
             className="h-7 w-10 cursor-pointer rounded border border-line-strong bg-transparent"
           />
@@ -106,7 +92,6 @@ export function FieldInput({
           field={field}
           value={typeof value === "number" ? value : (field.min ?? 0)}
           onCommit={onCommit}
-          onPreview={onPreview}
         />
       );
     case "number":
@@ -153,25 +138,6 @@ export function FieldInput({
       );
     case "longtext":
       return <TextBox multiline value={typeof value === "string" ? value : ""} onCommit={onCommit} />;
-    case "point": {
-      const p = (value as { x: number; y: number } | undefined) ?? { x: 0.5, y: 0.5 };
-      return (
-        <div className="grid grid-cols-2 gap-2">
-          {(["x", "y"] as const).map((axis) => (
-            <Slider
-              key={axis}
-              field={{ key: axis, label: axis, kind: "range", min: 0, max: 1, step: 0.01 }}
-              value={p[axis]}
-              prefix={axis.toUpperCase()}
-              onCommit={(v) => onCommit({ ...p, [axis]: v })}
-              onPreview={onPreview ? (v) => onPreview({ ...p, [axis]: v }) : undefined}
-            />
-          ))}
-        </div>
-      );
-    }
-    case "object":
-      return <ObjectFields field={field} value={value} onCommit={onCommit} onPreview={onPreview} />;
     default:
       // Anything without a control of its own: text, or JSON for a value that isn't (never "[object Object]").
       if (value !== null && typeof value === "object")
@@ -196,63 +162,6 @@ export function FieldInput({
   }
 }
 
-/**
- * A group of settings (checks.json's motion, a cover's moment): each of its fields, with what the schema
- * fills in for the ones not set. A change writes the whole group, so the others keep their values. One
- * that can be left empty (null) shows as off, with a way to set it.
- */
-function ObjectFields({
-  field,
-  value,
-  onCommit,
-  onPreview,
-}: {
-  field: Field;
-  value: unknown;
-  onCommit: (value: unknown) => void;
-  onPreview?: ((value: unknown) => void) | undefined;
-}) {
-  const off = value === null || (value === undefined && field.nullable);
-  const current = withDefaults(field, off ? undefined : (value as Record<string, unknown> | undefined));
-  if (off)
-    return (
-      <div className="flex items-center gap-2 text-[12px] text-faint">
-        None
-        <button
-          type="button"
-          onClick={() => onCommit(current)}
-          className="rounded-md px-1.5 py-0.5 text-accent hover:bg-button"
-        >
-          Set it
-        </button>
-      </div>
-    );
-  return (
-    <div className="flex flex-col gap-3 border-l border-line-strong pl-3">
-      {(field.children ?? []).map((c) => (
-        <FieldRow key={c.key} field={c}>
-          <FieldInput
-            field={c}
-            value={current[c.key]}
-            onCommit={(v) => onCommit({ ...current, [c.key]: v })}
-            {...(onPreview && { onPreview: (v: unknown) => onPreview({ ...current, [c.key]: v }) })}
-          />
-        </FieldRow>
-      ))}
-      {field.nullable && (
-        <button
-          type="button"
-          onClick={() => onCommit(null)}
-          className="self-start rounded-md px-1.5 py-0.5 text-[11px] text-muted hover:bg-button hover:text-fg"
-        >
-          Clear
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** Text that commits on blur or Enter (Shift+Enter for a new line in multiline fields). */
 export function TextBox({
   value,
   onCommit,
@@ -314,19 +223,7 @@ function NumberBox({
   );
 }
 
-function Slider({
-  field,
-  value,
-  onCommit,
-  onPreview,
-  prefix,
-}: {
-  field: Field;
-  value: number;
-  onCommit: (v: unknown) => void;
-  onPreview?: ((v: unknown) => void) | undefined;
-  prefix?: string;
-}) {
+function Slider({ field, value, onCommit }: { field: Field; value: number; onCommit: (v: unknown) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = () => {
@@ -334,7 +231,6 @@ function Slider({
   };
   return (
     <div className="flex items-center gap-2">
-      {prefix && <span className="w-3 font-mono text-[10px] text-faint">{prefix}</span>}
       <input
         type="range"
         min={field.min ?? 0}
@@ -342,9 +238,7 @@ function Slider({
         step={field.step ?? 0.01}
         value={draft}
         onChange={(e) => {
-          const v = Number(e.target.value);
-          setDraft(v);
-          onPreview?.(v);
+          setDraft(Number(e.target.value));
         }}
         onPointerUp={commit}
         onKeyUp={commit}
@@ -355,91 +249,5 @@ function Slider({
         {Number.isInteger(field.step) ? draft : draft.toFixed(2)}
       </span>
     </div>
-  );
-}
-
-const KIND_OF: Record<RefColl, "effect" | "transition" | "grade" | null> = {
-  effectKinds: "effect",
-  transitionKinds: "transition",
-  grades: "grade",
-  captionLooks: null,
-  sources: null,
-};
-
-/**
- * A field that names a file (an effect, transition, grade or caption look): pick one of the project's,
- * by its name, or open it to edit. New ones are new files, written by you or by Claude.
- */
-function RefSelect({
-  field,
-  value,
-  onCommit,
-}: {
-  field: Field;
-  value: string;
-  onCommit: (value: unknown) => void;
-}) {
-  const ref = field.ref!;
-  const files = useDoc((d) => d[ref]) as readonly { id: string; css: string }[];
-  const name = (f: { id: string; css: string }) =>
-    (ref === "captionLooks" ? captionLookMeta(f.css)?.name : styleMeta(f.css)?.name) ?? f.id;
-  const missing = value && !files.some((f) => f.id === value);
-  const open = () => {
-    if (!value || missing) return;
-    const kind = KIND_OF[ref];
-    setUi(kind ? { editingStyle: { kind, id: value } } : { editingLook: value });
-  };
-  return (
-    <div className="flex items-center gap-1.5">
-      <select value={value} onChange={(e) => e.target.value && onCommit(e.target.value)} className={box}>
-        {!value && <option value="">Choose…</option>}
-        {missing && <option value={value}>{value} (missing file)</option>}
-        {files.map((f) => (
-          <option key={f.id} value={f.id}>
-            {name(f)}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        aria-label={`Edit ${value || "file"}`}
-        title={value ? "Open this file to edit it, or make a new one" : undefined}
-        disabled={!value || Boolean(missing)}
-        onClick={open}
-        className="shrink-0 rounded-md p-1.5 text-muted hover:bg-button hover:text-fg disabled:opacity-30"
-      >
-        <PencilSimpleIcon size={13} />
-      </button>
-    </div>
-  );
-}
-
-const SOURCE_GROUPS = [
-  ["audio", "Audio"],
-  ["video", "Video"],
-  ["image", "Images"],
-] as const;
-
-/** A clip from the project's library, by name: sounds first, then video and stills. */
-function SourceSelect({ value, onCommit }: { value: string; onCommit: (value: unknown) => void }) {
-  const sources = useDoc((d) => d.sources);
-  const missing = value && !sources.some((s) => s.id === value);
-  return (
-    <select value={value} onChange={(e) => e.target.value && onCommit(e.target.value)} className={box}>
-      {!value && <option value="">Choose a clip…</option>}
-      {missing && <option value={value}>{value} (not in the library)</option>}
-      {SOURCE_GROUPS.map(([kind, label]) => {
-        const list = sources.filter((s) => s.kind === kind);
-        return list.length ? (
-          <optgroup key={kind} label={label}>
-            {list.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </optgroup>
-        ) : null;
-      })}
-    </select>
   );
 }

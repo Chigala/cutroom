@@ -32,6 +32,10 @@ function focusLines(ctx: AgentContext | undefined, doc: ProjectDoc): string {
     lines.push(`The playhead is at ${formatTime(ctx.time, true)} (${ctx.time.toFixed(2)}s).`);
   if (ctx.point)
     lines.push(`They pointed at x=${ctx.point.x.toFixed(2)}, y=${ctx.point.y.toFixed(2)} on the frame.`);
+  if (ctx.selection)
+    lines.push(
+      `They have ${ctx.selection.id} (${ctx.selection.coll}) selected: "this" and "it" in the request mean it.`,
+    );
   if (ctx.scenes?.length) lines.push(`Selected scenes: ${ctx.scenes.join(", ")}.`);
   if (ctx.comments?.length) {
     const comments = doc.comments.filter((c) => ctx.comments!.includes(c.id));
@@ -40,7 +44,15 @@ function focusLines(ctx: AgentContext | undefined, doc: ProjectDoc): string {
     );
   }
   if (ctx.words?.length) lines.push(`Selected words: ${ctx.words.join(", ")}.`);
-  if (ctx.range) {
+  if (ctx.range && ctx.range.end >= ctx.range.start && ctx.range.end - ctx.range.start < 0.05) {
+    // One frame, marked on the timeline: what's on screen then is what they mean.
+    const t = ctx.range.start;
+    const shot = timelineOf(doc).scenes.find((p) => p.start <= t && t < p.start + p.duration)?.scene.id;
+    const said = spokenWords(doc).filter((w) => w.end > t - 1 && w.start < t + 1);
+    lines.push(
+      `They marked the frame at ${formatTime(t, true)} (${t.toFixed(2)}s) on the timeline: the request is about what's on screen then. Look at it first to see what they mean. Shot: ${shot ?? "none"}.${said.length ? ` Said around it: "${said.map((w) => w.text).join(" ")}".` : ""}`,
+    );
+  } else if (ctx.range) {
     const { start, end } = ctx.range;
     const said = spokenWords(doc).filter((w) => w.end > start + 0.02 && w.start < end - 0.02);
     const tl = timelineOf(doc);

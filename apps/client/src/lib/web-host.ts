@@ -14,6 +14,7 @@ import type {
 import {
   type Commit,
   demoProject,
+  diffDocs,
   type InspirationInfo,
   inspirationInfo,
   inspirationMeta,
@@ -23,6 +24,7 @@ import {
   OpError,
   type ProjectDoc,
   packFromProject,
+  rewind,
   STARTER_INSPIRATIONS,
   stopInspirationOps,
 } from "@vedit/project";
@@ -30,6 +32,21 @@ import {
 type Listeners = { [E in keyof EditorEvents]: Set<(p: EditorEvents[E]) => void> };
 
 const DESKTOP_ONLY = "That needs the desktop app. Start it with pnpm dev.";
+
+const SAMPLE_PROJECTS =
+  import.meta.env.DEV && new URLSearchParams(location.search).has("projects")
+    ? [
+        "06-finance-creator",
+        "05-cinematic-quote",
+        "09-commercial-ad",
+        "Mr beast",
+        "IMG_4222",
+        "07-hook-cliffhanger",
+        "02-street-interview",
+        "01-gym-tour",
+        "08-recipe",
+      ]
+    : null;
 
 export function createWebHost(): EditorApi {
   let doc: ProjectDoc = demoProject();
@@ -67,7 +84,7 @@ export function createWebHost(): EditorApi {
     index: true,
     importDone: true,
     export: true,
-    versions: true,
+    thumbnail: true,
     claude: true,
     menu: true,
     library: true,
@@ -114,7 +131,25 @@ export function createWebHost(): EditorApi {
         commits.length = 0;
         return snapshot();
       },
-      recent: async () => [],
+      // One project here: the demo (in development, ?projects lists a few more, to work on the rail).
+      recent: async () => [
+        { dir: "(in memory)", name: doc.meta.name, openedAt: Date.now() },
+        ...(SAMPLE_PROJECTS
+          ? SAMPLE_PROJECTS.map((name, i) => ({
+              dir: `(sample) ${name}`,
+              name,
+              openedAt: Date.now() - (i + 1) * 3_600_000,
+            }))
+          : []),
+      ],
+      thumbnail: async () => null,
+      duplicate: async () => {
+        throw new Error(DESKTOP_ONLY);
+      },
+      trash: async () => {
+        throw new Error(DESKTOP_ONLY);
+      },
+      showProject: async () => {},
       async commit(req) {
         try {
           const result = makeCommit(doc, head, {
@@ -254,22 +289,19 @@ export function createWebHost(): EditorApi {
       },
       cancel: async () => {},
     },
-    versions: {
-      list: async () => [],
-      save: async () => {
-        throw new Error(DESKTOP_ONLY);
-      },
-      generate: async () => {
-        emit("versions", { type: "error", message: DESKTOP_ONLY });
-      },
-      doc: async () => null,
-      use: async () => ({ ok: false, error: DESKTOP_ONLY }),
-      remove: async () => {},
-    },
     history: {
       list: async () =>
         commits.toReversed().map((c) => ({ id: c.id, author: c.author, message: c.message, at: c.at })),
-      restore: async () => ({ ok: false, error: DESKTOP_ONLY }),
+      async restore(id) {
+        // As on the desktop: rewind to just after that commit, and commit the difference.
+        const at = commits.findIndex((c) => c.id === id);
+        if (at < 0) return { ok: false, error: "That point is no longer in the history." };
+        const past = rewind(doc, commits.slice(at + 1));
+        const ops = diffDocs(doc, past, ["sources", "transcripts", "analyses", "meta"]);
+        if (!ops.length) return { ok: false, error: "Nothing changed since then." };
+        const when = new Date(commits[at]!.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        return local(`Restored to ${when}`, ops);
+      },
     },
     settings: {
       get: async () => settings,

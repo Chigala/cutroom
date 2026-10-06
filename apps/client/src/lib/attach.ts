@@ -3,6 +3,7 @@
  * into the project's library right away (so indexing starts while you type), without touching the cut,
  * and the message carries its source id: "put this after scene one when he talks about Google".
  */
+import { create } from "zustand";
 import { host } from "./host.ts";
 
 export type AttachmentKind = "image" | "video" | "audio" | "other";
@@ -45,8 +46,12 @@ export function pending(file: File): Attachment {
   };
 }
 
+/** How many files are on their way into the project (switching projects waits for them). */
+export const useUploads = create<{ count: number }>()(() => ({ count: 0 }));
+
 /** Puts one file into the project's library. Files on disk are read in place; pasted data is saved. */
 export async function upload(file: File, name: string): Promise<{ source: string } | { error: string }> {
+  useUploads.setState((s) => ({ count: s.count + 1 }));
   try {
     const path = host.pathForFile(file);
     const result = path
@@ -57,5 +62,7 @@ export async function upload(file: File, name: string): Promise<{ source: string
     return source ? { source } : { error: "That file couldn't be added" };
   } catch (err) {
     return { error: (err as Error).message };
+  } finally {
+    useUploads.setState((s) => ({ count: s.count - 1 }));
   }
 }

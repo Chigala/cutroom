@@ -2,8 +2,8 @@ import { diffCollection, type Op } from "./ops.ts";
 import { COLLECTIONS, type Collection, type ProjectDoc, SINGLETONS, type Singleton } from "./schema.ts";
 
 /**
- * The ops that turn `from` into `to`, section by section. Used for outside file edits, switching to a
- * saved version and restoring history: every one of them lands as an ordinary, undoable commit.
+ * The ops that turn `from` into `to`, section by section. Used for outside file edits and restoring
+ * history: every one of them lands as an ordinary, undoable commit.
  */
 export function diffDocs(
   from: ProjectDoc,

@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Segmented } from "../../components/ui.tsx";
 import { setUi, useUi } from "../../state/ui.ts";
-import { Inspector } from "../inspector/Inspector.tsx";
 import { Checks } from "./Checks.tsx";
+import { ExportSettings } from "./ExportSettings.tsx";
 import { Files } from "./Files.tsx";
 import { Library } from "./Library.tsx";
 import { ShotLog } from "./ShotLog.tsx";
 import { Story } from "./Story.tsx";
-import { StyleEditor } from "./StyleEditor.tsx";
 import { Transcript } from "./Transcript.tsx";
 
 const TABS = [
@@ -15,29 +14,24 @@ const TABS = [
   { value: "transcript", label: "Words" },
   { value: "library", label: "Library" },
   { value: "files", label: "Files" },
-  { value: "style", label: "Style" },
+  { value: "export", label: "Export" },
 ] as const;
 
 export function SidePanel() {
   const tab = useUi((s) => s.sideTab);
-  const inspecting = useUi((s) => s.selection !== null);
+  const open = useUi((s) => s.sideOpen);
+  if (!open) return null;
   return (
     <aside className="flex min-h-0 w-[320px] shrink-0 flex-col gap-3.5 border-l border-line bg-panel p-4">
-      <Segmented value={tab} options={TABS} onChange={(sideTab) => setUi({ sideTab, selection: null })} />
+      <Segmented value={tab} options={TABS} onChange={(sideTab) => setUi({ sideTab })} />
       <div className="flex min-h-0 flex-1 flex-col">
-        {inspecting ? (
-          <Inspector />
-        ) : (
-          <>
-            {tab === "story" && <Story />}
-            {tab === "transcript" && <WordsTab />}
-            {tab === "library" && <Library />}
-            {tab === "files" && <Files />}
-            {tab === "style" && <StyleEditor />}
-          </>
-        )}
+        {tab === "story" && <Story />}
+        {tab === "transcript" && <WordsTab />}
+        {tab === "library" && <Library />}
+        {tab === "files" && <Files />}
+        {tab === "export" && <ExportSettings />}
       </div>
-      {!inspecting && <Checks />}
+      <Checks />
     </aside>
   );
 }

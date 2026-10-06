@@ -22,8 +22,9 @@ import { Button } from "../../components/ui.tsx";
 import { upload } from "../../lib/attach.ts";
 import { captionWindow } from "../../lib/caption-preview.ts";
 import { host, MEDIA_BASE } from "../../lib/host.ts";
-import { send, useChat } from "../../state/chat.ts";
+import { chatReady, send, useChat } from "../../state/chat.ts";
 import { receive, useDoc, useProject } from "../../state/project.ts";
+import { openProject } from "../../state/projects.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi } from "../../state/ui.ts";
 import { Brief } from "./Brief.tsx";
@@ -55,16 +56,17 @@ export function InspirationsView() {
   const selected = list?.find((i) => i.id === open) ?? null;
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-bg animate-fade-in">
-      <header className="drag-region flex h-[52px] shrink-0 items-center justify-between border-b border-line pr-4 pl-[84px]">
-        <div className="no-drag flex min-w-0 items-center gap-2">
+    // Over the editor, beside the project rail (which shows it's open), like a page in Claude's apps.
+    <div className="absolute inset-0 z-30 flex flex-col bg-bg animate-fade-in">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-line px-4">
+        <div className="flex min-w-0 items-center gap-2">
           <Button variant="ghost" onClick={close} className="-ml-2">
             <ArrowLeftIcon size={15} /> Editor
           </Button>
           <span className="text-faint">/</span>
           <span className="text-[14px] font-semibold">Inspirations</span>
         </div>
-        <div className="no-drag flex gap-2">
+        <div className="flex gap-2">
           <Button onClick={() => void host.inspirations.reveal()}>
             <FolderOpenIcon size={15} /> Open folder
           </Button>
@@ -313,12 +315,12 @@ function Detail({
     );
     onLeave();
   };
-  const tryVersion = () => {
-    void host.versions.generate(
-      `Follow the "${info.name}" inspiration (inspiration use ${info.id}) and re-edit the video to its brief.`,
-      1,
-    );
-    setUi({ view: "versions" });
+  /** The re-edit in a copy of the project, so this one stays as it is to compare. */
+  const tryCopy = async () => {
+    const dir = useProject.getState().dir;
+    if (!dir || !(await openProject(() => host.project.duplicate(dir, "edit")))) return;
+    await chatReady();
+    await reEdit();
   };
   const save = async () => {
     try {
@@ -380,8 +382,13 @@ function Detail({
               <Button disabled={working} onClick={useOnly}>
                 {active ? "Apply its settings again" : "Use its settings only"}
               </Button>
-              <Button variant="ghost" disabled={busy} onClick={tryVersion}>
-                Try as a version
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => void tryCopy()}
+                title="Makes a copy of this project and re-edits the copy, so this one stays to compare"
+              >
+                Try in a copy
               </Button>
             </>
           ) : (

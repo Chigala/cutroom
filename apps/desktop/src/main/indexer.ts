@@ -191,10 +191,23 @@ export class Indexer {
     this.enqueue(
       doc.sources.filter((s) => s.status === "pending" || s.status === "indexing").map((s) => s.id),
     );
-    void this.retime(this.controller.signal);
-    void this.healProxies(this.controller.signal);
-    void this.hearBackfill(this.controller.signal).then(() => this.readPictures());
-    void this.describeMissing();
+    this.track(this.retime(this.controller.signal));
+    this.track(this.healProxies(this.controller.signal));
+    this.track(this.hearBackfill(this.controller.signal).then(() => this.readPictures()));
+    this.track(this.describeMissing());
+  }
+
+  /** Work under way (indexing clips, the background passes): what settled() waits for. */
+  private inflight = new Set<Promise<unknown>>();
+
+  private track(work: Promise<unknown>): void {
+    this.inflight.add(work);
+    void work.catch(() => undefined).finally(() => this.inflight.delete(work));
+  }
+
+  /** Resolves once what was running has wound down (after reset(), before the folder goes away). */
+  settled(): Promise<void> {
+    return settle(this.inflight);
   }
 
   private describingMissing: Promise<void> | null = null;
@@ -523,7 +536,9 @@ export class Indexer {
       const own = new AbortController();
       this.jobs.set(id, own);
       const signal = AbortSignal.any([project, own.signal]);
-      void this.index(id, signal).finally(() => {
+      const work = this.index(id, signal);
+      this.track(work);
+      void work.finally(() => {
         // Another project opened, or this clip was removed (prune already moved on).
         if (signal.aborted) return;
         this.jobs.delete(id);
@@ -793,4 +808,12 @@ export class Indexer {
     await writeFile(file, peaks);
     return peaks;
   }
+}
+
+/** Waits for promises to settle, but no longer than `ms` (an aborted job winds down in a moment). */
+export function settle(work: Iterable<Promise<unknown>>, ms = 3000): Promise<void> {
+  return Promise.race([
+    Promise.allSettled([...work]).then(() => undefined),
+    new Promise<void>((r) => setTimeout(r, ms)),
+  ]);
 }

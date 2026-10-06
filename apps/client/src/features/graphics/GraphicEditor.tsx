@@ -27,7 +27,7 @@ import { edit, useDoc, useProject } from "../../state/project.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 import { AskClaude, CodeArea, PreviewPlayer } from "../code/parts.tsx";
-import { ParamFields } from "../inspector/Inspector.tsx";
+import { ParamFields } from "./ParamFields.tsx";
 
 const ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -233,8 +233,8 @@ export function GraphicEditor() {
             />
           )}
           <p className="text-[11px] leading-relaxed text-faint">
-            These values are only for trying the graphic out. Each visual on the timeline sets its own in the
-            inspector.
+            These values are only for trying the graphic out. Each visual on the timeline has its own: select
+            it and ask in the chat.
           </p>
         </aside>
       </div>

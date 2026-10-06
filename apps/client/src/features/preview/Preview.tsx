@@ -45,7 +45,7 @@ import {
   useViewedDoc,
 } from "../../state/project.ts";
 import { toast } from "../../state/toast.ts";
-import { setUi, useUi } from "../../state/ui.ts";
+import { setCommentsOpen, setUi, useUi } from "../../state/ui.ts";
 import { CommentsRail } from "./CommentsRail.tsx";
 import { EmptyStage } from "./EmptyStage.tsx";
 
@@ -60,8 +60,15 @@ export function Preview() {
 
 function PreviewBody() {
   const hasScenes = useDoc((d) => d.scenes.length > 0);
+  // Hidden comments give their room to the video (a 16:9 frame grows into it).
+  const comments = useUi((s) => s.commentsOpen);
   return (
-    <main className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-3.5 bg-sunken px-6 py-5 pr-[260px] [container-type:size]">
+    <main
+      className={clsx(
+        "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-3.5 bg-sunken px-6 py-5 [container-type:size]",
+        comments && "pr-[260px]",
+      )}
+    >
       {hasScenes ? (
         <>
           <StageBar />
@@ -172,7 +179,18 @@ const Stage = memo(function Stage() {
   }, [meta.fps, meta.durationInFrames]);
 
   return (
+    // ⌥-click anywhere on the video points at that spot (no Point button first, and it doesn't depend
+    // on having seen the key go down).
     <div
+      onClickCapture={(e) => {
+        // ⌥ held, or armed by the timeline's Mark button (one point, then it's off).
+        if (!(e.altKey || useUi.getState().marking) || stage === "cover") return;
+        // The box that opens at a point (its text, Comment, Do it) keeps its own clicks.
+        if ((e.target as Element).closest("[data-point-popover]")) return;
+        e.stopPropagation();
+        if (!e.altKey) setUi({ marking: false });
+        pointAt(e);
+      }}
       className="relative overflow-hidden rounded-[22px] bg-black shadow-[0_0_0_1px_#2a2a30]"
       // As tall as fits, but never wider than the column (a 16:9 shape is wide).
       style={{
@@ -230,36 +248,43 @@ const Stage = memo(function Stage() {
   );
 });
 
+/** Points at where the video was clicked: the spot and the moment, for the next request or a comment. */
+function pointAt(e: React.MouseEvent<HTMLElement>): void {
+  const r = e.currentTarget.getBoundingClientRect();
+  const point = {
+    x: Math.round(((e.clientX - r.left) / r.width) * 1000) / 1000,
+    y: Math.round(((e.clientY - r.top) / r.height) * 1000) / 1000,
+  };
+  pause();
+  setUi({ pointer: { point, time: currentTime() }, pointing: false });
+}
+
 function Overlay() {
   const safeZones = useUi((s) => s.safeZones);
   const pointing = useUi((s) => s.pointing);
+  const marking = useUi((s) => s.marking);
   const pointer = useUi((s) => s.pointer);
   const cover = useUi((s) => s.stage === "cover");
+  // ⌥ held points too, without the Point button first (not on the cover: it's a still, not a moment).
+  const armed = pointing || (marking && !cover);
   // The platform's buttons and captions are a phone-screen thing: none over a square or wide shape.
   const portrait = useUi((s) => s.stageShape === null || s.stageShape === "9:16" || s.stageShape === "4:5");
 
   const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!pointing) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const point = {
-      x: Math.round(((e.clientX - r.left) / r.width) * 1000) / 1000,
-      y: Math.round(((e.clientY - r.top) / r.height) * 1000) / 1000,
-    };
-    pause();
-    setUi({ pointer: { point, time: currentTime() }, pointing: false });
+    if (pointing) pointAt(e);
   };
 
   return (
     <div
-      className={clsx("absolute inset-0 z-10", pointing ? "cursor-crosshair" : "pointer-events-none")}
+      className={clsx("absolute inset-0 z-10", armed ? "cursor-crosshair" : "pointer-events-none")}
       onClick={onClick}
     >
       {!cover && <SceneLabel />}
       {safeZones && portrait && <SafeZones />}
       {!cover && <CommentPins />}
       {pointer && <PointPopover />}
-      {pointing && (
-        <div className="absolute inset-x-0 top-3 flex justify-center">
+      {armed && !pointer && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <span className="rounded-md bg-black/70 px-2 py-1 text-[11px] text-fg">
             Click the spot you mean
           </span>
@@ -370,6 +395,8 @@ function PointPopover() {
       },
     ]);
     setUi({ pointer: null });
+    // A comment just pinned shows where it went.
+    setCommentsOpen(true);
   };
   const instruct = () => {
     if (empty) return input.current?.focus();
@@ -384,6 +411,7 @@ function PointPopover() {
         style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
       />
       <div
+        data-point-popover
         className={clsx(
           "pointer-events-auto absolute w-[230px] rounded-[10px] border border-accent bg-bg p-2 shadow-xl animate-rise",
         )}

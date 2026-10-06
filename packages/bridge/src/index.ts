@@ -38,6 +38,10 @@ export const AgentContext = z.object({
   time: z.number().nonnegative().optional().describe("Playhead, in seconds"),
   point: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
   scenes: z.array(z.string()).max(50).optional(),
+  /** The item selected on the timeline: what "this" means in the request. */
+  selection: z
+    .object({ coll: z.string().regex(/^[a-zA-Z]{1,32}$/), id: z.string().regex(/^[\w-]{1,64}$/) })
+    .optional(),
   comments: z.array(z.string()).max(50).optional(),
   words: z.array(z.string()).max(500).optional().describe('Selected words, "<clip id>:<word index>"'),
   range: z
@@ -193,21 +197,6 @@ export type ExportEvent =
     }
   | { readonly jobId: string; readonly type: "done"; readonly file: string; readonly elapsedMs: number }
   | { readonly jobId: string; readonly type: "error"; readonly message: string };
-
-export interface VersionInfo {
-  readonly id: string;
-  readonly name: string;
-  readonly note: string;
-  readonly createdAt: number;
-  readonly duration: number;
-  readonly scenes: number;
-}
-
-export type VersionEvent =
-  | { readonly type: "changed" }
-  | { readonly type: "generating"; readonly total: number; readonly done: number; readonly label: string }
-  | { readonly type: "generated"; readonly ids: readonly string[] }
-  | { readonly type: "error"; readonly message: string };
 
 export interface HistoryEntry {
   readonly id: string;
@@ -434,6 +423,17 @@ export interface EditorApi {
     create(name: string): Promise<ProjectSnapshot | null>;
     openDemo(): Promise<ProjectSnapshot>;
     recent(): Promise<RecentProject[]>;
+    /** A small frame of a recent project's first shot (a data URL), or null when it has none yet. */
+    thumbnail(dir: string): Promise<string | null>;
+    /**
+     * A copy of a recent project next to it, opened: "edit" keeps the edit, "footage" starts again from
+     * the clips (their analysis comes along, so nothing is indexed twice).
+     */
+    duplicate(dir: string, from: "edit" | "footage"): Promise<ProjectSnapshot>;
+    /** Moves a recent project's folder to the Trash. Returns the project open after, when it was the open one. */
+    trash(dir: string): Promise<ProjectSnapshot | null>;
+    /** Shows a recent project's folder in the file manager. */
+    showProject(dir: string): Promise<void>;
     commit(req: CommitRequest): Promise<CommitResult>;
     /** Reads files in place (nothing is copied), adds them to the cut, and starts indexing them. */
     importFiles(paths: string[]): Promise<CommitResult>;
@@ -544,17 +544,6 @@ export interface EditorApi {
     start(): Promise<{ jobId: string }>;
     cancel(jobId: string): Promise<void>;
   };
-  readonly versions: {
-    list(): Promise<VersionInfo[]>;
-    /** Saves the current edit as a version. */
-    save(name: string): Promise<VersionInfo>;
-    /** Runs the agent several times in parallel, each in a different direction, and saves each result. */
-    generate(prompt: string, count: number): Promise<void>;
-    doc(id: string): Promise<ProjectDoc | null>;
-    /** Makes a version the current edit (one undoable commit). */
-    use(id: string): Promise<CommitResult>;
-    remove(id: string): Promise<void>;
-  };
   readonly history: {
     list(): Promise<HistoryEntry[]>;
     /** Puts the project back the way it was right after `commitId` (one undoable commit). */
@@ -578,7 +567,8 @@ export interface EditorEvents {
   index: IndexEvent;
   importDone: ImportDoneEvent;
   export: ExportEvent;
-  versions: VersionEvent;
+  /** A project's thumbnail was made again (its first shot changed). */
+  thumbnail: { dir: string };
   claude: ClaudeTask;
   menu: { action: MenuAction };
   library: LibraryState;

@@ -39,7 +39,7 @@ import { peaksOf } from "../../state/jobs.ts";
 import { pause, playback, seekTime, useFrameEffect } from "../../state/playback.ts";
 import { DraftViewContext, edit, useDoc, useDraftShown, useProject } from "../../state/project.ts";
 import { fitTimeline, setRange, useTimeline, zoomBy, zoomTo } from "../../state/timeline.ts";
-import { select, useUi } from "../../state/ui.ts";
+import { composerRef, select, setUi, useUi } from "../../state/ui.ts";
 import { AddMenu } from "./AddMenu.tsx";
 
 const LABEL_W = 88;
@@ -63,6 +63,7 @@ function TimelineBody() {
   const [width, setWidth] = useState(0);
   const tl = useDoc(timelineOf);
   const { zoom, start: viewStart, range } = useTimeline();
+  const marking = useUi((s) => s.marking);
 
   useLayoutEffect(() => {
     const el = track.current;
@@ -105,6 +106,38 @@ function TimelineBody() {
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  /**
+   * ⌥ held, anywhere on the timeline: a drag marks a stretch, a click marks that frame. Either goes to
+   * the chat with the next request, and the text bar takes the typing.
+   */
+  // The click that ends a mark isn't also a click on what's under it (a shot would get selected, a word
+  // would seek away from the frame).
+  const marked = useRef(false);
+  const mark = (e: React.PointerEvent) => {
+    marked.current = false;
+    if (!(e.altKey || useUi.getState().marking) || !pps || e.button !== 0) return;
+    // Only on the tracks themselves: + Add, the zoom and Mark buttons, a selection's × stay buttons.
+    if (!(e.target as Element).closest("[data-track]")) return;
+    // Armed by the Mark button, it's one mark at a time.
+    if (!e.altKey) setUi({ marking: false });
+    e.stopPropagation();
+    marked.current = true;
+    const rect = track.current!.getBoundingClientRect();
+    const at = (x: number) => Math.max(0, Math.min(tl.duration, (x - rect.left + offset) / pps));
+    const t0 = at(e.clientX);
+    pause();
+    seekTime(t0);
+    setRange({ start: t0, end: t0 });
+    const move = (ev: PointerEvent) => {
+      const t1 = at(ev.clientX);
+      setRange({ start: Math.min(t0, t1), end: Math.max(t0, t1) });
+    };
+    const up = () => {
+      composerRef.current?.focus();
+    };
+    follow(move, up);
+  };
+
   // Click or drag on empty track space to scrub.
   const scrub = (e: React.PointerEvent) => {
     if (!pps || e.button !== 0) return;
@@ -113,19 +146,24 @@ function TimelineBody() {
     pause();
     go(e.clientX);
     const move = (ev: PointerEvent) => go(ev.clientX);
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    const up = () => {};
+    follow(move, up);
   };
 
   return (
     <View.Provider value={{ offset }}>
       <section
         ref={section}
-        className="relative h-[264px] shrink-0 overflow-hidden border-t border-line bg-track px-6 py-3"
+        onPointerDownCapture={mark}
+        onClickCapture={(e) => {
+          if (!marked.current) return;
+          marked.current = false;
+          e.stopPropagation();
+        }}
+        className={clsx(
+          "relative h-[264px] shrink-0 overflow-hidden border-t border-line bg-track px-6 py-3",
+          marking && "cursor-crosshair [&_*]:cursor-crosshair",
+        )}
         aria-label="Timeline"
       >
         <div className="flex h-full flex-col gap-1">
@@ -168,6 +206,11 @@ function TimelineBody() {
           </div>
         </div>
         {range && pps > 0 && <RangeBand range={range} pps={pps} offset={offset} width={width} />}
+        {marking && (
+          <span className="pointer-events-none absolute top-2.5 left-1/2 z-30 -translate-x-1/2 rounded-md bg-black/80 px-2.5 py-1 text-[11px] text-fg animate-fade-in">
+            Drag to mark a stretch · click to mark a frame · click the video to point
+          </span>
+        )}
         {draftShown && (
           <span
             title="The agent's draft, to watch. Switch to your project on the preview to edit."
@@ -190,6 +233,8 @@ function ZoomControls({ zoom }: { zoom: number }) {
     "flex h-[18px] min-w-[18px] items-center justify-center rounded px-1 text-[11px] text-muted hover:bg-button hover:text-fg-2 disabled:opacity-30";
   return (
     <div className="absolute top-2.5 right-6 flex items-center gap-0.5 rounded-md bg-track/90 font-mono">
+      <MarkButton />
+      <span className="mx-1 h-3 w-px bg-line-strong" />
       <button
         type="button"
         aria-label="Zoom out"
@@ -223,6 +268,49 @@ function ZoomControls({ zoom }: { zoom: number }) {
 }
 
 /**
+ * Follows a drag until the button comes up, or until the drag is lost (released outside the window,
+ * ⌘-Tab away): without that, a lost drag kept tracking until the next click.
+ */
+function follow(move: (e: PointerEvent) => void, up: () => void): void {
+  const end = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    window.removeEventListener("blur", end);
+    up();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+  window.addEventListener("blur", end);
+}
+
+const ALT = isMac ? "⌥" : "Alt";
+
+/**
+ * The ⌥ shortcut, where people look for timeline tools: it says what holding ⌥ does, and a click arms
+ * the same marking for one click or drag (for a trackpad, or before you've learned the key).
+ */
+function MarkButton() {
+  const marking = useUi((s) => s.marking);
+  return (
+    <button
+      type="button"
+      aria-pressed={marking}
+      title={`Hold ${ALT} (or click here), then click the timeline to mark a frame, drag to mark a stretch, or click the video to point at something. Then ask in the chat about it.`}
+      onClick={() => setUi({ marking: !marking })}
+      className={clsx(
+        "flex h-[18px] items-center gap-1 rounded px-1.5 text-[10px]",
+        marking ? "bg-accent text-accent-fg" : "text-muted hover:bg-button hover:text-fg-2",
+      )}
+    >
+      <span className="[font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif]">{ALT}</span>
+      <span className="font-sans">Mark</span>
+    </button>
+  );
+}
+
+/**
  * A stretch selected on the ruler, shaded across every row. It goes to the agent with the next
  * request ("tighten this", "add a meme here"); Escape or × clears it.
  */
@@ -239,19 +327,26 @@ function RangeBand({
 }) {
   const a = Math.max(0, range.start * pps - offset);
   const b = Math.min(width, range.end * pps - offset);
-  if (b <= 0 || a >= width) return null;
+  if (b < 0 || a > width) return null;
   const left = 24 + LABEL_W + a;
+  // A frame: the moment, as a line.
+  const frame = range.end - range.start < 0.05;
   return (
     <>
       <div
-        className="pointer-events-none absolute top-[34px] bottom-2.5 border-x border-accent/70 bg-accent/12"
-        style={{ left, width: Math.max(1, b - a) }}
+        className={clsx(
+          "pointer-events-none absolute top-[34px] bottom-2.5",
+          frame ? "w-0.5 bg-accent" : "border-x border-accent/70 bg-accent/12",
+        )}
+        style={{ left, ...(!frame && { width: Math.max(1, b - a) }) }}
       />
       <div
         className="absolute top-[34px] z-20 flex -translate-y-1/2 items-center gap-1 rounded-md bg-accent py-px pr-0.5 pl-1.5 font-mono text-[10px] whitespace-nowrap text-accent-fg shadow"
         style={{ left: left + 2 }}
       >
-        {formatTime(range.start, true)}–{formatTime(range.end, true)}
+        {frame
+          ? `Frame ${formatTime(range.start, true)}`
+          : `${formatTime(range.start, true)}–${formatTime(range.end, true)}`}
         <span className="font-sans opacity-80">· ask in the chat</span>
         <button
           type="button"
@@ -339,7 +434,7 @@ function Row({
       <div className="shrink-0 font-mono text-[11px] text-muted" style={{ width: LABEL_W }}>
         {label}
       </div>
-      <div ref={trackRef} className="relative h-full flex-1 overflow-hidden">
+      <div ref={trackRef} data-track className="relative h-full flex-1 overflow-hidden">
         <div className="absolute inset-0" style={{ transform: `translateX(${-offset}px)` }}>
           {children}
         </div>
@@ -388,15 +483,12 @@ const Ruler = memo(function Ruler({
       setRange({ start: Math.min(t0, t1), end: Math.max(t0, t1) });
     };
     const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
       if (!moved) {
         pause();
         seekTime(t0);
-      }
+      } else composerRef.current?.focus();
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    follow(move, up);
   };
   return (
     <div
@@ -564,8 +656,6 @@ const SceneBlock = memo(function SceneBlock({
       } else el.style.width = `${Math.max(2, width + px)}px`;
     };
     const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
       el.style.transform = restore.transform;
       el.style.width = restore.width;
       if (Math.abs(dt) < 0.02) return;
@@ -576,8 +666,7 @@ const SceneBlock = memo(function SceneBlock({
           : trimSceneOps(doc, scene.id, scene.in, scene.out + dt);
       edit(ops, { message: `Trimmed ${scene.id}` });
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    follow(move, up);
   };
 
   return (
@@ -627,7 +716,7 @@ const SceneBlock = memo(function SceneBlock({
 });
 
 /** The clip's loudness under the shot, drawn once per size into a canvas. */
-export function Waveform({ source, from, to }: { source: string; from: number; to: number }) {
+function Waveform({ source, from, to }: { source: string; from: number; to: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [peaks, setPeaks] = useState<Uint8Array | null>(null);
   const status = useDoc((d) => d.sources.find((s) => s.id === source)?.status);
@@ -806,10 +895,16 @@ function Draggable({
       dx = ev.clientX - x0;
       el.style.transform = `translateX(${dx}px)`;
     };
-    const up = () => {
+    const stop = () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", cancel);
       el.style.transform = "";
+    };
+    // A drag the system takes away (a gesture, the window losing focus) puts the item back.
+    const cancel = () => stop();
+    const up = () => {
+      stop();
       if (Math.abs(dx) < 3) {
         seekTime(start);
         select({ coll, id });
@@ -821,6 +916,7 @@ function Draggable({
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", cancel);
   };
   return (
     <button

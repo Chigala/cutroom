@@ -5,7 +5,7 @@ export type EditorEventName =
   | "index"
   | "importDone"
   | "export"
-  | "versions"
+  | "thumbnail"
   | "claude"
   | "menu"
   | "library"
@@ -20,6 +20,10 @@ export const Channel = {
   create: "project:create",
   openDemo: "project:open-demo",
   recent: "project:recent",
+  thumbnail: "project:thumbnail",
+  duplicate: "project:duplicate",
+  trash: "project:trash",
+  showProject: "project:show-project",
   commit: "project:commit",
   importFiles: "project:import",
   pickAndImport: "project:pick-import",
@@ -60,12 +64,6 @@ export const Channel = {
   claudeCancel: "claude:cancel",
   exportStart: "export:start",
   exportCancel: "export:cancel",
-  versionsList: "versions:list",
-  versionsSave: "versions:save",
-  versionsGenerate: "versions:generate",
-  versionsDoc: "versions:doc",
-  versionsUse: "versions:use",
-  versionsRemove: "versions:remove",
   historyList: "history:list",
   historyRestore: "history:restore",
   kitsList: "kits:list",

@@ -8,24 +8,26 @@ import { GraphicEditor } from "./features/graphics/GraphicEditor.tsx";
 import { Header } from "./features/header/Header.tsx";
 import { InspirationsView } from "./features/inspirations/InspirationsView.tsx";
 import { LookEditor } from "./features/looks/LookEditor.tsx";
+import { PROJECT_SHORTCUTS, ProjectRail } from "./features/nav/ProjectRail.tsx";
+import { Switcher } from "./features/nav/Switcher.tsx";
 import { Onboarding } from "./features/onboarding/Onboarding.tsx";
 import { Preview } from "./features/preview/Preview.tsx";
-import { openProject, ProjectsDialog } from "./features/projects/ProjectsDialog.tsx";
 import { SettingsDialog } from "./features/settings/SettingsDialog.tsx";
 import { SidePanel } from "./features/side/SidePanel.tsx";
 import { KindEditor } from "./features/styles/KindEditor.tsx";
 import { Timeline } from "./features/timeline/Timeline.tsx";
-import { VersionsView } from "./features/versions/VersionsView.tsx";
 import { host } from "./lib/host.ts";
+import { isMac } from "./lib/keys.ts";
 import { connectChat } from "./state/chat.ts";
 import { connectJobs } from "./state/jobs.ts";
 import { offerToKeep } from "./state/library.ts";
 import { currentTime, holdStep, releaseStep, seekTime, togglePlay } from "./state/playback.ts";
 import { connectHost, edit, receive, redo, undo, useProject } from "./state/project.ts";
+import { connectProjects, openProject, useProjects } from "./state/projects.ts";
 import { loadSettings, useSettings } from "./state/settings.ts";
 import { fitTimeline, setRange, zoomBy } from "./state/timeline.ts";
 import { dismissToast, toast, useToasts } from "./state/toast.ts";
-import { composerRef, setUi, useUi } from "./state/ui.ts";
+import { composerRef, setUi, toggleRail, toggleSide, useUi } from "./state/ui.ts";
 
 /** In development, ?onboarding shows the first-launch screens in the browser too, to work on them. */
 const PREVIEW_ONBOARDING = import.meta.env.DEV && new URLSearchParams(location.search).has("onboarding");
@@ -42,7 +44,7 @@ export function App() {
   const onboarded = useSettings((s) => s.settings?.onboarded);
   useEffect(() => {
     void loadSettings();
-    const offs = [connectHost(), connectChat(), connectJobs()];
+    const offs = [connectHost(), connectChat(), connectJobs(), connectProjects()];
     return () => {
       for (const off of offs) off();
     };
@@ -64,20 +66,24 @@ export function App() {
         <>
           <Header />
           <div className="flex min-h-0 flex-1">
-            <ChatPanel />
-            <Preview />
-            <SidePanel />
+            <ProjectRail />
+            <div className="relative flex min-w-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1">
+                <ChatPanel />
+                <Preview />
+                <SidePanel />
+              </div>
+              <Timeline />
+              {view === "inspirations" && <InspirationsView />}
+            </div>
           </div>
-          <Timeline />
           <DropTarget />
-          {view === "versions" && <VersionsView />}
-          {view === "inspirations" && <InspirationsView />}
           {editingGraphic && <GraphicEditor key="graphic-editor" />}
           {editingLook && <LookEditor key="look-editor" />}
           {editingStyle && <KindEditor key="kind-editor" />}
           {dialog === "export" && <ExportDialog />}
           {dialog === "settings" && <SettingsDialog />}
-          {dialog === "projects" && <ProjectsDialog />}
+          {dialog === "projects" && <Switcher />}
         </>
       ) : (
         <div className="drag-region h-[52px] border-b border-line" />
@@ -107,6 +113,24 @@ function useAppMenu(): void {
 }
 
 function useHotkeys(): void {
+  // Holding ⌥ arms marking (the timeline and the video take a click or a drag as "this, here").
+  useEffect(() => {
+    const set = (marking: boolean) => {
+      if (useUi.getState().marking !== marking) setUi({ marking });
+    };
+    // Not while typing: ⌥ there is word-jumping and special characters, not marking.
+    const down = (e: KeyboardEvent) => e.key === "Alt" && !typing(e.target) && set(true);
+    const up = (e: KeyboardEvent) => e.key === "Alt" && set(false);
+    const off = () => set(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", off);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", off);
+    };
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -116,10 +140,47 @@ function useHotkeys(): void {
         else undo();
         return;
       }
-      if (mod && e.key.toLowerCase() === "k") {
+      // ⇧⌘B shows or hides the side panel (⌘B is the rail's names).
+      if (
+        (isMac ? e.metaKey : e.ctrlKey) &&
+        e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "b" &&
+        !typing(e.target)
+      ) {
         e.preventDefault();
-        composerRef.current?.focus();
+        toggleSide();
         return;
+      }
+      // Projects: ⌘K to jump to one, ⌘B for the rail's names, ⌘N for a new one, ⌘1-9 for the rail's.
+      // ⌘ itself on a Mac (Ctrl there is text editing: Ctrl-K, Ctrl-N), and never on a held key's repeat.
+      const app = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
+      if (app && !e.shiftKey && !e.altKey && !e.repeat) {
+        const key = e.key.toLowerCase();
+        if (key === "k") {
+          e.preventDefault();
+          setUi((s) => ({ dialog: s.dialog === "projects" ? null : "projects" }));
+          return;
+        }
+        if (key === "b" && !typing(e.target)) {
+          e.preventDefault();
+          toggleRail();
+          return;
+        }
+        if (key === "n") {
+          e.preventDefault();
+          void openProject(() => host.project.newFromVideos());
+          return;
+        }
+        // By key position, so ⌘1 is ⌘1 on any layout (AZERTY's is "&").
+        const n = /^Digit([1-9])$/.exec(e.code) ? Number(e.code.slice(5)) : 0;
+        if (n >= 1 && n <= PROJECT_SHORTCUTS) {
+          const target = useProjects.getState().recent[n - 1];
+          e.preventDefault();
+          if (target && target.dir !== useProject.getState().dir)
+            void openProject(() => host.project.open(target.dir));
+          return;
+        }
       }
       if (typing(e.target) || mod || e.altKey) return;
       switch (e.key) {
@@ -183,7 +244,14 @@ function useHotkeys(): void {
           break;
         case "Escape":
           setRange(null);
-          setUi({ pointing: false, pointer: null, selectedScene: null, selection: null, view: "editor" });
+          setUi({
+            pointing: false,
+            marking: false,
+            pointer: null,
+            selectedScene: null,
+            selection: null,
+            view: "editor",
+          });
           break;
         case "Backspace":
         case "Delete": {

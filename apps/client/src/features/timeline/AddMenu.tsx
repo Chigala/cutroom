@@ -1,8 +1,8 @@
 /**
  * "+ Add": put a graphic, cutaway, effect, transition, sound, zoom or title at the playhead. Effects and
  * transitions are listed from the project's own files (effects/, transitions/), so a new one, written by
- * you or by Claude, shows up here. Whatever is added opens in the inspector straight away, so adding and
- * tuning are one motion.
+ * you or by Claude, shows up here. Whatever is added is selected straight away, so the next request
+ * ("make it say...", "move it to the punchline") is about it.
  */
 
 import {
@@ -33,7 +33,7 @@ import { importClips } from "../../lib/import.ts";
 import { currentTime } from "../../state/playback.ts";
 import { edit, useDoc, useProject } from "../../state/project.ts";
 import { toast } from "../../state/toast.ts";
-import { type InspectableColl, select, setUi } from "../../state/ui.ts";
+import { type InspectableColl, select } from "../../state/ui.ts";
 
 type Section = "graphic" | "cutaway" | "effect" | "transition" | "sound" | null;
 
@@ -50,6 +50,7 @@ const entry = (f: StyleFile, fallback: number) => {
 
 export function AddMenu() {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState({ left: 0, bottom: 0, room: 400 });
   const [section, setSection] = useState<Section>(null);
   const ref = useRef<HTMLDivElement>(null);
   const graphics = useDoc((d) => d.graphics);
@@ -106,7 +107,6 @@ export function AddMenu() {
     const op = { op: "insert", coll, item: make(id, anchor, tl.duration - t) } as Op;
     if (edit([op], { message: label })) {
       select({ coll, id });
-      setUi({ sideTab: "story" });
     }
     setOpen(false);
     setSection(null);
@@ -137,7 +137,6 @@ export function AddMenu() {
       )
     ) {
       select({ coll: "scenes", id: placed.scene.id });
-      setUi({ sideTab: "story" });
     }
     setOpen(false);
     setSection(null);
@@ -147,14 +146,22 @@ export function AddMenu() {
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => {
+          // Above the button, against the window: the timeline clips anything that leaves its box.
+          const r = e.currentTarget.getBoundingClientRect();
+          setAt({ left: r.left, bottom: window.innerHeight - r.top + 6, room: r.top - 12 });
+          setOpen((o) => !o);
+        }}
         aria-expanded={open}
         className="flex items-center gap-1 rounded-md bg-control px-1.5 py-0.5 font-sans text-[11px] text-fg-2 hover:bg-selected hover:text-fg"
       >
         <PlusIcon size={12} /> Add
       </button>
       {open && (
-        <div className="absolute bottom-7 left-0 z-50 flex w-64 flex-col rounded-xl border border-line-strong bg-panel p-1.5 font-sans shadow-2xl animate-rise">
+        <div
+          className="fixed z-50 flex w-64 flex-col overflow-y-auto rounded-xl border border-line-strong bg-panel p-1.5 font-sans shadow-2xl animate-rise"
+          style={{ left: at.left, bottom: at.bottom, maxHeight: at.room }}
+        >
           {section === null ? (
             <>
               <Item

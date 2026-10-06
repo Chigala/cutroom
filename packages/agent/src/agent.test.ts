@@ -107,6 +107,22 @@ describe("agent tools", () => {
     expect(prompt.indexOf("<attachments>")).toBeLessThan(prompt.indexOf("put this after scene one"));
   });
 
+  it('tells the model what\'s selected, so "this" means it', () => {
+    const prompt = buildPrompt(
+      talking(),
+      "slow it down",
+      { selection: { coll: "scenes", id: "sc2" }, scenes: ["sc2"] },
+      [],
+    );
+    expect(prompt).toContain('They have sc2 (scenes) selected: "this" and "it" in the request mean it.');
+  });
+
+  it("tells the model a marked frame is about what's on screen then", () => {
+    const prompt = buildPrompt(talking(), "what's this", { range: { start: 2, end: 2 } }, []);
+    expect(prompt).toContain("They marked the frame at 0:02.0 (2.00s) on the timeline");
+    expect(prompt).toContain("Look at it first");
+  });
+
   it("reads and searches the visual transcript", async () => {
     const doc: ProjectDoc = {
       ...talking(),

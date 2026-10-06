@@ -16,6 +16,10 @@ const api: EditorApi = {
     create: (name) => invoke(Channel.create, name),
     openDemo: () => invoke(Channel.openDemo),
     recent: () => invoke(Channel.recent),
+    thumbnail: (dir) => invoke(Channel.thumbnail, dir),
+    duplicate: (dir, from) => invoke(Channel.duplicate, dir, from),
+    trash: (dir) => invoke(Channel.trash, dir),
+    showProject: (dir) => invoke(Channel.showProject, dir),
     commit: (req) => invoke(Channel.commit, req),
     importFiles: (paths) => invoke(Channel.importFiles, paths),
     pickAndImport: () => invoke(Channel.pickAndImport),
@@ -69,14 +73,6 @@ const api: EditorApi = {
   exporter: {
     start: () => invoke(Channel.exportStart),
     cancel: (jobId) => invoke(Channel.exportCancel, jobId),
-  },
-  versions: {
-    list: () => invoke(Channel.versionsList),
-    save: (name) => invoke(Channel.versionsSave, name),
-    generate: (prompt, count) => invoke(Channel.versionsGenerate, prompt, count),
-    doc: (id) => invoke(Channel.versionsDoc, id),
-    use: (id) => invoke(Channel.versionsUse, id),
-    remove: (id) => invoke(Channel.versionsRemove, id),
   },
   history: {
     list: () => invoke(Channel.historyList),

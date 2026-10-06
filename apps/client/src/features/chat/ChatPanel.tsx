@@ -5,14 +5,17 @@ import {
   CaretRightIcon,
   CheckIcon,
   CircleNotchIcon,
+  ClockCounterClockwiseIcon,
   CopyIcon,
   CrosshairIcon,
+  CursorClickIcon,
   FilmStripIcon,
   GearSixIcon,
   LightbulbIcon,
   ListPlusIcon,
   MusicNotesIcon,
   PaperclipIcon,
+  PencilSimpleIcon,
   SparkleIcon,
   StopIcon,
   WarningIcon,
@@ -21,12 +24,12 @@ import {
 import type { AgentContext, WorkEntry } from "@vedit/bridge";
 import { activeInspiration, formatTime, inspirationMeta } from "@vedit/project";
 import { clsx } from "clsx";
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "../../components/Markdown.tsx";
 import { ChangeChip } from "../../components/ui.tsx";
 import { type Attachment, pending, upload } from "../../lib/attach.ts";
 import { took } from "../../lib/duration.ts";
-import { MEDIA_BASE } from "../../lib/host.ts";
+import { host, MEDIA_BASE } from "../../lib/host.ts";
 import { mod } from "../../lib/keys.ts";
 import {
   type AgentRun,
@@ -48,15 +51,16 @@ import {
 import { useJobs } from "../../state/jobs.ts";
 import { offerToKeep } from "../../state/library.ts";
 import { currentTime } from "../../state/playback.ts";
-import { isReverted, revert, useDoc, useProject } from "../../state/project.ts";
+import { isReverted, receive, revert, useDoc, useProject } from "../../state/project.ts";
 import { setRange, useTimeline } from "../../state/timeline.ts";
 import { toast } from "../../state/toast.ts";
-import { composerRef, setUi, useUi } from "../../state/ui.ts";
+import { composerRef, select, selectionContext, setUi, useUi } from "../../state/ui.ts";
 import { ThinkingPicker } from "./ThinkingPicker.tsx";
 import { UsageMeter } from "./UsageMeter.tsx";
 
 export function ChatPanel() {
   const items = useChat((s) => s.items);
+  const dir = useProject((s) => s.dir);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
 
@@ -77,9 +81,19 @@ export function ChatPanel() {
         // The conversation is text: select and copy any of it (the app is otherwise unselectable).
         className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-[18px] pt-[18px] pb-2 select-text"
       >
-        {items.length === 0 ? <Empty /> : items.map((item) => <Item key={item.id} item={item} />)}
+        {items.length === 0 ? (
+          <Empty />
+        ) : (
+          items.map((item, i) => (
+            <Fragment key={item.id}>
+              <Item item={item} />
+              {item.kind !== "user" && <HandEdits after={item} next={items[i + 1]} />}
+            </Fragment>
+          ))
+        )}
       </div>
-      <Composer />
+      {/* One per project: its draft stays with it; attachments not sent are dropped on switching. */}
+      <Composer key={dir ?? ""} dir={dir} />
     </aside>
   );
 }
@@ -169,6 +183,7 @@ function ContextLine({ context }: { context: AgentContext }) {
       : context.time !== undefined && `at ${formatTime(context.time, true)}`,
     context.point && `pointing ${Math.round(context.point.x * 100)}%, ${Math.round(context.point.y * 100)}%`,
     context.comments?.length && `${context.comments.length} comments`,
+    context.selection && `on ${context.selection.id}`,
   ].filter(Boolean);
   if (!parts.length) return null;
   return <div className="mt-1 font-mono text-[11px] text-muted">{parts.join(" · ")}</div>;
@@ -211,7 +226,7 @@ function Run({ run }: { run: AgentRun }) {
       {run.kept && run.runId && <KeptRow runId={run.runId} count={run.kept} />}
       {(run.status === "error" || run.status === "stopped") && <RetryRow run={run} />}
       {commit && commit.groups.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="group/changes flex flex-wrap items-center gap-1.5">
           {commit.groups.map((g, i) => (
             <ChangeChip
               key={i}
@@ -220,8 +235,87 @@ function Run({ run }: { run: AgentRun }) {
               onUndo={() => revert(commit.id, i)}
             />
           ))}
+          <RestoreButton commitId={commit.id} label="Restore to here" />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Whether anything was changed after a commit (so going back to it would change something). */
+function useChangedSince(commitId: string): boolean {
+  return useProject((s) => {
+    const i = s.commits.findIndex((c) => c.id === commitId);
+    // A restore back to this very point isn't a change since it.
+    return (
+      i >= 0 && s.commits.slice(i + 1).some((c) => c.author !== "index" && restoredTo.get(c.id) !== commitId)
+    );
+  });
+}
+
+/** Restore commits, to the point each one restored: the button hides once that's where the edit is. */
+const restoredTo = new Map<string, string>();
+
+/**
+ * Puts the whole edit back the way it was right after a request (or a run of hand edits): one commit,
+ * so ⌘Z takes it back. Shows on hover, like Copy, once something has changed since.
+ */
+function RestoreButton({ commitId, label }: { commitId: string; label: string }) {
+  const changed = useChangedSince(commitId);
+  const [busy, setBusy] = useState(false);
+  if (!changed) return null;
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      title="Put the edit back the way it was at this point. You can undo it."
+      onClick={() => {
+        setBusy(true);
+        void host.history
+          .restore(commitId)
+          .then((r) => {
+            if (!r.ok) return toast(r.error, "warn");
+            restoredTo.set(r.commit.id, commitId);
+            receive(r.commit);
+            toast(`Restored. ${mod}Z puts it back.`);
+          })
+          .finally(() => setBusy(false));
+      }}
+      className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-faint opacity-0 group-hover/changes:opacity-100 hover:bg-button hover:text-fg-2 focus-visible:opacity-100 disabled:opacity-50"
+    >
+      <ClockCounterClockwiseIcon size={12} />
+      {label}
+    </button>
+  );
+}
+
+/**
+ * The user's own edits between one chat item and the next (trims, drags, splits): one quiet
+ * line, so the conversation is the whole history and any point of it can be restored.
+ */
+function HandEdits({ after, next }: { after: ChatItem; next: ChatItem | undefined }) {
+  const commits = useProject((s) => s.commits);
+  const notes = useChat((s) => s.items);
+  const own = after.kind === "agent" ? after.commitId : after.kind === "note" ? after.commitId : null;
+  // From the item's start: edits made while Claude was working belong here too.
+  const from = after.at;
+  const to = next?.at ?? Number.POSITIVE_INFINITY;
+  const noted = new Set(notes.flatMap((n) => (n.kind === "note" ? [n.commitId] : [])));
+  const edits = commits.filter(
+    (c) => c.author === "user" && c.at > from && c.at < to && c.id !== own && !noted.has(c.id),
+  );
+  if (!edits.length) return null;
+  // Restore to whichever came last, the edits or the reply's own change, so restoring here never
+  // drops the reply.
+  const ownCommit = own ? commits.find((c) => c.id === own) : undefined;
+  const last = ownCommit && ownCommit.at > edits.at(-1)!.at ? ownCommit : edits.at(-1)!;
+  return (
+    <div className="group/changes flex items-center gap-2 border-y border-dashed border-line py-1.5 text-[12px] text-faint">
+      <PencilSimpleIcon size={12} className="shrink-0" />
+      <span className="min-w-0 flex-1 truncate" title={edits.map((c) => c.message).join("\n")}>
+        You · {edits.length === 1 ? edits[0]!.message : `${edits.length} edits`}
+      </span>
+      <RestoreButton commitId={last.id} label="Restore" />
     </div>
   );
 }
@@ -545,7 +639,7 @@ function Note({ commitId, imported }: { commitId: string; imported?: ChangeNote[
             : "Changed"}
       </div>
       <div className="text-[13px] text-fg-2">{commit.message}</div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="group/changes flex flex-wrap items-center gap-1.5">
         {commit.groups.map((g, i) => (
           <ChangeChip
             key={i}
@@ -554,6 +648,7 @@ function Note({ commitId, imported }: { commitId: string; imported?: ChangeNote[
             onUndo={() => revert(commit.id, i)}
           />
         ))}
+        <RestoreButton commitId={commit.id} label="Restore to here" />
       </div>
       {imported && <ImportStatus imported={imported} />}
     </div>
@@ -633,9 +728,26 @@ function ImportStatus({ imported }: { imported: NonNullable<ChangeNote["import"]
   );
 }
 
-function Composer() {
-  const [text, setText] = useState("");
+/** What's typed and not sent yet, per project: switching away and back finds it as it was left. */
+const drafts = new Map<string, string>();
+
+function Composer({ dir }: { dir: string | null }) {
+  const [text, setText] = useState(() => (dir && drafts.get(dir)) || "");
+  useEffect(() => {
+    if (!dir) return;
+    if (text) drafts.set(dir, text);
+    else drafts.delete(dir);
+  }, [dir, text]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Previews of what was attached but not sent go with the project's composer.
+  const held = useRef(attachments);
+  held.current = attachments;
+  useEffect(
+    () => () => {
+      for (const a of held.current) if (a.preview) URL.revokeObjectURL(a.preview);
+    },
+    [],
+  );
   const [dropping, setDropping] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const uploading = attachments.some((a) => a.status === "uploading");
@@ -656,6 +768,7 @@ function Composer() {
       ? suggestion
       : null;
 
+  const selected = useUi((s) => (s.selection ? s.selection.id : null));
   useEffect(() => {
     composerRef.current = ref.current;
     return () => {
@@ -667,9 +780,15 @@ function Composer() {
     ? "Drop to attach it to your message"
     : pointer
       ? "What should happen here?"
-      : attachments.length
-        ? "Where should it go? e.g. after scene one"
-        : (offer ?? "Tell it what to change, or point at the video");
+      : range
+        ? range.end - range.start < 0.05
+          ? "What about this frame?"
+          : "What should happen in this stretch?"
+        : selected
+          ? `What should change about ${selected}?`
+          : attachments.length
+            ? "Where should it go? e.g. after scene one"
+            : (offer ?? "Tell it what to change, or point at the video");
 
   // Grow with the text, up to a limit; while it's empty, with the placeholder (a suggestion can run to
   // two lines, and would spill over what's below).
@@ -721,7 +840,7 @@ function Composer() {
     const base: AgentContext = pointer
       ? { time: pointer.time, point: pointer.point }
       : { time: currentTime() };
-    const context: AgentContext = range ? { ...base, range } : base;
+    const context: AgentContext = { ...base, ...(range && { range }), ...selectionContext() };
     void send(text.trim() || "Use what I attached where it fits best.", context, "quick", ready);
     setText("");
     for (const a of attachments) if (a.preview) URL.revokeObjectURL(a.preview);
@@ -767,11 +886,27 @@ function Composer() {
         {range && (
           <div className="mr-1.5 mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-accent/10 py-0.5 pr-1 pl-2 font-mono text-[11px] text-fg animate-fade-in">
             <BracketsSquareIcon size={12} className="text-accent" />
-            {formatTime(range.start, true)}–{formatTime(range.end, true)}
+            {range.end - range.start < 0.05
+              ? `Frame ${formatTime(range.start, true)}`
+              : `${formatTime(range.start, true)}–${formatTime(range.end, true)}`}
             <button
               type="button"
               aria-label="Clear the selected stretch"
               onClick={() => setRange(null)}
+              className="rounded p-0.5 text-muted hover:text-fg"
+            >
+              <XIcon size={12} />
+            </button>
+          </div>
+        )}
+        {selected && (
+          <div className="mr-1.5 mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-accent/10 py-0.5 pr-1 pl-2 font-mono text-[11px] text-fg animate-fade-in">
+            <CursorClickIcon size={12} className="text-accent" />
+            {selected}
+            <button
+              type="button"
+              aria-label={`Deselect ${selected}`}
+              onClick={() => select(null)}
               className="rounded p-0.5 text-muted hover:text-fg"
             >
               <XIcon size={12} />

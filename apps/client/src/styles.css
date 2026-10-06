@@ -52,6 +52,8 @@
   body,
   #root {
     height: 100%;
+    /* An app, not a page: nothing (a scrollIntoView deep inside) may scroll the window itself. */
+    overflow: clip;
   }
   body {
     margin: 0;

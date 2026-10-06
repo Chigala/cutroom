@@ -1,21 +1,54 @@
-import { XIcon } from "@phosphor-icons/react";
+import { ChatCircleTextIcon, SidebarSimpleIcon, XIcon } from "@phosphor-icons/react";
 import { formatTime, resolveAnchor, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
 import { SectionLabel } from "../../components/ui.tsx";
 import { send, useChat } from "../../state/chat.ts";
 import { seekTime } from "../../state/playback.ts";
 import { edit, useDoc } from "../../state/project.ts";
+import { setCommentsOpen, useUi } from "../../state/ui.ts";
 
-/** Notes pinned to moments. Leave a few, then hand them all to the agent at once. */
+/**
+ * Notes pinned to moments. Leave a few, then hand them all to the agent at once. Hidden, they're a chip
+ * in the corner (with how many are open) that brings them back.
+ */
 export function CommentsRail() {
   const comments = useDoc((d) => d.comments);
   const tl = useDoc(timelineOf);
   const busy = useChat((s) => s.activeRun !== null);
+  const shown = useUi((s) => s.commentsOpen);
   const open = comments.filter((c) => c.status !== "resolved");
+
+  if (!shown)
+    return (
+      <button
+        type="button"
+        onClick={() => setCommentsOpen(true)}
+        title="Show comments"
+        className="absolute top-6 right-[22px] flex items-center gap-1.5 rounded-lg px-2 py-1 font-mono text-[11px] tracking-[0.06em] text-muted uppercase hover:bg-button hover:text-fg"
+      >
+        <ChatCircleTextIcon size={14} />
+        {open.length > 0 ? `Comments · ${open.length}` : "Comments"}
+      </button>
+    );
 
   return (
     <div className="absolute top-6 right-[22px] bottom-6 flex w-[214px] flex-col gap-2.5">
-      <SectionLabel right={<span className="font-mono text-[11px] text-faint">{open.length} open</span>}>
+      <SectionLabel
+        right={
+          <span className="flex items-center gap-1.5">
+            <span className="font-mono text-[11px] text-faint">{open.length} open</span>
+            <button
+              type="button"
+              aria-label="Hide comments"
+              title="Hide comments"
+              onClick={() => setCommentsOpen(false)}
+              className="-my-1 rounded-md p-1 text-faint hover:bg-button hover:text-fg"
+            >
+              <SidebarSimpleIcon size={14} mirrored />
+            </button>
+          </span>
+        }
+      >
         Comments
       </SectionLabel>
       <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">

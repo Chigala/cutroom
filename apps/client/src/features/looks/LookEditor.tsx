@@ -34,7 +34,7 @@ function headerProblem(css: string): string | null {
 }
 
 /** Switches the project's captions to a look, with the settings its header asks for, as one edit. */
-export function applyLook(look: CaptionLook): boolean {
+function applyLook(look: CaptionLook): boolean {
   return edit(
     [
       {

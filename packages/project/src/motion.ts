@@ -170,13 +170,32 @@ export const poseTransform = (p: Pose, width: number, height: number) =>
 
 // --- Cutouts -----------------------------------------------------------------------------------------
 
-/** Media keys for files made from a clip: its cutout over a stretch, a ramped shot. */
-export const cutoutKey = (source: string, from: number, to: number) =>
-  `${source}~cutout~${from.toFixed(2)}~${to.toFixed(2)}`;
+/** A short hash of points, for tags. */
+function pointsHash(points: readonly { x: number; y: number; at: number }[]): string {
+  let h = 2166136261;
+  for (const c of points.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.at.toFixed(2)}`).join(";"))
+    h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * What a shot's cutout is, as a short tag for keys and records: who (everyone, or "q<hash>" for people
+ * picked by points) and what's kept with them ("subject" for everything in the foreground, "p<hash>" for
+ * objects at points). "" for everyone and nothing else: the cutout as it always was.
+ */
+export function keepTag(scene: Pick<Scene, "keep" | "person">): string {
+  const who = scene.person?.length ? `q${pointsHash(scene.person)}` : "";
+  const what = !scene.keep ? "" : scene.keep === "subject" ? "subject" : `p${pointsHash(scene.keep)}`;
+  return who + what;
+}
+
+/** Media keys for files made from a clip: its cutout over a stretch (and what it keeps), a ramped shot. */
+export const cutoutKey = (source: string, from: number, to: number, keep = "") =>
+  `${source}~cutout~${from.toFixed(2)}~${to.toFixed(2)}${keep ? `~${keep}` : ""}`;
 export const rampKey = (source: string, hash: string) => `${source}~ramp~${hash}`;
 /** The background of a cutout's stretch blurred without the person (no halo), at a blur amount. */
-export const blurPlateKey = (source: string, from: number, to: number, amount: number) =>
-  `${source}~bgblur~${from.toFixed(2)}~${to.toFixed(2)}~${amount}`;
+export const blurPlateKey = (source: string, from: number, to: number, amount: number, keep = "") =>
+  `${source}~bgblur~${from.toFixed(2)}~${to.toFixed(2)}~${amount}${keep ? `~${keep}` : ""}`;
 
 /** A still for a cover, from one moment of a clip: the frame, the person cut out, or the background blurred. */
 export type CoverPart = "frame" | "cut" | `blur${number}`;
@@ -187,8 +206,8 @@ export function parseDerivedKey(
   key: string,
 ):
   | { kind: "cover"; source: string; t: number; part: "frame" | "cut" | "blur"; amount: number }
-  | { kind: "cutout"; source: string; from: number; to: number }
-  | { kind: "bgblur"; source: string; from: number; to: number; amount: number }
+  | { kind: "cutout"; source: string; from: number; to: number; keep: string }
+  | { kind: "bgblur"; source: string; from: number; to: number; amount: number; keep: string }
   | { kind: "ramp"; source: string; hash: string }
   | null {
   const v = /^(.+)~cover~(\d+(?:\.\d+)?)~(frame|cut|blur)(\d+)?$/.exec(key);
@@ -200,22 +219,34 @@ export function parseDerivedKey(
       part: v[3] as "frame" | "cut" | "blur",
       amount: Number(v[4] ?? 0),
     };
-  const b = /^(.+)~bgblur~(\d+(?:\.\d+)?)~(\d+(?:\.\d+)?)~(\d+(?:\.\d+)?)$/.exec(key);
-  if (b) return { kind: "bgblur", source: b[1]!, from: Number(b[2]), to: Number(b[3]), amount: Number(b[4]) };
-  const c = /^(.+)~cutout~(\d+(?:\.\d+)?)~(\d+(?:\.\d+)?)$/.exec(key);
-  if (c) return { kind: "cutout", source: c[1]!, from: Number(c[2]), to: Number(c[3]) };
+  const b = /^(.+)~bgblur~(\d+(?:\.\d+)?)~(\d+(?:\.\d+)?)~(\d+(?:\.\d+)?)(?:~([a-z0-9]+))?$/.exec(key);
+  if (b)
+    return {
+      kind: "bgblur",
+      source: b[1]!,
+      from: Number(b[2]),
+      to: Number(b[3]),
+      amount: Number(b[4]),
+      keep: b[5] ?? "",
+    };
+  const c = /^(.+)~cutout~(\d+(?:\.\d+)?)~(\d+(?:\.\d+)?)(?:~([a-z0-9]+))?$/.exec(key);
+  if (c) return { kind: "cutout", source: c[1]!, from: Number(c[2]), to: Number(c[3]), keep: c[4] ?? "" };
   const r = /^(.+)~ramp~([0-9a-z]+)$/.exec(key);
   if (r) return { kind: "ramp", source: r[1]!, hash: r[2]! };
   return null;
 }
 
-/** The made cutout of a clip that covers [from, to] of it, if there is one. */
+/** The made cutout of a clip that covers [from, to] of it and keeps the same things (keepTag), if any. */
 export function cutoutCovering(
   analysis: Pick<Analysis, "cutouts"> | undefined,
   from: number,
   to: number,
-): { from: number; to: number; blurs?: number[] | undefined } | null {
-  return analysis?.cutouts?.find((c) => c.from <= from + 1e-3 && c.to >= to - 1e-3) ?? null;
+  keep = "",
+): { from: number; to: number; blurs?: number[] | undefined; keep?: string | undefined } | null {
+  return (
+    analysis?.cutouts?.find((c) => c.from <= from + 1e-3 && c.to >= to - 1e-3 && (c.keep ?? "") === keep) ??
+    null
+  );
 }
 
 /**

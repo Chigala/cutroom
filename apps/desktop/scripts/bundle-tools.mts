@@ -26,6 +26,8 @@ import {
 import path from "node:path";
 import {
   compileHear,
+  compileLift,
+  compileSee,
   DEEP_FILTER_BINARIES,
   DEEP_FILTER_VERSION,
   ensureDeepFilter,
@@ -317,6 +319,33 @@ if (platform === "darwin") {
   }
   selfContained(dest);
   manifest.hear = { source: "packages/media/src/hear.ts" };
+}
+
+// 5. The subject lifter (Apple's Vision: the person and what they hold, for cutouts that keep more).
+if (platform === "darwin") {
+  const dest = path.join(out, "lift");
+  if (!force && existsSync(dest)) {
+    console.log("✓ lift (already there)");
+  } else {
+    step("the subject lifter");
+    // Built for the app's oldest macOS; it uses subject lifting only where it's there (macOS 14+).
+    await compileLift(dest, arch === "arm64" ? "arm64-apple-macos13.3" : "x86_64-apple-macos13.3");
+  }
+  selfContained(dest);
+  manifest.lift = { source: "packages/media/src/lift.ts" };
+}
+
+// 6. The seeing tool (Apple's Vision: words on screen, where the eye goes, how good each moment looks).
+if (platform === "darwin") {
+  const dest = path.join(out, "see");
+  if (!force && existsSync(dest)) {
+    console.log("✓ see (already there)");
+  } else {
+    step("the seeing tool");
+    await compileSee(dest, arch === "arm64" ? "arm64-apple-macos13.3" : "x86_64-apple-macos13.3");
+  }
+  selfContained(dest);
+  manifest.see = { source: "packages/media/src/see.ts" };
 }
 
 // Notices: what ships, under which licence, and where its source is (the GPL asks for that).

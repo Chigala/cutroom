@@ -74,6 +74,46 @@ export const MODELS = {
     size: 14_975_696,
     license: "GPL-3.0",
   },
+  /** ISNet (general use, as rembg ships it): everything in the foreground, for cutouts that keep more than the person. */
+  foreground: {
+    file: "isnet-general-use.onnx",
+    url: "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx",
+    sha256: "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a",
+    size: 178_648_008,
+    license: "Apache-2.0",
+  },
+  /** PaddleOCR's text detector (PP-OCRv4 mobile, as RapidOCR ships it): where the words are. */
+  ocrDet: {
+    file: "ch_PP-OCRv4_det_infer.onnx",
+    url: "https://huggingface.co/SWHL/RapidOCR/resolve/1cfba2e90fc938db55889873735088de210cc173/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx",
+    sha256: "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+    size: 4_745_517,
+    license: "Apache-2.0",
+  },
+  /** PaddleOCR's reader for Latin script (PP-OCRv5 mobile: English and most European languages). */
+  ocrRec: {
+    file: "latin_PP-OCRv5_rec.onnx",
+    url: "https://huggingface.co/monkt/paddleocr-onnx/resolve/7b02d0a30a07ba2b92ad1ff5a8941ae2c633de65/languages/latin/rec.onnx",
+    sha256: "614ffc2d6d3902d360fad7f1b0dd455ee45e877069d14c4e51a99dc4ef144409",
+    size: 7_862_832,
+    license: "Apache-2.0",
+  },
+  /** The reader's characters, one a line. */
+  ocrDict: {
+    file: "latin_PP-OCRv5_dict.txt",
+    url: "https://huggingface.co/monkt/paddleocr-onnx/resolve/7b02d0a30a07ba2b92ad1ff5a8941ae2c633de65/languages/latin/dict.txt",
+    sha256: "3c0a8a79b612653c25f765271714f71281e4e955962c153e272b7b8c1d2b13ff",
+    size: 1_634,
+    license: "Apache-2.0",
+  },
+  /** U²-Net (small): where the eye goes in a frame. */
+  saliency: {
+    file: "u2netp.onnx",
+    url: "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
+    sha256: "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
+    size: 4_574_861,
+    license: "Apache-2.0",
+  },
 } as const satisfies Record<string, ModelFile>;
 
 export type ModelName = keyof typeof MODELS;
@@ -86,6 +126,11 @@ const PURPOSE: Record<ModelName, string> = {
   soundsData: "Sound recognition",
   soundLabels: "Sound recognition",
   cutouts: "Person cutouts",
+  foreground: "Cutouts that keep what they hold",
+  ocrDet: "Reading words on screen",
+  ocrRec: "Reading words on screen",
+  ocrDict: "Reading words on screen",
+  saliency: "Where the eye goes",
 };
 
 /** Platforms ONNX Runtime ships for. */

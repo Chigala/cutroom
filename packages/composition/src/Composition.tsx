@@ -29,6 +29,7 @@ import {
   followPath,
   type Graphic,
   type Keyframe,
+  keepTag,
   type Look,
   type MotionTrack,
   type MusicClip,
@@ -48,7 +49,7 @@ import {
   sceneAt,
   sceneLength,
   scenesNeedingCutout,
-  shotFace,
+  shotFocus,
   sourceTime,
   spokenWords,
   type Timeline,
@@ -153,19 +154,22 @@ export const VideoComposition = ({
     const starts = new Map(tl.scenes.map((p) => [p.scene.id, { start: p.start, end: p.start + p.duration }]));
     const out = new Map<string, { key: string; from: number; plate?: string }>();
     for (const s of scenesNeedingCutout(doc, starts)) {
+      // What the cutout keeps with the person (the mic they hold...), part of which one it is.
+      const keep = keepTag(s);
       const c = cutoutCovering(
         doc.analyses.find((a) => a.id === s.source),
         s.in,
         s.out,
+        keep,
       );
       if (!c) continue;
       // A blurred background made without the person (no halo), once it exists.
       const amount = s.background?.kind === "blur" ? (s.background.amount ?? 18) : null;
       const plate =
         amount !== null && c.blurs?.includes(amount)
-          ? blurPlateKey(s.source, c.from, c.to, amount)
+          ? blurPlateKey(s.source, c.from, c.to, amount, keep)
           : undefined;
-      out.set(s.id, { key: cutoutKey(s.source, c.from, c.to), from: c.from, ...(plate && { plate }) });
+      out.set(s.id, { key: cutoutKey(s.source, c.from, c.to, keep), from: c.from, ...(plate && { plate }) });
     }
     return out;
   }, [doc, tl]);
@@ -174,7 +178,8 @@ export const VideoComposition = ({
     const out = new Map<string, Framed>();
     for (const p of tl.scenes) {
       const a = doc.analyses.find((x) => x.id === p.scene.source);
-      const face = shotFace(a, p.scene.in, p.scene.out);
+      // On the person, else on where the eye goes (a shot with nobody in it).
+      const face = shotFocus(a, p.scene.in, p.scene.out);
       const path =
         doc.look.reframe === "follow"
           ? followPath(a, p.scene, fps, Math.ceil(p.duration * fps) + 1, doc.look.follow)

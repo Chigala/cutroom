@@ -1180,7 +1180,7 @@ export const TOOLS: readonly AgentTool[] = [
   tool({
     name: "get_shots",
     description:
-      "Read what a clip shows, shot by shot (the visual transcript): shot type, camera move, energy, highlights and a description, in source time, plus loud stretches with no speech. Use it to find b-roll, reactions and action without looking at every frame.",
+      "Read what a clip shows, shot by shot (the visual transcript): shot type, camera move, energy, highlights and a description, in source time, plus loud stretches with no speech, the words seen on screen (signs, slides, screens, captions already burned in) and where, the best-looking moments, and moments the face is weak (a blink). Use it to find b-roll, reactions and action without looking at every frame.",
     input: z.object({
       source: z.string(),
       from: z.number().min(0).optional().describe("Seconds into the clip"),

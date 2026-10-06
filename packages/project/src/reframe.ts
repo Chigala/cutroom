@@ -4,7 +4,7 @@
  * else the clip's usual face), and with look.reframe "follow" the frame pans with them, smoothly.
  */
 import { sourceOffset } from "./motion.ts";
-import type { Analysis, Format, Scene } from "./schema.ts";
+import type { Analysis, Format, ProjectDoc, Scene } from "./schema.ts";
 
 export const SHAPES = ["9:16", "4:5", "1:1", "16:9"] as const;
 export type Shape = (typeof SHAPES)[number];
@@ -78,6 +78,27 @@ export function shotFace(
 }
 
 /**
+ * Where a shot's frame centres for another shape: on its person (shotFace), else, for a shot with nobody
+ * in it (b-roll, a product, scenery), on where the eye goes over the shot: the middle of what draws
+ * attention, from the clip's saliency.
+ */
+export function shotFocus(
+  analysis: Pick<Analysis, "tracks" | "face" | "salient"> | undefined,
+  from: number,
+  to: number,
+): Focus | undefined {
+  const face = shotFace(analysis, from, to);
+  if (face) return face;
+  const seen = (analysis?.salient ?? []).filter((s) => s.t >= from - 0.5 && s.t <= to + 0.5);
+  if (!seen.length) return undefined;
+  return {
+    x: median(seen.map((s) => s.x + s.w / 2)),
+    y: median(seen.map((s) => s.y + s.h / 2)),
+    size: 0.3,
+  };
+}
+
+/**
  * The face's place frame by frame through a shot, for a frame that follows the person: the track,
  * smoothed (about half a second), then followed like a camera operator would, holding still until the
  * person drifts out of a small dead zone and easing after them. Null without a face track.
@@ -143,4 +164,45 @@ export function fitsInside(
   if (fit === "cover" || !source.width || !source.height) return false;
   if (fit === "fit") return true;
   return source.height > source.width * 1.05 && frame.width > frame.height * 1.05;
+}
+
+/**
+ * The part of a shot's clip that shows in the frame, as shares of the clip's picture: filling the frame
+ * (cropped to the project's shape), centred on the shot's framing or its focus (shotFocus), zoomed by the
+ * framing's scale. Zooms and camera moves over the shot aren't counted. Null without the clip's size.
+ */
+export function frameWindow(
+  doc: Pick<ProjectDoc, "meta" | "sources" | "analyses">,
+  scene: Pick<Scene, "source" | "in" | "out" | "framing">,
+): { x: number; y: number; w: number; h: number } | null {
+  const src = doc.sources.find((s) => s.id === scene.source);
+  if (!src?.width || !src.height) return null;
+  const srcAspect = src.width / src.height;
+  const outAspect = doc.meta.format.width / doc.meta.format.height;
+  const scale = scene.framing?.scale ?? 1;
+  const w = (srcAspect > outAspect ? outAspect / srcAspect : 1) / scale;
+  const h = (srcAspect > outAspect ? 1 : srcAspect / outAspect) / scale;
+  const focus =
+    scene.framing ??
+    shotFocus(
+      doc.analyses.find((a) => a.id === scene.source),
+      scene.in,
+      scene.out,
+    );
+  const cx = focus?.x ?? 0.5;
+  const cy = focus?.y ?? 0.5;
+  const clamp = (v: number, size: number) => Math.min(1 - size, Math.max(0, v - size / 2));
+  return { x: clamp(cx, w), y: clamp(cy, h), w, h };
+}
+
+/** A box on a clip's picture (shares, from the top left) as it lands in the frame; null when it's cropped away. */
+export function toFrame(
+  win: { x: number; y: number; w: number; h: number },
+  box: { x: number; y: number; w: number; h: number },
+): { x: number; y: number; w: number; h: number } | null {
+  const x1 = Math.max(0, (box.x - win.x) / win.w);
+  const y1 = Math.max(0, (box.y - win.y) / win.h);
+  const x2 = Math.min(1, (box.x + box.w - win.x) / win.w);
+  const y2 = Math.min(1, (box.y + box.h - win.y) / win.h);
+  return x2 > x1 && y2 > y1 ? { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } : null;
 }

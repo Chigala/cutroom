@@ -18,9 +18,10 @@ import {
   type Source,
 } from "@vedit/project";
 import { findBinary, run } from "./exec.ts";
+import { LiftUnavailable, liftMattes } from "./lift.ts";
 import { useOpenModels } from "./models.ts";
 import { renderableAsIs } from "./transcode.ts";
-import { matteFrames } from "./vision.ts";
+import { addForeground, keepOnlyPeople, matteFrames } from "./vision.ts";
 
 const opts = (signal?: AbortSignal) => (signal ? { signal } : {});
 
@@ -196,6 +197,12 @@ async function appleMattes(
     );
 }
 
+/** Points on a clip's own picture (shares, from the top left) at moments in its own time. */
+export type ClipPoints = readonly { readonly x: number; readonly y: number; readonly at: number }[];
+
+/** What a cutout keeps with the person (a shot's keep): everything in the foreground, or objects at points in the clip. */
+export type Keep = "subject" | ClipPoints;
+
 /**
  * Whether this machine can cut people out: Apple's person segmentation on macOS, the open matting model
  * (Robust Video Matting, vision.ts) where ONNX Runtime runs. Where neither does, the video plays and
@@ -210,9 +217,19 @@ export async function makeCutout(
   out: string,
   {
     fps = 30,
+    keep,
+    person,
     signal,
     onProgress,
-  }: { fps?: number; signal?: AbortSignal; onProgress?: (fraction: number) => void } = {},
+  }: {
+    fps?: number;
+    /** What stays in front with the person (a shot's keep): everything in the foreground, or objects at points. */
+    keep?: Keep | undefined;
+    /** Who the cutout is (a shot's person): the people at these points. Unset: everyone. */
+    person?: ClipPoints | undefined;
+    signal?: AbortSignal;
+    onProgress?: (fraction: number) => void;
+  } = {},
 ): Promise<string> {
   if (!cutoutsAvailable()) throw new Error("Cutouts aren't available on this computer");
   const dir = await mkdtemp(path.join(tmpdir(), "vedit-cutout-"));
@@ -259,13 +276,47 @@ export async function makeCutout(
       opts(signal),
     );
     const [w, h] = stdout.trim().split(",").map(Number);
-    if (useOpenModels())
+    if (useOpenModels()) {
       // The open matting model, frame after frame (it needs them in order: it carries over what it saw).
       await matteFrames(frames, files.length, w!, h!, mattes, {
         ...(signal && { signal }),
-        onProgress: (f) => onProgress?.(0.1 + 0.8 * f),
+        onProgress: (f) => onProgress?.(0.1 + 0.8 * (keep ? 0.5 : 1) * f),
       });
-    else await appleMattes(dir, frames, mattes, files, signal, onProgress);
+      // Kept with the person: the foreground the background-removal model sees (points: the same; it
+      // can't follow single objects).
+      if (keep)
+        await addForeground(frames, files.length, w!, h!, mattes, {
+          ...(signal && { signal }),
+          onProgress: (f) => onProgress?.(0.5 + 0.4 * f),
+        });
+      // Just the people picked: the matte inside their tracked box (it can't tell people apart itself).
+      if (person) await keepOnlyPeople(video, from, to, fps, files.length, w!, h!, mattes, person, signal);
+    } else if (keep || person) {
+      // Apple's Vision: just the people picked (or everyone), with the foreground or the objects at points.
+      const atFrame = (points: ClipPoints) =>
+        points.map((p) => ({
+          f: Math.max(0, Math.min(files.length - 1, Math.round((p.at - from) * fps))),
+          x: p.x,
+          y: p.y,
+        }));
+      try {
+        await liftMattes(
+          frames,
+          mattes,
+          {
+            count: files.length,
+            people: person ? atFrame(person) : "all",
+            objects: !keep ? "none" : keep === "subject" ? "all" : atFrame(keep),
+          },
+          signal,
+        );
+        onProgress?.(0.9);
+      } catch (err) {
+        if (!(err instanceof LiftUnavailable)) throw err;
+        console.warn(`[cutout] ${err.message}: the person only`);
+        await appleMattes(dir, frames, mattes, files, signal, onProgress);
+      }
+    } else await appleMattes(dir, frames, mattes, files, signal, onProgress);
     await mkdir(path.dirname(out), { recursive: true });
     const part = `${out}.part.webm`;
     await run(
@@ -315,18 +366,24 @@ export async function makeCutout(
 
 /** Where a project's derived footage lives (in its cache: safe to delete, remade when needed). */
 export const derivedPaths = (projectDir: string) => ({
-  cutout: (source: string, from: number, to: number) =>
-    path.join(projectDir, CACHE_DIR, "cutout", `${source}_${from.toFixed(2)}_${to.toFixed(2)}.webm`),
-  ramp: (source: string, hash: string) => path.join(projectDir, CACHE_DIR, "ramp", `${source}_${hash}.mp4`),
-  /** A cover's stills from one moment of a clip: its frame, the person cut out, the background blurred. */
-  cover: (source: string, t: number, part: string) =>
-    path.join(projectDir, CACHE_DIR, "cover", `${source}_${t.toFixed(2)}_${part}.png`),
-  blur: (source: string, from: number, to: number, amount: number) =>
+  /** `keep`: what it keeps with the person (keepTag; "" for the person alone). */
+  cutout: (source: string, from: number, to: number, keep = "") =>
     path.join(
       projectDir,
       CACHE_DIR,
       "cutout",
-      `${source}_${from.toFixed(2)}_${to.toFixed(2)}_blur${amount}.mp4`,
+      `${source}_${from.toFixed(2)}_${to.toFixed(2)}${keep ? `_${keep}` : ""}.webm`,
+    ),
+  ramp: (source: string, hash: string) => path.join(projectDir, CACHE_DIR, "ramp", `${source}_${hash}.mp4`),
+  /** A cover's stills from one moment of a clip: its frame, the person cut out, the background blurred. */
+  cover: (source: string, t: number, part: string) =>
+    path.join(projectDir, CACHE_DIR, "cover", `${source}_${t.toFixed(2)}_${part}.png`),
+  blur: (source: string, from: number, to: number, amount: number, keep = "") =>
+    path.join(
+      projectDir,
+      CACHE_DIR,
+      "cutout",
+      `${source}_${from.toFixed(2)}_${to.toFixed(2)}${keep ? `_${keep}` : ""}_blur${amount}.mp4`,
     ),
 });
 
@@ -378,11 +435,11 @@ export async function resolveDerived(
     return once(file, () => makeCoverStill(input, d.t, d.part, d.amount, file, path.dirname(file)));
   }
   if (d.kind === "cutout") {
-    const file = paths.cutout(d.source, d.from, d.to);
+    const file = paths.cutout(d.source, d.from, d.to, d.keep);
     return existsSync(file) ? file : null;
   }
   if (d.kind === "bgblur") {
-    const file = paths.blur(d.source, d.from, d.to, d.amount);
+    const file = paths.blur(d.source, d.from, d.to, d.amount, d.keep);
     return existsSync(file) ? file : null;
   }
   const file = paths.ramp(d.source, d.hash);

@@ -82,12 +82,22 @@ export function ensureHear(dir: string): Promise<string | null> {
  * Compiles the sound classifier to `out` (the app's build bundles it; `target` builds for another
  * architecture, e.g. "x86_64-apple-macos12"). Throws when it can't.
  */
-export async function compileHear(out: string, target?: string): Promise<void> {
-  const work = await mkdtemp(path.join(tmpdir(), "vedit-hear-"));
+export function compileHear(out: string, target?: string): Promise<void> {
+  return compileSwift(HEAR_SWIFT, "hear", out, target);
+}
+
+/** Compiles one Swift file to a program at `out` (for another architecture with `target`). Throws when it can't. */
+export async function compileSwift(
+  source: string,
+  name: string,
+  out: string,
+  target?: string,
+): Promise<void> {
+  const work = await mkdtemp(path.join(tmpdir(), `vedit-${name}-`));
   try {
-    const src = path.join(work, "hear.swift");
-    await writeFile(src, HEAR_SWIFT);
-    const built = path.join(work, "hear");
+    const src = path.join(work, `${name}.swift`);
+    await writeFile(src, source);
+    const built = path.join(work, name);
     const t = target ? ["-target", target] : [];
     try {
       await run("swiftc", ["-O", ...t, src, "-o", built]);

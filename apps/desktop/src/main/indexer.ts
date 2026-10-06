@@ -26,6 +26,7 @@ import {
   measureLoudness,
   pictureProfile,
   type Segment,
+  seeClip,
   segmentsOf,
   transcribeWords,
   voiceEnvelope,
@@ -171,6 +172,8 @@ export class Indexer {
   }
 
   enqueue(ids: readonly string[], batch?: { firstImport: boolean }): void {
+    // Indexing goes first: reading pictures stops, and starts again when indexing is done.
+    if (ids.length) this.readStop?.abort();
     for (const id of ids) {
       if (this.queue.includes(id) || this.active.has(id)) continue;
       this.queue.push(id);
@@ -190,7 +193,7 @@ export class Indexer {
     );
     void this.retime(this.controller.signal);
     void this.healProxies(this.controller.signal);
-    void this.hearBackfill(this.controller.signal);
+    void this.hearBackfill(this.controller.signal).then(() => this.readPictures());
     void this.describeMissing();
   }
 
@@ -263,6 +266,56 @@ export class Indexer {
    * Clips indexed before the editor could hear: their sounds, a track's instruments and how hard each
    * word is said, filled in once in the background (a second or two a clip).
    */
+  /** What a clip's picture shows a frame a second (see.ts); null when it can't be read here. */
+  private async see(video: string, signal: AbortSignal) {
+    return seeClip(video, { signal }).catch((err: unknown) => {
+      if (!signal.aborted)
+        console.warn("[index] seeing", path.basename(video), "failed:", (err as Error).message);
+      return null;
+    });
+  }
+
+  private reading: Promise<void> | null = null;
+  /** Stops reading at once when there's indexing to do (the clip is read again later). */
+  private readStop: AbortController | null = null;
+
+  /**
+   * Reads the picture of clips that haven't had it read (the words on screen, where the eye goes, how
+   * good each moment looks): in the background, only while nothing is indexing, so a clip is ready as
+   * soon as it ever was and this never competes with transcribing or Claude describing shots. Stops when
+   * indexing starts again; indexing finishing starts it again. Nothing waits for it.
+   */
+  private readPictures(): Promise<void> {
+    if (this.reading) return this.reading;
+    this.readStop = new AbortController();
+    const signal = AbortSignal.any([this.controller.signal, this.readStop.signal]);
+    this.reading = this.readPicturesNow(signal).finally(() => {
+      this.reading = null;
+      this.readStop = null;
+    });
+    return this.reading;
+  }
+
+  private async readPicturesNow(signal: AbortSignal): Promise<void> {
+    const store = this.deps.store();
+    if (!store) return;
+    for (const src of store.doc.sources) {
+      if (signal.aborted) return;
+      // Indexing came back: it goes first, and starts this again when it's done.
+      if (this.queue.length || this.active.size) return;
+      if (src.kind !== "video" || src.status !== "ready") continue;
+      const analysis = this.deps.store()?.doc.analyses.find((a) => a.id === src.id);
+      if (!analysis || analysis.text !== undefined) continue;
+      const proxy = cachePaths(store.dir, src.id).proxy;
+      const video = existsSync(proxy) ? proxy : src.path;
+      if (!video || !existsSync(video)) continue;
+      const seen = await this.see(video, signal);
+      if (!seen || signal.aborted) return;
+      if (this.deps.store()?.doc.sources.some((s) => s.id === src.id))
+        this.commit([{ op: "update", coll: "analyses", id: src.id, patch: { ...seen } }]);
+    }
+  }
+
   private async hearBackfill(signal: AbortSignal): Promise<void> {
     const store = this.deps.store();
     if (!store) return;
@@ -477,6 +530,8 @@ export class Indexer {
         this.active.delete(id);
         this.finishBatches(id);
         this.pump();
+        // All indexed: now the pictures can be read, in the background.
+        if (!this.queue.length && !this.active.size) void this.readPictures();
       });
     }
   }

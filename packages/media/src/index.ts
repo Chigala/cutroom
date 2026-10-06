@@ -9,6 +9,7 @@ export { checkGroqKey } from "./groq.ts";
 export * from "./hear.ts";
 export * from "./joins.ts";
 export * from "./klipy.ts";
+export * from "./lift.ts";
 export {
   ensureModel,
   MODELS,
@@ -19,6 +20,7 @@ export {
 export * from "./music.ts";
 export * from "./probe.ts";
 export * from "./profile.ts";
+export * from "./see.ts";
 export { sfxFile } from "./sfx.ts";
 export {
   contactSheets,

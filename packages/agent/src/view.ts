@@ -180,7 +180,8 @@ export function transcriptView(doc: ProjectDoc, sourceId: string, from = 0, to =
  */
 export function shotsView(doc: ProjectDoc, sourceId: string, from = 0, to = Infinity): string {
   const log = doc.shotLogs.find((x) => x.id === sourceId);
-  if (!log) return `${sourceId}: no shot log (not indexed yet, or not a video).`;
+  const seen = pictureView(doc, sourceId, from, to);
+  if (!log) return `${sourceId}: no shot log (not indexed yet, or not a video).${seen ? `\n${seen}` : ""}`;
   const t = (s: number) => formatTime(s, true);
   const lines = log.segments
     .filter((s) => s.end > from && s.start < to)
@@ -189,7 +190,62 @@ export function shotsView(doc: ProjectDoc, sourceId: string, from = 0, to = Infi
         `${t(s.start)}-${t(s.end)} ${s.shot} · ${s.camera} · E${s.energy}${s.highlight ? " ★" : ""}${s.quality.length ? ` (${s.quality.join(", ")})` : ""} ${s.what}${s.tags.length ? ` [${s.tags.join(", ")}]` : ""}`,
     );
   const loud = log.loud.filter(([a, b]) => b > from && a < to).map(([a, b]) => `${t(a)}-${t(b)}`);
-  return `${sourceId} (${log.segments.length} shots; E=energy 1-5, ★=highlight)\n${lines.join("\n")}${loud.length ? `\nLoud, no speech (crowd, applause, engines, music): ${loud.join(", ")}` : ""}`;
+  return `${sourceId} (${log.segments.length} shots; E=energy 1-5, ★=highlight)\n${lines.join("\n")}${loud.length ? `\nLoud, no speech (crowd, applause, engines, music): ${loud.join(", ")}` : ""}${seen ? `\n${seen}` : ""}`;
+}
+
+/**
+ * What the clip's picture was read to hold, in source time: the words on screen (and where), the
+ * best-looking moments, and moments the face is weak (a blink, blurred, turned away). Empty when the
+ * clip wasn't read (see.ts).
+ */
+export function pictureView(doc: ProjectDoc, sourceId: string, from = 0, to = Infinity): string {
+  const a = doc.analyses.find((x) => x.id === sourceId);
+  if (!a) return "";
+  const t = (s: number) => formatTime(s, true);
+  const where = (y: number, h: number) => {
+    const mid = y + h / 2;
+    return mid < 0.33 ? "top" : mid > 0.66 ? "bottom" : "middle";
+  };
+  const parts: string[] = [];
+  const text = (a.text ?? []).filter((x) => x.end > from && x.start < to);
+  if (text.length) {
+    // Many short lines low in the frame, changing every second or two: captions already burned in.
+    const low = text.filter((x) => x.y > 0.45 && x.end - x.start <= 4);
+    const burned = low.length >= 6;
+    parts.push(
+      `On screen (words in the picture, ${text.length}): ${text
+        .slice(0, 30)
+        .map((x) => `${t(x.start)}-${t(x.end)} "${x.text}" (${where(x.y, x.h)})`)
+        .join(
+          "; ",
+        )}${text.length > 30 ? "; ..." : ""}${burned ? "\nThis footage looks like it already has captions burned in: don't add captions over them (crop or cover them, or skip captions here)." : ""}`,
+    );
+  }
+  const quality = (a.quality ?? []).filter((q) => q.t >= from && q.t < to);
+  if (quality.length >= 3) {
+    const score = (q: (typeof quality)[number]) => (q.look ?? 0) + (q.face ?? q.sharp ?? 0);
+    const best = [...quality]
+      .sort((p, q) => score(q) - score(p))
+      .slice(0, 5)
+      .map(
+        (q) =>
+          `${t(q.t)}${q.look !== undefined ? ` look ${q.look.toFixed(2)}` : ""}${q.face !== undefined ? ` face ${q.face.toFixed(2)}` : ""}`,
+      );
+    parts.push(`Best-looking moments (covers, takes): ${best.join("; ")}`);
+    const faces = quality.filter((q) => q.face !== undefined).map((q) => q.face!);
+    if (faces.length >= 3) {
+      const typical = [...faces].sort((p, q) => p - q)[Math.floor(faces.length / 2)]!;
+      const weak = quality.filter((q) => q.face !== undefined && q.face < typical * 0.6);
+      if (weak.length)
+        parts.push(
+          `Weak face moments (a blink, blur or a turn: don't cut or pick a cover there): ${weak
+            .slice(0, 15)
+            .map((q) => t(q.t))
+            .join(", ")}`,
+        );
+    }
+  }
+  return parts.join("\n");
 }
 
 /** What each graphic is for and which values it takes, without its HTML. */
@@ -300,5 +356,11 @@ export function searchFootage(doc: ProjectDoc, query: string) {
     .filter((s) => terms.some((t) => s.label.includes(t) || t.includes(s.label.split(" ")[0]!.slice(0, 5))))
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, 25);
-  return { clips, said, shown, heard, scenes };
+  // Words seen on screen: a sign, a slide, a product's name.
+  const onScreen = doc.analyses
+    .flatMap((a) => (a.text ?? []).map((x) => ({ source: a.id, start: x.start, end: x.end, text: x.text })))
+    .filter((x) => score(x.text) > 0)
+    .sort((p, q) => score(q.text) - score(p.text))
+    .slice(0, 25);
+  return { clips, said, shown, heard, scenes, ...(onScreen.length && { onScreen }) };
 }

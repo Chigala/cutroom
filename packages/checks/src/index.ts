@@ -9,6 +9,7 @@ import {
   castCorrection,
   DANGLING_WORDS,
   formatTime,
+  frameWindow,
   type Op,
   type ProjectDoc,
   resolveAnchor,
@@ -16,6 +17,7 @@ import {
   spokenWords,
   type Timeline,
   timelineOf,
+  toFrame,
   validateGraphic,
 } from "@vedit/project";
 
@@ -158,6 +160,109 @@ const rules: Rule[] = [
         status: "warn",
         detail: "Music plays at full volume over speech.",
         fix: { label: "Duck music", ops: [{ op: "merge", key: "music", patch: { duckUnderSpeech: true } }] },
+      };
+    },
+  },
+  {
+    id: "words-clear",
+    title: "Captions and titles clear of words in the footage",
+    run(doc, tl) {
+      const found = wordsInFrame(doc, tl);
+      if (!found.length) return pass;
+      const cs = doc.captionStyle;
+      // When captions show: under the words said (speech captions), and the captions placed by hand.
+      const shown = [
+        ...(cs.speech ? spokenWords(doc).filter((w) => !w.hidden) : []),
+        ...doc.captions.flatMap((c) => {
+          const start = resolveAnchor(tl, c.anchor);
+          return start === null ? [] : [{ start, end: start + c.duration }];
+        }),
+      ];
+      const captioned = (t1: number, t2: number) => shown.some((w) => w.start < t2 && w.end > t1);
+      const band = (y: number) => ({
+        x: cs.marginLeft,
+        y: y - 0.06,
+        w: 1 - cs.marginLeft - cs.marginRight,
+        h: 0.12,
+      });
+      const underCaptions = (y: number) =>
+        found.filter((f) => captioned(f.from, f.to) && overlaps(f.box, band(y)));
+      const hits: { at: number; text: string; scene: string; by: string }[] = underCaptions(cs.y).map(
+        (f) => ({
+          at: f.from,
+          text: f.text,
+          scene: f.scene,
+          by: "Captions",
+        }),
+      );
+      for (const title of doc.titles) {
+        const start = resolveAnchor(tl, title.anchor);
+        if (start === null) continue;
+        const box = titleBox(title, doc.meta.format.height);
+        for (const f of found)
+          if (start < f.to && start + title.duration > f.from && overlaps(f.box, box))
+            hits.push({ at: Math.max(start, f.from), text: f.text, scene: f.scene, by: "A title" });
+      }
+      if (!hits.length) return pass;
+      hits.sort((a, b) => a.at - b.at);
+      // Footage with its own captions burned in: many short lines low in the frame.
+      const burned = new Set(
+        doc.analyses
+          .filter((a) => (a.text ?? []).filter((x) => x.y > 0.45 && x.end - x.start <= 4).length >= 6)
+          .map((a) => a.id),
+      );
+      const scenes = [...new Set(hits.map((h) => h.scene))];
+      const onBurned = scenes.some((id) => burned.has(tl.byId.get(id)?.scene.source ?? ""));
+      const first = hits[0]!;
+      // A height for the captions that clears every word they'd cover, inside the platform's safe area.
+      const area = clearArea(R);
+      const clear = [0.7, 0.64, 0.58, 0.3, 0.24, 0.18].find(
+        (y) => y >= area.top + 0.06 && y <= area.bottom - 0.06 && !underCaptions(y).length,
+      );
+      const captionHits = hits.some((h) => h.by === "Captions");
+      return {
+        status: "warn",
+        detail: `${first.by} cover${first.by === "Captions" ? "" : "s"} "${first.text}" in the footage at ${formatTime(first.at, true)}${hits.length > 1 ? ` (and ${hits.length - 1} more)` : ""}.${onBurned ? " The footage already has captions burned in: keep yours off it, or hide one set." : ""}`,
+        scenes,
+        ...(captionHits &&
+          clear !== undefined && {
+            fix: {
+              label: "Move captions clear",
+              ops: [{ op: "merge" as const, key: "captionStyle" as const, patch: { y: clear } }],
+            },
+          }),
+      };
+    },
+  },
+  {
+    id: "clear-face",
+    title: "Shots start and end on a clear face",
+    run(doc, tl) {
+      const weak: { scene: string; at: number; where: "starts" | "ends" }[] = [];
+      for (const p of tl.scenes) {
+        const quality = (doc.analyses.find((a) => a.id === p.scene.source)?.quality ?? []).filter(
+          (q) => q.face !== undefined,
+        );
+        if (quality.length < 3) continue;
+        const faces = quality.map((q) => q.face!).sort((a, b) => a - b);
+        const usual = faces[Math.floor(faces.length / 2)]!;
+        const at = (t: number) => {
+          const near = quality.reduce((best, q) => (Math.abs(q.t - t) < Math.abs(best.t - t) ? q : best));
+          return Math.abs(near.t - t) <= 0.5 && near.face! < usual * 0.6;
+        };
+        if (at(p.scene.in)) weak.push({ scene: p.scene.id, at: p.start, where: "starts" });
+        if (at(p.scene.out)) weak.push({ scene: p.scene.id, at: p.start + p.duration, where: "ends" });
+      }
+      if (!weak.length) return pass;
+      return {
+        status: "warn",
+        detail: `${weak
+          .slice(0, 4)
+          .map((w) => `${w.scene} ${w.where} at ${formatTime(w.at, true)}`)
+          .join(
+            ", ",
+          )}${weak.length > 4 ? ` and ${weak.length - 4} more` : ""} on a weak face (eyes closed, blurred or turned away): move the cut a little, without clipping a word.`,
+        scenes: [...new Set(weak.map((w) => w.scene))],
       };
     },
   },
@@ -566,6 +671,52 @@ function snapToBeat(doc: ProjectDoc, tl: Timeline, beats: readonly number[]): Op
 export const CHECK_IDS = rules.map((r) => r.id);
 
 /** Runs every check. Pure and fast (well under a millisecond for a typical short). */
+type Area = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
+
+const overlaps = (a: Area, b: Area) =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** Where a title's text sits in the frame, near enough: from its position, size, width and alignment. */
+function titleBox(title: ProjectDoc["titles"][number], height: number): Area {
+  const w = title.width ?? 0.84;
+  const x =
+    title.align === "center"
+      ? title.position.x - w / 2
+      : title.align === "right"
+        ? title.position.x - w
+        : title.position.x;
+  return { x, y: title.position.y, w, h: (title.size / height) * 2.4 };
+}
+
+/**
+ * The words seen in the footage (the clips' on-screen text, see.ts) as they land in the video: when, in
+ * output time, and where in the frame (cropped to the shot's framing; words cropped away don't count).
+ */
+function wordsInFrame(doc: ProjectDoc, tl: Timeline) {
+  const out: { scene: string; from: number; to: number; text: string; box: Area }[] = [];
+  for (const p of tl.scenes) {
+    if (p.scene.ramp?.length) continue;
+    const text = doc.analyses.find((a) => a.id === p.scene.source)?.text ?? [];
+    if (!text.length) continue;
+    const win = frameWindow(doc, p.scene);
+    if (!win) continue;
+    const speed = p.scene.speed ?? 1;
+    for (const r of text) {
+      if (r.end <= p.scene.in || r.start >= p.scene.out) continue;
+      const box = toFrame(win, r);
+      if (!box) continue;
+      out.push({
+        scene: p.scene.id,
+        from: p.start + (Math.max(r.start, p.scene.in) - p.scene.in) / speed,
+        to: p.start + (Math.min(r.end, p.scene.out) - p.scene.in) / speed,
+        text: r.text,
+        box,
+      });
+    }
+  }
+  return out;
+}
+
 export function runChecks(doc: ProjectDoc): CheckResult[] {
   const tl = timelineOf(doc);
   if (!tl.scenes.length) return [];

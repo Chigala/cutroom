@@ -12,6 +12,7 @@ import { userNamespacesBlocked } from "./platform.ts";
 import { ProjectService } from "./project-service.ts";
 import { here, registerAppProtocol, registerMediaProtocol, registerSchemes } from "./protocols.ts";
 import { APP_ORIGIN, DEV_SERVER_URL, harden } from "./security.ts";
+import { setSettings } from "./settings.ts";
 import { runSmoke } from "./smoke.ts";
 import { rememberPlace, savedPlace, setAppMenu } from "./window.ts";
 
@@ -148,20 +149,26 @@ app.whenReady().then(() => {
   if (!SMOKE && !BENCH)
     void service.library.start().catch((err: unknown) => console.warn("[library] couldn't start:", err));
   if (SMOKE) {
-    void runSmoke(service, SMOKE, async () => {
-      // The editor itself, hidden: the app's protocol, preload and interface load and show the project.
-      createWindow({ hidden: true });
-      const contents = win!.webContents;
-      await new Promise<void>((ok) => contents.once("did-finish-load", () => ok()));
-      for (let i = 0; i < 40; i++) {
-        const shown = (await contents.executeJavaScript(
-          `(document.querySelector("header")?.innerText ?? "") + " | " + document.querySelectorAll("button").length`,
-        )) as string;
-        if (/\| [1-9]/.test(shown) && !shown.startsWith(" |")) return shown;
-        await new Promise((ok) => setTimeout(ok, 250));
-      }
-      throw new Error("the editor's window didn't show the project");
-    })
+    // A build machine's test: a smaller speech model than people get (it proves transcription works).
+    const smokeWhisper = process.env.VEDIT_SMOKE_WHISPER;
+    const smokeSetup = smokeWhisper ? setSettings({ whisperModel: smokeWhisper }) : Promise.resolve();
+    void smokeSetup
+      .then(() =>
+        runSmoke(service, SMOKE, async () => {
+          // The editor itself, hidden: the app's protocol, preload and interface load and show the project.
+          createWindow({ hidden: true });
+          const contents = win!.webContents;
+          await new Promise<void>((ok) => contents.once("did-finish-load", () => ok()));
+          for (let i = 0; i < 40; i++) {
+            const shown = (await contents.executeJavaScript(
+              `(document.querySelector("header")?.innerText ?? "") + " | " + document.querySelectorAll("button").length`,
+            )) as string;
+            if (/\| [1-9]/.test(shown) && !shown.startsWith(" |")) return shown;
+            await new Promise((ok) => setTimeout(ok, 250));
+          }
+          throw new Error("the editor's window didn't show the project");
+        }),
+      )
       // The exit code says whether it passed (Electron's quit doesn't carry process.exitCode).
       .then(async (ok) => {
         await service.close().catch(() => {});

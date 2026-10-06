@@ -1,13 +1,16 @@
 /**
  * A packaged-app self-test: VEDIT_SMOKE=<clip> imports the clip into a fresh project, indexes it
- * (preview copy, audio, transcript), exports it and prints what happened as one JSON line, then quits.
- * It runs with its own data folder, so it never touches the user's projects or settings. No agent call. It also opens the editor's window, hidden, and checks it shows the project.
+ * (preview copy, audio, transcript), reads its picture (the words on screen: Apple's Vision on a Mac,
+ * the open models elsewhere), exports it and prints what happened as one JSON line (also written to
+ * VEDIT_SMOKE_REPORT, when set), then quits. It runs with its own data folder, so it never touches the
+ * user's projects or settings. No agent call. It also opens the editor's window, hidden, and checks it
+ * shows the project. VEDIT_SMOKE_WHISPER picks a smaller speech model (a build machine's test).
  */
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ExportEvent } from "@vedit/bridge";
-import { findBinary, run } from "@vedit/media";
+import { findBinary, run, seeClip } from "@vedit/media";
 import type { ProjectService } from "./project-service.ts";
 
 /**
@@ -52,6 +55,10 @@ export async function runSmoke(
       .slice(0, 8)
       .map((w) => w.text)
       .join(" ");
+    // The picture read (it runs in the background after indexing in the app; here, straight away).
+    const seen = await seeClip(clip);
+    report.seen = seen && { text: seen.text.map((t) => t.text), salient: seen.salient.length };
+    report.readWords = (seen?.text ?? []).some((t) => /smoke|test|123/i.test(t.text));
     // The scripted graphic, over the first shot from 0.5s to 3.5s.
     const scene = doc?.scenes[0];
     if (scene) {
@@ -112,11 +119,17 @@ export async function runSmoke(
       report.graphicDrew = g > 200 && r < 60 && b < 60;
     }
     report.ui = await ui();
-    report.ok = end.type === "done" && Number(report.words) > 0 && report.graphicDrew === true;
+    report.ok =
+      end.type === "done" &&
+      Number(report.words) > 0 &&
+      report.graphicDrew === true &&
+      report.readWords === true;
   } catch (err) {
     report.ok = false;
     report.error = (err as Error).stack ?? String(err);
   }
   console.log(`[smoke] ${JSON.stringify(report)}`);
+  if (process.env.VEDIT_SMOKE_REPORT)
+    await writeFile(process.env.VEDIT_SMOKE_REPORT, JSON.stringify(report, null, 2)).catch(() => {});
   return report.ok === true;
 }

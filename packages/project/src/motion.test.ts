@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  blurPlateKey,
+  cutoutCovering,
   cutoutKey,
   emptyProject,
+  keepTag,
   parseDerivedKey,
   poseAt,
   rampKey,
@@ -115,6 +118,7 @@ describe("cutouts", () => {
       source: "clip_1",
       from: 4.1,
       to: 7,
+      keep: "",
     });
     expect(parseDerivedKey(rampKey("clip_1", "abc123"))).toEqual({
       kind: "ramp",
@@ -122,5 +126,47 @@ describe("cutouts", () => {
       hash: "abc123",
     });
     expect(parseDerivedKey("clip_1")).toBeNull();
+  });
+});
+
+describe("what a cutout keeps with the person", () => {
+  it("is part of its key and file, and a cutout keeping something else never stands in for it", () => {
+    expect(keepTag({})).toBe("");
+    expect(keepTag({ keep: "subject" })).toBe("subject");
+    const mic = [{ x: 0.12, y: 0.6, at: 3 }];
+    expect(keepTag({ keep: mic })).toMatch(/^p[0-9a-z]+$/);
+    expect(keepTag({ keep: mic })).toBe(keepTag({ keep: [{ x: 0.12, y: 0.6, at: 3 }] }));
+    expect(keepTag({ keep: mic })).not.toBe(keepTag({ keep: [{ x: 0.5, y: 0.6, at: 3 }] }));
+    // Who the cutout is goes in the tag too: the speaker alone, and the speaker with the mic, differ.
+    const host = [{ x: 0.7, y: 0.3, at: 3 }];
+    expect(keepTag({ person: host })).toMatch(/^q[0-9a-z]+$/);
+    expect(keepTag({ person: host, keep: "subject" })).toMatch(/^q[0-9a-z]+subject$/);
+    expect(keepTag({ person: host })).not.toBe(keepTag({ person: host, keep: mic }));
+
+    // The person-only key is as it always was, so cutouts already made stay valid.
+    expect(cutoutKey("clip_1", 1, 4)).toBe("clip_1~cutout~1.00~4.00");
+    expect(parseDerivedKey(cutoutKey("clip_1", 1, 4))).toMatchObject({ kind: "cutout", keep: "" });
+    expect(parseDerivedKey(cutoutKey("clip_1", 1, 4, "subject"))).toMatchObject({
+      kind: "cutout",
+      source: "clip_1",
+      from: 1,
+      to: 4,
+      keep: "subject",
+    });
+    expect(parseDerivedKey(blurPlateKey("clip_1", 1, 4, 18, keepTag({ keep: mic })))).toMatchObject({
+      kind: "bgblur",
+      amount: 18,
+      keep: keepTag({ keep: mic }),
+    });
+
+    const analysis = {
+      cutouts: [
+        { from: 0, to: 10 },
+        { from: 0, to: 10, keep: "subject" },
+      ],
+    };
+    expect(cutoutCovering(analysis, 2, 5)).toEqual({ from: 0, to: 10 });
+    expect(cutoutCovering(analysis, 2, 5, "subject")).toMatchObject({ keep: "subject" });
+    expect(cutoutCovering(analysis, 2, 5, keepTag({ keep: mic }))).toBeNull();
   });
 });

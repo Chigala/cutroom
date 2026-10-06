@@ -6,8 +6,10 @@
  */
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { mkdir, rename, rm } from "node:fs/promises";
+import path from "node:path";
 import type * as Ort from "onnxruntime-node";
-import { CancelledError, findBinary } from "./exec.ts";
+import { CancelledError, findBinary, run } from "./exec.ts";
 import { onnx, session } from "./models.ts";
 import { probe } from "./probe.ts";
 
@@ -397,4 +399,182 @@ export async function matteFrames(
   } finally {
     await writer.close();
   }
+}
+
+/**
+ * Adds everything in the foreground to the person's mattes (`mattes`, %06d.png), from the background
+ * removal model (ISNet) at 1024 px: what they hold, a product, a pet. The person's own matte stays as the
+ * open matting model made it; the foreground only adds to it.
+ */
+export async function addForeground(
+  frames: string,
+  count: number,
+  width: number,
+  height: number,
+  mattes: string,
+  { signal, onProgress }: { signal?: AbortSignal; onProgress?: (fraction: number) => void } = {},
+): Promise<void> {
+  const ort = await onnx();
+  const s = await session("foreground");
+  const S = 1024;
+  const n = S * S;
+  const src = new Float32Array(3 * n);
+  const gray = new Uint8Array(n);
+  const fg = path.join(path.dirname(mattes), "foreground");
+  await mkdir(fg, { recursive: true });
+  const writer = await frameWriter(S, S, "gray", ["-start_number", "1", `${fg}/%06d.png`]);
+  let done = 0;
+  try {
+    for await (const frame of rawFrames(
+      ["-framerate", "30", "-i", `${frames}/%06d.png`, "-vf", `scale=${S}:${S}`],
+      n * 3,
+      "rgb24",
+      signal,
+    )) {
+      // Every other frame (it's slow on a CPU, and what's held moves little in a fifteenth of a second);
+      // the one between keeps the last mask. The person's own matte is still made for every frame.
+      if (done % 2 === 0) {
+        // As rembg feeds it: 0..1, centred on a half.
+        for (let p = 0; p < n; p++) {
+          src[p] = frame[p * 3]! / 255 - 0.5;
+          src[n + p] = frame[p * 3 + 1]! / 255 - 0.5;
+          src[2 * n + p] = frame[p * 3 + 2]! / 255 - 0.5;
+        }
+        const out = await s.run({ input_image: new ort.Tensor("float32", src, [1, 3, S, S]) });
+        const pred = out.output_image!.data as Float32Array;
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (let p = 0; p < n; p++) {
+          lo = Math.min(lo, pred[p]!);
+          hi = Math.max(hi, pred[p]!);
+        }
+        const span = hi - lo || 1;
+        // Firmed up: what it's fairly sure of is solid (no see-through mic), the edges stay soft.
+        for (let p = 0; p < n; p++)
+          gray[p] = Math.round(Math.min(1, Math.max(0, ((pred[p]! - lo) / span - 0.1) / 0.6)) * 255);
+      }
+      await writer.write(gray);
+      onProgress?.(++done / count);
+    }
+  } finally {
+    await writer.close();
+  }
+  // The person's matte, lightened by the foreground's (back at the frame's size).
+  const merged = path.join(path.dirname(mattes), "merged");
+  await mkdir(merged, { recursive: true });
+  await run(
+    "ffmpeg",
+    [
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      `${mattes}/%06d.png`,
+      "-i",
+      `${fg}/%06d.png`,
+      "-filter_complex",
+      `[0]format=gray[p];[1]format=gray,scale=${width}:${height}[f];[p][f]blend=all_mode=lighten`,
+      `${merged}/%06d.png`,
+    ],
+    signal ? { signal } : {},
+  );
+  await rm(mattes, { recursive: true, force: true });
+  await rename(merged, mattes);
+}
+
+/**
+ * Just the people picked by points, where the matte can't tell people apart itself (the open matting
+ * model): people are found five times a second over the stretch, each picked one followed from sample to
+ * sample (the box that overlaps it most), and the matte kept only inside their box, widened for arms and
+ * what they hold, down to the bottom of the frame, with soft edges. Mattes are rewritten in place.
+ */
+export async function keepOnlyPeople(
+  video: string,
+  from: number,
+  to: number,
+  fps: number,
+  count: number,
+  width: number,
+  height: number,
+  mattes: string,
+  points: readonly { readonly x: number; readonly y: number; readonly at: number }[],
+  signal?: AbortSignal,
+): Promise<void> {
+  const rate = 5;
+  const { times, frames } = await detectBoxes(video, from, to, rate, signal);
+  if (!times.length) return;
+  const people = frames.map((f) => f.filter((b) => b.k === "person"));
+  const xyxy = (b: Box) => [b.x - b.w / 2, b.y - b.h / 2, b.x + b.w / 2, b.y + b.h / 2];
+  // Each point's person, at every sample: picked where the point is, followed both ways by overlap.
+  const chosen: (Box | null)[][] = points.map((p) => {
+    const at = Math.max(0, Math.min(times.length - 1, Math.round((p.at - from) * rate)));
+    const near = (list: Box[]) =>
+      list
+        .filter((b) => Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.y - b.y) <= b.h / 2)
+        .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0] ??
+      list.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0] ??
+      null;
+    const out: (Box | null)[] = times.map(() => null);
+    out[at] = near(people[at]!);
+    const carry = (i: number, prev: Box | null) => {
+      if (!prev) return null;
+      const best = people[i]!.map((b) => ({ b, o: iou(xyxy(b), xyxy(prev)) })).sort((a, b) => b.o - a.o)[0];
+      // Lost for a moment (turned away, blurred): they're where they were.
+      return best && best.o > 0.2 ? best.b : prev;
+    };
+    for (let i = at + 1; i < times.length; i++) out[i] = carry(i, out[i - 1]!);
+    for (let i = at - 1; i >= 0; i--) out[i] = carry(i, out[i + 1]!);
+    return out;
+  });
+  const boxAt = (pick: (Box | null)[], t: number): Box | null => {
+    const u = Math.max(0, Math.min(times.length - 1, (t - from) * rate));
+    const a = pick[Math.floor(u)];
+    const b = pick[Math.ceil(u)];
+    if (!a || !b) return a ?? b ?? null;
+    const k = u - Math.floor(u);
+    const mix = (p: number, q: number) => p + (q - p) * k;
+    return { ...a, x: mix(a.x, b.x), y: mix(a.y, b.y), w: mix(a.w, b.w), h: mix(a.h, b.h) };
+  };
+  const n = width * height;
+  const keep = new Float32Array(n);
+  const out = new Uint8Array(n);
+  const kept = path.join(path.dirname(mattes), "people");
+  await mkdir(kept, { recursive: true });
+  const writer = await frameWriter(width, height, "gray", ["-start_number", "1", `${kept}/%06d.png`]);
+  let i = 0;
+  try {
+    for await (const matte of rawFrames(
+      ["-framerate", "30", "-i", `${mattes}/%06d.png`],
+      n,
+      "gray",
+      signal,
+    )) {
+      keep.fill(0);
+      for (const pick of chosen) {
+        const b = boxAt(pick, from + i / fps);
+        if (!b) continue;
+        // Widened for arms and what they hold, and down to the bottom (bodies run off the frame).
+        const x1 = (b.x - b.w * 0.75) * width;
+        const x2 = (b.x + b.w * 0.75) * width;
+        const y1 = (b.y - b.h * 0.65) * height;
+        const soft = Math.max(8, b.w * width * 0.12);
+        for (let y = 0; y < height; y++) {
+          const vy = Math.min(1, Math.max(0, (y - y1) / soft + 1));
+          if (vy <= 0) continue;
+          for (let x = 0; x < width; x++) {
+            const vx = Math.min(1, Math.max(0, Math.min(x - x1, x2 - x) / soft + 1));
+            const v = vx * vy;
+            if (v > keep[y * width + x]!) keep[y * width + x] = v;
+          }
+        }
+      }
+      for (let p = 0; p < n; p++) out[p] = Math.round(matte[p]! * keep[p]!);
+      await writer.write(out);
+      if (++i >= count) break;
+    }
+  } finally {
+    await writer.close();
+  }
+  await rm(mattes, { recursive: true, force: true });
+  await rename(kept, mattes);
 }

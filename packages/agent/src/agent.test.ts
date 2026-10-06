@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { API_TOOLS } from "./api.ts";
 import { buildPrompt, handEdits } from "./context.ts";
 import { runTool, type Scratch, type ToolContext } from "./tools.ts";
-import { projectView, transcriptView } from "./view.ts";
+import { pictureView, projectView, searchFootage, transcriptView } from "./view.ts";
 
 const words = "so today um so today I want to show you this".split(" ").map((text, i) => ({
   text,
@@ -393,5 +393,36 @@ describe("hand edits", () => {
     expect(prompt).toContain("<hand_edits>");
     expect(prompt).toContain("- Undid your change: Hook title");
     expect(buildPrompt(emptyProject("x"), "tighten it", undefined, [])).not.toContain("<hand_edits>");
+  });
+});
+
+describe("what the picture holds, for the agent", () => {
+  it("lists words on screen, flags captions already burned in, and the best and weak moments", () => {
+    const doc = talking();
+    const lines = Array.from({ length: 7 }, (_, i) => ({
+      start: i * 2,
+      end: i * 2 + 2,
+      text: `line ${i}`,
+      x: 0.1,
+      y: 0.78,
+      w: 0.6,
+      h: 0.05,
+    }));
+    const analysis = {
+      id: "cam",
+      silences: [],
+      shots: [],
+      text: [{ start: 0, end: 9, text: "OPEN DAILY", x: 0.3, y: 0.1, w: 0.4, h: 0.06 }, ...lines],
+      quality: [0, 1, 2, 3, 4].map((t) => ({ t, face: t === 2 ? 0.1 : 0.6, look: t === 4 ? 0.6 : 0.2 })),
+    };
+    const withSeen = { ...doc, analyses: [...doc.analyses.filter((a) => a.id !== "cam"), analysis] };
+    const view = pictureView(withSeen as ProjectDoc, "cam");
+    expect(view).toContain('"OPEN DAILY" (top)');
+    expect(view).toContain("captions burned in");
+    expect(view).toMatch(/Best-looking moments[^\n]*0:04/);
+    expect(view).toMatch(/Weak face moments[^\n]*0:02/);
+    expect(searchFootage(withSeen as ProjectDoc, "open daily").onScreen?.[0]).toMatchObject({
+      text: "OPEN DAILY",
+    });
   });
 });

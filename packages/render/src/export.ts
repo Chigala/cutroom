@@ -45,6 +45,7 @@ import {
   cutoutCovering,
   EXPORTS_DIR,
   FONTS_DIR,
+  keepTag,
   type ProjectDoc,
   SFX_NAMES,
   type SfxName,
@@ -288,17 +289,24 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
   );
   // Off macOS there are no cutouts: the export goes ahead without the subject layer, like the preview.
   for (const scene of cutoutsAvailable() ? scenesNeedingCutout(doc, starts) : []) {
+    const keep = keepTag(scene);
     const c = cutoutCovering(
       doc.analyses.find((a) => a.id === scene.source),
       scene.in,
       scene.out,
+      keep,
     );
-    const file = c && derivedPaths(projectDir).cutout(scene.source, c.from, c.to);
+    const file = c && derivedPaths(projectDir).cutout(scene.source, c.from, c.to, keep);
     const src = sources.get(scene.source);
     if (!c || !file || existsSync(file) || !src) continue;
     report("picture", "Cutting out the person", base + 0.05);
     const input = await derivationInput(projectDir, src);
-    if (input) await makeCutout(input, c.from, c.to, file, { ...(signal && { signal }) });
+    if (input)
+      await makeCutout(input, c.from, c.to, file, {
+        ...(scene.keep && { keep: scene.keep }),
+        ...(scene.person && { person: scene.person }),
+        ...(signal && { signal }),
+      });
   }
   const server = await startMediaServer(async (key) => {
     // Footage made from a clip: its cutout, or a ramped shot (rendered on first ask).

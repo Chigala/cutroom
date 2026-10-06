@@ -256,6 +256,38 @@ export const Scene = z
     })
       .optional()
       .describe("Style the person in this shot: outline, glow, shadow. The person is cut out automatically"),
+    person: z
+      .array(
+        z.object({
+          x: Unit.describe("Across the clip's own picture (not the reframed video), 0 left to 1 right"),
+          y: Unit.describe("Down the clip's own picture, 0 top to 1 bottom"),
+          at: Seconds.describe("When in the clip (its own time) they're there"),
+        }),
+      )
+      .min(1)
+      .max(4)
+      .optional()
+      .describe(
+        "Who the cutout is when there's more than one person in the shot: a point on each person to cut out (on their face or body), followed through the shot. Unset: everyone. For the speaker alone in a two-shot (their spotlight, outline or colour pop), or one host kept in front of a change behind",
+      ),
+    keep: z
+      .union([
+        z.literal("subject"),
+        z
+          .array(
+            z.object({
+              x: Unit.describe("Across the clip's own picture (not the reframed video), 0 left to 1 right"),
+              y: Unit.describe("Down the clip's own picture, 0 top to 1 bottom"),
+              at: Seconds.describe("When in the clip (its own time) the object is there"),
+            }),
+          )
+          .min(1)
+          .max(8),
+      ])
+      .optional()
+      .describe(
+        "What stays in front with the person when they're cut out (a background change, a styled subject, something behind them): unset, the person only; subject, everything in the foreground (the mic or guitar they hold, a product, a pet); or points on the objects to keep, each with the moment it's there, followed through the shot. Use it when a background effect shouldn't touch something",
+      ),
     jumpZoom: z
       .boolean()
       .optional()
@@ -377,12 +409,50 @@ export const Analysis = z.object({
     .optional()
     .describe("Where the speaker's face usually is: centre and width, 0..1 of the frame"),
   tracks: z.array(MotionTrack).optional().describe("Faces and people tracked over stretches of the clip"),
+  text: z
+    .array(
+      z.object({
+        start: Seconds,
+        end: Seconds,
+        text: z.string().max(200),
+        x: Unit,
+        y: Unit,
+        w: Unit,
+        h: Unit,
+      }),
+    )
+    .optional()
+    .describe(
+      "Words seen on screen (signs, slides, screens, captions already burned in): when, in the clip's time, and where, as shares of the frame from the top left",
+    ),
+  salient: z
+    .array(z.object({ t: Seconds, x: Unit, y: Unit, w: Unit, h: Unit }))
+    .optional()
+    .describe("Where the eye goes, a frame a second: the box around what draws attention"),
+  quality: z
+    .array(
+      z.object({
+        t: Seconds,
+        face: Unit.optional().describe(
+          "The best face's capture quality: eyes open, sharp, facing the camera",
+        ),
+        look: z.number().min(-1).max(1).optional().describe("How good the frame looks overall, -1 to 1"),
+        sharp: Unit.optional().describe("How sharp the frame is (where there's no face quality)"),
+      }),
+    )
+    .optional()
+    .describe("How good each second looks, for covers, takes and where to cut"),
   cutouts: z
     .array(
       z.object({
         from: Seconds,
         to: Seconds,
         blurs: z.array(z.number()).optional().describe("Background blur plates made for it, by blur amount"),
+        keep: z
+          .string()
+          .max(40)
+          .optional()
+          .describe("What it keeps with the person: unset the person only, subject, or a tag of the points"),
       }),
     )
     .optional()

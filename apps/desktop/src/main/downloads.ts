@@ -15,6 +15,11 @@ const OPEN_MODELS: readonly ModelName[] = [
   "soundsData",
   "soundLabels",
   "cutouts",
+  // Reading every clip's picture: the words on screen and where the eye goes (about 17 MB together).
+  "ocrDet",
+  "ocrRec",
+  "ocrDict",
+  "saliency",
 ];
 
 export class Downloads {

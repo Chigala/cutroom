@@ -65,3 +65,25 @@ jobs:
           name: ${{ matrix.name }}
           path: ${{ matrix.files }}
           if-no-files-found: error
+
+      # The packaged app, started on its own system: its self-test (src/main/smoke.ts) imports a short
+      # clip, transcribes it, reads its picture, renders a scripted graphic, exports and opens the editor.
+      # It runs after the upload, so a failing build's installer is still there to look at.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/whisper
+          key: whisper-small.en-${{ runner.os }}
+      - name: Screen for the self-test (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libnss3 libgbm1 libasound2
+      - name: Self-test the packaged app
+        shell: bash
+        env:
+          VEDIT_SMOKE_WHISPER: small.en
+          VEDIT_WHISPER_DIR: ${{ runner.temp }}/whisper
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a node apps/desktop/scripts/smoke-run.mjs
+          else
+            node apps/desktop/scripts/smoke-run.mjs
+          fi

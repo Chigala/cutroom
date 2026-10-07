@@ -3,8 +3,10 @@
 // picture, renders a scripted graphic, exports, and opens the editor's window. Fails (exit 1) unless
 // all of it worked. On Linux it needs a screen: run it under xvfb-run.
 //
-//   node apps/desktop/scripts/smoke-run.mjs
+//   node apps/desktop/scripts/smoke-run.mjs [--arch arm64|x64]
 //
+// --arch tests a build for another architecture than this machine's: an Intel Mac build on Apple silicon
+// runs under Rosetta.
 // VEDIT_SMOKE_WHISPER (e.g. small.en) and VEDIT_WHISPER_DIR pick and keep the speech model.
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
@@ -13,13 +15,17 @@ import path from "node:path";
 
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const release = path.join(here, "..", "release");
+const argv = process.argv.slice(2);
+const arch = argv.includes("--arch") ? argv[argv.indexOf("--arch") + 1] : process.arch;
+// electron-builder puts an Intel Mac build in mac/, an Apple silicon one in mac-arm64/.
+const macApp = (dir) => path.join(release, dir, "Cutroom.app", "Contents", "MacOS", "Cutroom");
 const app = {
-  darwin: [path.join(release, `mac-${process.arch}`, "Cutroom.app", "Contents", "MacOS", "Cutroom")],
+  darwin: arch === "x64" ? [macApp("mac"), macApp("mac-x64")] : [macApp(`mac-${arch}`)],
   win32: [path.join(release, "win-unpacked", "Cutroom.exe")],
   linux: [path.join(release, "linux-unpacked", "cutroom")],
 }[process.platform]?.find(existsSync);
 if (!app) {
-  console.error(`No packaged app in ${release} for ${process.platform}-${process.arch}`);
+  console.error(`No packaged app in ${release} for ${process.platform}-${arch}`);
   process.exit(1);
 }
 

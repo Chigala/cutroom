@@ -214,6 +214,18 @@ describe("measuring", () => {
     expect(report).not.toMatch(/Stream #|@ 0x/);
   });
 
+  it("reads Windows' logs, whose addresses have no 0x", () => {
+    const log = [
+      "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'clip.mp4':",
+      "  Duration: 00:00:02.00, start: 0.000000, bitrate: 25 kb/s",
+      "[Parsed_metadata_3 @ 000001F2A3B4C5D0] lavfi.signalstats.YAVG=16",
+      "[blackdetect @ 000001f2a3b4c600] black_start:0 black_end:1 black_duration:1",
+    ].join("\r\n");
+    expect(filterReport(log, ["blackdetect", "metadata"])).toBe(
+      "[Parsed_metadata_3] lavfi.signalstats.YAVG=16\n[blackdetect] black_start:0 black_end:1 black_duration:1",
+    );
+  });
+
   it("keeps a long report readable", () => {
     const log = [
       "Input #0, mov",

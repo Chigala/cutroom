@@ -1,9 +1,10 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const dir = mkdtempSync(path.join(tmpdir(), "vedit-settings-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 vi.mock("electron", () => ({
   app: { getPath: () => dir, whenReady: async () => {}, isPackaged: false },
   // A stand-in keychain: reversible, and visibly not the plain key.

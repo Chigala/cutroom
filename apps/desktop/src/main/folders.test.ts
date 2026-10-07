@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   isProjectFolder,
   makeProjectFolder,
@@ -12,7 +12,9 @@ import {
   videosIn,
 } from "./folders.ts";
 
-const root = () => mkdtempSync(path.join(tmpdir(), "vedit-folders-"));
+const base = mkdtempSync(path.join(tmpdir(), "vedit-folders-"));
+afterAll(() => rmSync(base, { recursive: true, force: true }));
+const root = () => mkdtempSync(path.join(base, "root-"));
 
 function video(parent: string, folder: string, name = folder): string {
   const dir = path.join(parent, folder);

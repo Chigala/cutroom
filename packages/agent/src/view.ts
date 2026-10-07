@@ -38,6 +38,16 @@ export function projectView(doc: ProjectDoc): string {
       speech: s.speech,
       words: doc.transcripts.find((t) => t.id === s.id)?.words.length ?? 0,
       ...(() => {
+        // Where someone talks, when it's only part of the clip (a vlog's pieces to camera between scenery).
+        const talk = doc.analyses.find((a) => a.id === s.id)?.speech;
+        if (!talk || s.kind !== "video") return {};
+        if (!talk.length) return { talks: "nobody" };
+        const said = talk.reduce((n, [a, b]) => n + b - a, 0);
+        return said < s.duration * 0.85
+          ? { talksAt: talk.slice(0, 8).map(([a, b]) => [round(a, 1), round(b, 1)]) }
+          : {};
+      })(),
+      ...(() => {
         const log = doc.shotLogs.find((l) => l.id === s.id);
         return log
           ? { shots: log.segments.length, highlights: log.segments.filter((x) => x.highlight).length }
@@ -149,7 +159,10 @@ const STRESSED = 0.85;
 
 export function transcriptView(doc: ProjectDoc, sourceId: string, from = 0, to = Infinity): string {
   const t = doc.transcripts.find((x) => x.id === sourceId);
-  if (!t) return `${sourceId}: no transcript (not indexed yet, or no speech).`;
+  if (!t)
+    return doc.analyses.find((a) => a.id === sourceId)?.speech?.length === 0
+      ? `${sourceId}: nobody talks in it (heard on device): edit it for its picture and sound.`
+      : `${sourceId}: no transcript (not indexed yet, or no speech).`;
   const inCut = new Set(
     spokenWords(doc)
       .filter((w) => w.source === sourceId)

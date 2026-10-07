@@ -6,11 +6,14 @@ import {
   entrySound,
   lasting,
   type ProjectDoc,
+  STARTER_GRAPHICS,
   scenesNeedingCutout,
   spanOf,
   splitSceneOps,
+  starterOps,
   timelineOf,
   trimSceneOps,
+  validateGraphic,
 } from "./index.ts";
 
 /** Three two-second shots: a (0-2), b (2-4), d (4-6). */
@@ -139,3 +142,17 @@ describe("the clear area", () => {
   });
 });
 
+describe("the watermark graphic", () => {
+  it("is built in, valid, and comes to older projects", () => {
+    const g = STARTER_GRAPHICS.find((x) => x.id === "watermark");
+    expect(g && validateGraphic(g.html)).toBeNull();
+    const fresh = emptyProject("t");
+    const old = {
+      ...fresh,
+      meta: { ...fresh.meta, starters: 4 },
+      graphics: fresh.graphics.filter((x) => x.id !== "watermark"),
+    };
+    const { doc } = applyOps(old, starterOps(old));
+    expect(doc.graphics.some((x) => x.id === "watermark")).toBe(true);
+  });
+});

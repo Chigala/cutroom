@@ -478,7 +478,17 @@ export class ProjectService {
     };
   }
 
-  async restore(): Promise<ProjectSnapshot> {
+  /** A restore under way: a second ask (the window's startup running twice) waits for it, not opens again. */
+  private restoring: Promise<ProjectSnapshot> | null = null;
+
+  restore(): Promise<ProjectSnapshot> {
+    this.restoring ??= this.restoreNow().finally(() => {
+      this.restoring = null;
+    });
+    return this.restoring;
+  }
+
+  private async restoreNow(): Promise<ProjectSnapshot> {
     if (this.store) return this.snapshot();
     // The one opened last, wherever it sits in the list.
     const last = (await this.recent()).reduce<RecentProject | undefined>(

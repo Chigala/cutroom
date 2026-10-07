@@ -41,6 +41,10 @@ interface CaseResult {
   readonly indexMs: number;
   readonly agentMs: number;
   readonly steps: number;
+  /** Each tool the agent called: how often, and how often it was refused or failed. */
+  readonly tools?: Record<string, { calls: number; errors: number }>;
+  /** The most of the context window any turn used (tokens). */
+  readonly context?: number;
   readonly error: string | null;
   readonly score: EditScore | null;
 }
@@ -61,6 +65,8 @@ export async function runBench(service: ProjectService, file: string): Promise<s
     let indexMs = 0;
     let agentMs = 0;
     let steps = 0;
+    let context = 0;
+    const tools: Record<string, { calls: number; errors: number }> = {};
     let error: string | null = null;
     try {
       const imported = service.waitFor("importDone", () => true, 3_600_000);
@@ -77,7 +83,14 @@ export async function runBench(service: ProjectService, file: string): Promise<s
         const t1 = Date.now();
         const { runId } = await service.runAgent({ prompt, depth: i === 0 ? "thorough" : "quick" });
         const counted = service.on("agent", (e: AgentEvent) => {
-          if (e.runId === runId && e.type === "step") steps++;
+          if (e.runId !== runId) return;
+          if (e.type === "step") steps++;
+          if (e.type === "tool" && e.status !== "running") {
+            const t = (tools[e.name] ??= { calls: 0, errors: 0 });
+            t.calls++;
+            if (e.status === "error") t.errors++;
+          }
+          if (e.type === "usage" && e.context) context = Math.max(context, e.context.used);
         });
         const end = await service.waitFor(
           "agent",
@@ -102,7 +115,7 @@ export async function runBench(service: ProjectService, file: string): Promise<s
       });
       score = scoreEdit(doc, motion);
     }
-    results.push({ name: c.name, dir, indexMs, agentMs, steps, error, score });
+    results.push({ name: c.name, dir, indexMs, agentMs, steps, tools, context, error, score });
     await writeFile(path.join(root, "results.json"), `${JSON.stringify({ stamp, results }, null, 2)}\n`);
   }
   const previous = await previousRun(out, stamp);
@@ -124,6 +137,13 @@ async function previousRun(
   return null;
 }
 
+/** apply_ops calls, how many were refused, and how many times the agent looked fields up. */
+function edits(r: CaseResult): string {
+  if (!r.tools) return "";
+  const ops = r.tools.apply_ops ?? { calls: 0, errors: 0 };
+  return `${ops.calls} (${ops.errors} refused, ${r.tools.fields?.calls ?? 0} lookups)`;
+}
+
 function report(
   stamp: string,
   results: CaseResult[],
@@ -139,7 +159,7 @@ function report(
     const p = previous?.results.find((x) => x.name === r.name);
     const s = r.score;
     const ps = p?.score;
-    if (!s) return `| ${r.name} | failed: ${r.error ?? "no edit"} | | | | | |`;
+    if (!s) return `| ${r.name} | failed: ${r.error ?? "no edit"} | | | | | | | |`;
     const failed = r.error ? ` ⚠ ${r.error}` : "";
     return [
       "",
@@ -150,6 +170,8 @@ function report(
       `${s.edit.duration}s · ${s.edit.shots} shots · ${s.edit.visuals} visuals (${s.edit.graphicKinds} kinds)`,
       `${Math.round(r.agentMs / 1000)}s${delta(r.agentMs / 1000, p ? p.agentMs / 1000 : undefined, "down")}`,
       `${r.steps}`,
+      edits(r),
+      r.context ? `${Math.round(r.context / 1000)}k` : "",
       "",
     ]
       .join(" | ")
@@ -176,8 +198,8 @@ function report(
     `# Benchmark ${stamp}`,
     previous ? `Compared with ${previous.stamp}.` : "First run.",
     "",
-    "| case | score | checks | motion issues | edit | agent time | steps |",
-    "|---|---|---|---|---|---|---|",
+    "| case | score | checks | motion issues | edit | agent time | steps | edits (refused, lookups) | context |",
+    "|---|---|---|---|---|---|---|---|---|",
     ...rows,
     "",
     ...details,

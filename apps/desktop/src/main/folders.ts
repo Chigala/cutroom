@@ -76,9 +76,11 @@ export async function projectName(dir: string): Promise<string> {
 
 /**
  * The videos in a project folder, made on this computer or not: each edit folder directly inside it,
- * with its name and when it last changed.
+ * with its name, when it was made (the order the sidebar keeps) and when it last changed.
  */
-export async function videosIn(dir: string): Promise<{ dir: string; name: string; changedAt: number }[]> {
+export async function videosIn(
+  dir: string,
+): Promise<{ dir: string; name: string; createdAt: number; changedAt: number }[]> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   const videos = await Promise.all(
     entries
@@ -89,9 +91,11 @@ export async function videosIn(dir: string): Promise<{ dir: string; name: string
         if (!isVideo(video)) return null;
         const file = path.join(video, "project.json");
         let name = e.name;
+        let made = Number.NaN;
         try {
-          const meta = JSON.parse(await readFile(file, "utf8")) as { name?: unknown };
+          const meta = JSON.parse(await readFile(file, "utf8")) as { name?: unknown; createdAt?: unknown };
           if (typeof meta.name === "string" && meta.name.trim()) name = meta.name.trim();
+          if (typeof meta.createdAt === "string") made = Date.parse(meta.createdAt);
         } catch {}
         const changedAt = await stat(path.join(video, ".history", "log.jsonl"))
           .then((s) => s.mtimeMs)
@@ -101,7 +105,14 @@ export async function videosIn(dir: string): Promise<{ dir: string; name: string
               () => 0,
             ),
           );
-        return { dir: video, name, changedAt };
+        // When it was made: its own record of it, else when its folder was.
+        const createdAt = Number.isFinite(made)
+          ? made
+          : await stat(video).then(
+              (st) => st.birthtimeMs || st.ctimeMs,
+              () => changedAt,
+            );
+        return { dir: video, name, createdAt, changedAt };
       }),
   );
   return videos.filter((v) => v !== null);

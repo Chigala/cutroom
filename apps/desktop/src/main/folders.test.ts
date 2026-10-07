@@ -42,6 +42,20 @@ describe("projects: folders of videos", () => {
     expect(videos.map((v) => v.name).sort()).toEqual(["Episode one", "ep2"]);
   });
 
+  it("keeps videos in the order they were made, whichever was opened last", async () => {
+    const { dir } = await makeProjectFolder(root(), "Trips");
+    const made = (folder: string, at: string) => {
+      const v = path.join(dir, folder);
+      mkdirSync(v);
+      writeFileSync(path.join(v, "project.json"), JSON.stringify({ schema: 1, name: folder, createdAt: at }));
+    };
+    made("lisbon", "2026-10-01T10:00:00Z");
+    made("porto", "2026-10-03T10:00:00Z");
+    const videos = await videosIn(dir);
+    expect(videos.find((v) => v.name === "porto")!.createdAt).toBe(Date.parse("2026-10-03T10:00:00Z"));
+    expect(videos.find((v) => v.name === "lisbon")!.createdAt).toBe(Date.parse("2026-10-01T10:00:00Z"));
+  });
+
   it("knows which project a video is in, however the path is written", async () => {
     const { dir } = await makeProjectFolder(root(), "Reels");
     const clip = video(dir, "teaser");

@@ -244,14 +244,17 @@ for (const tool of ["ffmpeg", "ffprobe"] as const) {
       "-DWHISPER_BUILD_TESTS=OFF",
       "-DWHISPER_BUILD_SERVER=OFF",
     ];
-    if (platform === "darwin")
+    if (platform === "darwin") {
       flags.push(
         `-DCMAKE_OSX_ARCHITECTURES=${arch === "arm64" ? "arm64" : "x86_64"}`,
         "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.3",
         "-DGGML_METAL=ON",
         "-DGGML_METAL_EMBED_LIBRARY=ON",
       );
-    else {
+      // Intel Macs: the vector instructions every Mac that runs macOS 13.3 has (2017 on), which a
+      // build that isn't native to the machine otherwise leaves out.
+      if (arch === "x64") flags.push("-DGGML_AVX=ON", "-DGGML_AVX2=ON", "-DGGML_FMA=ON", "-DGGML_F16C=ON");
+    } else {
       // No OpenMP: its runtime library wouldn't be on the user's machine (ggml has its own threads).
       flags.push("-DGGML_OPENMP=OFF");
       if (arch === "x64") flags.push("-DGGML_AVX=ON", "-DGGML_AVX2=ON", "-DGGML_FMA=ON", "-DGGML_F16C=ON");

@@ -3,15 +3,18 @@
  * project, written in when it's made. Built-ins added to the app later are written into older projects
  * once, the first time they open (meta.starters says which have been given), so every effect a project
  * can use is a file in it that the agent and the user can read and change. One deleted stays deleted.
+ *
+ * A built-in rewritten later replaces the project's copy only if that copy is exactly as the app wrote
+ * it: anything the user or the agent changed stays theirs.
  */
 import { STARTER_CAPTION_LOOKS } from "./caption-looks.ts";
 import type { Op } from "./ops.ts";
 import type { ProjectDoc } from "./schema.ts";
 import { STARTER_GRAPHICS } from "./starter-graphics.ts";
-import { STARTER_EFFECTS, STARTER_GRADES, STARTER_TRANSITIONS } from "./styles.ts";
+import { REPLACED_GRADES, STARTER_EFFECTS, STARTER_GRADES, STARTER_TRANSITIONS } from "./styles.ts";
 
 /** The current set of built-ins. Bump it when adding one, and list it in ADDED. */
-export const STARTER_VERSION = 3;
+export const STARTER_VERSION = 4;
 
 /** Built-ins added after the first set, by the version that brought them. */
 const ADDED: Readonly<Record<string, number>> = {
@@ -42,6 +45,13 @@ export function starterOps(doc: ProjectDoc): Op[] {
       const since = ADDED[`${coll}/${item.id}`] ?? 1;
       const present = (doc[coll] as readonly { id: string }[]).some((x) => x.id === item.id);
       if (since > have && !present) ops.push({ op: "insert", coll, item } as Op);
+    }
+  // Version 4: the grades became real grades (lift/gamma/gain, curves) instead of CSS filters.
+  if (have < 4)
+    for (const g of doc.grades) {
+      const now = STARTER_GRADES.find((n) => n.id === g.id);
+      if (now && REPLACED_GRADES.get(g.id) === g.css)
+        ops.push({ op: "update", coll: "grades", id: g.id, patch: { css: now.css } });
     }
   ops.push({ op: "merge", key: "meta", patch: { starters: STARTER_VERSION } });
   return ops;

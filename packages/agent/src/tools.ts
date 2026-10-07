@@ -26,6 +26,7 @@ import {
   cutReport,
   DERIVED,
   describeSound,
+  gradeColorOf,
   graphicPreviewDoc,
   type InspirationInfo,
   type InspirationPack,
@@ -969,7 +970,7 @@ export const TOOLS: readonly AgentTool[] = [
   tool({
     name: "write_style",
     description:
-      "Create or replace an effect, transition or grade: CSS saved as effects/, transitions/ or grades/<id>.css. Effects style .frame (the picture), .subject (the person alone, cut out automatically), .background (what's behind them) and .overlay; transitions style .out (the leaving shot), .in (the arriving one) and .overlay; grades style .picture and .overlay. Variables --t, --duration, --progress, --accent; animations run on the file's own clock. Use it when the user wants a move, a change between shots or a colour look the existing files don't give. Then place it (an effect's kind, a scene's transition.kind, or use: true for a grade) and look at it.",
+      "Create or replace an effect, transition or grade: CSS saved as effects/, transitions/ or grades/<id>.css. Effects style .frame (the picture), .subject (the person alone, cut out automatically), .background (what's behind them) and .overlay; transitions style .out (the leaving shot), .in (the arriving one) and .overlay; a grade is its header's color (white balance, exposure, lift/gamma/gain, contrast, saturation, curves, a LUT), with .picture and .overlay CSS on top. Variables --t, --duration, --progress, --accent; animations run on the file's own clock. Use it when the user wants a move, a change between shots or a colour look the existing files don't give. Then place it (an effect's kind, a scene's transition.kind, or use: true for a grade) and look at it.",
     input: z.object({
       label: Label,
       kind: z.enum(["effect", "transition", "grade"]),
@@ -980,6 +981,12 @@ export const TOOLS: readonly AgentTool[] = [
     async run({ label, kind, id, css, use }, ctx) {
       const problem = validateStyle(kind, css);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
+      const lut = kind === "grade" ? gradeColorOf(css)?.lut : undefined;
+      if (lut && !ctx.scratch.doc.luts.some((l) => l.file === lut))
+        return {
+          text: `Not saved: there's no luts/${lut}. ${ctx.scratch.doc.luts.length ? `The project has: ${ctx.scratch.doc.luts.map((l) => l.file).join(", ")}` : "The project has no LUTs; the user can drop .cube files into its luts/ folder"}.`,
+          isError: true,
+        };
       const coll = STYLE_COLLECTION[kind];
       const exists = ctx.scratch.doc[coll].some((f) => f.id === id);
       const ops: Op[] = [

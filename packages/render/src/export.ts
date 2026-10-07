@@ -57,7 +57,13 @@ import {
   sourceTime,
   timelineOf,
 } from "@vedit/project";
-import { chromiumOptions, readyBrowser, remotionBinaries } from "./binaries.ts";
+import {
+  chromiumOptions,
+  fallBackToSoftware,
+  isGlUnavailable,
+  readyBrowser,
+  remotionBinaries,
+} from "./binaries.ts";
 import { startMediaServer } from "./server.ts";
 
 export interface ExportProgress {
@@ -340,7 +346,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
     await readyBrowser();
     const url = await serveUrl(o.entry);
     browser = await openBrowser("chrome", { chromiumOptions: chromiumOptions() });
-    const puppeteerInstance = browser;
+    let puppeteerInstance = browser;
     for (const [i, shape] of shapes.entries()) {
       check();
       const at = base + 0.1 + i * share;
@@ -357,13 +363,13 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
       const onAbort = () => cancel.cancel();
       signal?.addEventListener("abort", onAbort, { once: true });
       renders.add(onAbort);
-      try {
-        const inputProps: CompositionProps = {
-          doc: shaped,
-          mediaBase: server.base,
-          quality: "export",
-          muteSources: true,
-        };
+      const inputProps: CompositionProps = {
+        doc: shaped,
+        mediaBase: server.base,
+        quality: "export",
+        muteSources: true,
+      };
+      const renderPicture = async () => {
         const composition = await selectComposition({
           ...remotionBinaries(),
           serveUrl: url,
@@ -395,6 +401,19 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
           chromiumOptions: chromiumOptions(),
           onProgress: ({ progress }) => report("picture", `Rendering${tag}`, at + progress * share * 0.9),
         });
+      };
+      try {
+        try {
+          await renderPicture();
+        } catch (err) {
+          // No WebGL2 on this GPU (the colour grade needs it): once more in software, the right colours.
+          if (signal?.aborted || !isGlUnavailable(err) || !fallBackToSoftware()) throw err;
+          report("picture", `Rendering${tag} without the GPU`, at);
+          await browser.close({ silent: true }).catch(() => {});
+          browser = await openBrowser("chrome", { chromiumOptions: chromiumOptions() });
+          puppeteerInstance = browser;
+          await renderPicture();
+        }
       } catch (err) {
         if (voiceError) throw voiceError;
         if (signal?.aborted) throw new CancelledError();

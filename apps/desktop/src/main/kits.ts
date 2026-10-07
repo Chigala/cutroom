@@ -13,6 +13,7 @@ import {
   kitFromDoc,
   kitInfo,
   kitOps,
+  LUTS_DIR,
   type ProjectDoc,
   rememberIn,
 } from "@vedit/project";
@@ -61,23 +62,33 @@ export async function saveKit(
   let kitId = id && (await getKit(id)) ? id : slug(name);
   if (!id) for (let n = 2; existsSync(kitDir(kitId)); n++) kitId = `${slug(name)}-${n}`;
   const kit = kitFromDoc(doc, kitId, name.trim() || "My kit");
-  await mkdir(path.join(kitDir(kitId), FONTS_DIR), { recursive: true });
-  for (const f of kit.fonts) {
-    const from = path.join(projectDir, FONTS_DIR, f.file);
-    if (existsSync(from)) await copyFile(from, path.join(kitDir(kitId), FONTS_DIR, f.file));
+  for (const [dir, files] of kitFiles(kit)) {
+    await mkdir(path.join(kitDir(kitId), dir), { recursive: true });
+    for (const file of files) {
+      const from = path.join(projectDir, dir, file);
+      if (existsSync(from)) await copyFile(from, path.join(kitDir(kitId), dir, file));
+    }
   }
   await writeKit(kit);
   return kitInfo(kit);
 }
 
-/** Copies a kit's font files into a project's fonts/ (the store picks them up from there). */
-export async function copyKitFonts(kit: BrandKit, projectDir: string): Promise<void> {
-  if (!kit.fonts.length) return;
-  await mkdir(path.join(projectDir, FONTS_DIR), { recursive: true });
-  for (const f of kit.fonts) {
-    const from = path.join(kitDir(kit.id), FONTS_DIR, f.file);
-    const to = path.join(projectDir, FONTS_DIR, f.file);
-    if (existsSync(from) && !existsSync(to)) await copyFile(from, to);
+/** A kit's own files, by folder: its fonts and its LUTs. */
+const kitFiles = (kit: BrandKit): [string, string[]][] => [
+  [FONTS_DIR, kit.fonts.map((f) => f.file)],
+  [LUTS_DIR, kit.luts.map((l) => l.file)],
+];
+
+/** Copies a kit's font and LUT files into a project's fonts/ and luts/ (the store picks them up there). */
+export async function copyKitFiles(kit: BrandKit, projectDir: string): Promise<void> {
+  for (const [dir, files] of kitFiles(kit)) {
+    if (!files.length) continue;
+    await mkdir(path.join(projectDir, dir), { recursive: true });
+    for (const file of files) {
+      const from = path.join(kitDir(kit.id), dir, file);
+      const to = path.join(projectDir, dir, file);
+      if (existsSync(from) && !existsSync(to)) await copyFile(from, to);
+    }
   }
 }
 
@@ -85,8 +96,8 @@ export async function copyKitFonts(kit: BrandKit, projectDir: string): Promise<v
 export async function withKit(doc: ProjectDoc, kitId: string, projectDir: string): Promise<ProjectDoc> {
   const kit = kitId ? await getKit(kitId) : null;
   if (!kit) return doc;
-  await copyKitFonts(kit, projectDir);
-  return { ...applyOps(doc, kitOps(doc, kit)).doc, fonts: kit.fonts };
+  await copyKitFiles(kit, projectDir);
+  return { ...applyOps(doc, kitOps(doc, kit)).doc, fonts: kit.fonts, luts: kit.luts };
 }
 
 /** Adds a learned preference to a kit's STYLE.md. */

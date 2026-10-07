@@ -4,7 +4,6 @@
  */
 
 import {
-  type ChromiumOptions,
   type HeadlessBrowser,
   makeCancelSignal,
   openBrowser,
@@ -13,7 +12,13 @@ import {
 } from "@remotion/renderer";
 import type { CompositionProps } from "@vedit/composition";
 import type { ProjectDoc } from "@vedit/project";
-import { chromiumOptions, readyBrowser, remotionBinaries } from "./binaries.ts";
+import {
+  chromiumOptions,
+  fallBackToSoftware,
+  isGlUnavailable,
+  readyBrowser,
+  remotionBinaries,
+} from "./binaries.ts";
 import { type ExportOptions, serveUrl } from "./export.ts";
 import { startMediaServer } from "./server.ts";
 
@@ -41,7 +46,6 @@ export interface Stills {
   readonly errors: readonly string[];
 }
 
-const GL: ChromiumOptions = chromiumOptions();
 let browser: Promise<HeadlessBrowser> | null = null;
 let idle: ReturnType<typeof setTimeout> | undefined;
 
@@ -49,7 +53,7 @@ let idle: ReturnType<typeof setTimeout> | undefined;
 function warmBrowser(): Promise<HeadlessBrowser> {
   clearTimeout(idle);
   browser ??= readyBrowser()
-    .then(() => openBrowser("chrome", { chromiumOptions: GL }))
+    .then(() => openBrowser("chrome", { chromiumOptions: chromiumOptions() }))
     .catch((err: unknown) => {
       browser = null;
       throw err;
@@ -110,6 +114,17 @@ function release(): void {
 }
 
 export async function renderStills(o: StillsOptions): Promise<Stills> {
+  try {
+    return await renderStillsOnce(o);
+  } catch (err) {
+    // No WebGL2 on this GPU (the colour grade needs it): again in software, in a fresh browser.
+    if (!isGlUnavailable(err) || !fallBackToSoftware()) throw err;
+    discardBrowser();
+    return renderStillsOnce(o);
+  }
+}
+
+async function renderStillsOnce(o: StillsOptions): Promise<Stills> {
   const server = await startMediaServer(o.resolve);
   const errors = new Set<string>();
   const onBrowserLog = ({ text }: { text: string }) => {
@@ -144,7 +159,7 @@ export async function renderStills(o: StillsOptions): Promise<Stills> {
         id,
         inputProps,
         puppeteerInstance,
-        chromiumOptions: GL,
+        chromiumOptions: chromiumOptions(),
         onBrowserLog,
       }),
     );
@@ -163,7 +178,7 @@ export async function renderStills(o: StillsOptions): Promise<Stills> {
             ...((o.imageFormat ?? "jpeg") === "jpeg" && { jpegQuality: 82 }),
             scale: o.scale ?? 0.4,
             puppeteerInstance,
-            chromiumOptions: GL,
+            chromiumOptions: chromiumOptions(),
             onBrowserLog,
             cancelSignal: cancel.cancelSignal,
           }),

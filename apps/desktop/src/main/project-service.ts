@@ -82,6 +82,7 @@ import {
   type KitInfo,
   keepable,
   kitOps,
+  LUTS_DIR,
   newId,
   nextId,
   type Op,
@@ -125,7 +126,7 @@ import { History } from "./history.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { InspirationStore } from "./inspirations.ts";
 import { jevEndpoint, logInstant } from "./instant.ts";
-import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
+import { copyKitFiles, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
 import { onWindowsDrive } from "./platform.ts";
 import {
@@ -311,6 +312,10 @@ export class ProjectService {
       // Only fonts the project knows, by exact file name: no other path is reachable.
       const font = doc?.fonts.find((f) => `${FONTS_DIR}/${f.file}` === key);
       return store && font ? path.join(store.dir, FONTS_DIR, font.file) : null;
+    }
+    if (key.startsWith(`${LUTS_DIR}/`)) {
+      const lut = doc?.luts.find((l) => `${LUTS_DIR}/${l.file}` === key);
+      return store && lut ? path.join(store.dir, LUTS_DIR, lut.file) : null;
     }
     const src = doc?.sources.find((s) => s.id === key);
     if (!store || !src?.path) return null;
@@ -586,7 +591,7 @@ export class ProjectService {
     const store = this.requireStore();
     const kit = await getKit(id);
     if (!kit) return { ok: false, error: "That brand kit is gone." };
-    await copyKitFonts(kit, store.dir);
+    await copyKitFiles(kit, store.dir);
     try {
       const commit = store.commitAndBroadcast({
         author: "user",
@@ -1621,7 +1626,7 @@ export class ProjectService {
         apply: async (id, doc) => {
           const kit = await getKit(id);
           if (!kit) return null;
-          await copyKitFonts(kit, store.dir);
+          await copyKitFiles(kit, store.dir);
           return { ops: kitOps(doc, kit), name: kit.name };
         },
         remember: (id, note) => rememberInKit(id, note),

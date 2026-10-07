@@ -20,7 +20,7 @@ import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/rend
 import type { CompositionProps } from "@vedit/composition";
 import { findBinary, trackRange } from "@vedit/media";
 import { musicBeats, type ProjectDoc, resolveAnchor, timelineOf } from "@vedit/project";
-import { chromiumOptions, remotionBinaries } from "./binaries.ts";
+import { chromiumOptions, fallBackToSoftware, isGlUnavailable, remotionBinaries } from "./binaries.ts";
 import { type ExportOptions, serveUrl } from "./export.ts";
 import { startMediaServer } from "./server.ts";
 
@@ -104,6 +104,7 @@ export async function senseMotion(o: SenseOptions): Promise<MotionReport> {
     doc.effects,
     doc.look,
     doc.grades,
+    doc.luts,
     doc.visuals.filter((v) => v.content.kind === "cutaway" || v.layout !== "overlay"),
     doc.analyses.map((a) => [a.id, a.face, a.tracks?.length, a.cutouts]),
     doc.sources.map((x) => [x.id, x.path]),
@@ -129,37 +130,46 @@ export async function senseMotion(o: SenseOptions): Promise<MotionReport> {
         audio: false,
         layers,
       };
-      const composition = await selectComposition({
-        serveUrl: url,
-        id: "Video",
-        inputProps,
-        ...remotionBinaries(),
-      });
-      await renderMedia({
-        ...remotionBinaries(),
-        composition,
-        serveUrl: url,
-        inputProps,
-        outputLocation: out,
-        scale,
-        muted: true,
-        cancelSignal: cancel.cancelSignal,
-        chromiumOptions: chromiumOptions(),
-        concurrency: 4,
-        ...(layers === "overlay"
-          ? {
-              codec: "prores" as const,
-              proResProfile: "4444" as const,
-              imageFormat: "png" as const,
-              pixelFormat: "yuva444p10le" as const,
-            }
-          : { codec: "h264" as const, crf: 28 }),
-        onProgress: ({ progress }) =>
-          o.onProgress?.(
-            from + progress * share,
-            layers === "overlay" ? "Rendering the graphics" : "Rendering the footage",
-          ),
-      });
+      const attempt = async () => {
+        const composition = await selectComposition({
+          serveUrl: url,
+          id: "Video",
+          inputProps,
+          ...remotionBinaries(),
+        });
+        await renderMedia({
+          ...remotionBinaries(),
+          composition,
+          serveUrl: url,
+          inputProps,
+          outputLocation: out,
+          scale,
+          muted: true,
+          cancelSignal: cancel.cancelSignal,
+          chromiumOptions: chromiumOptions(),
+          concurrency: 4,
+          ...(layers === "overlay"
+            ? {
+                codec: "prores" as const,
+                proResProfile: "4444" as const,
+                imageFormat: "png" as const,
+                pixelFormat: "yuva444p10le" as const,
+              }
+            : { codec: "h264" as const, crf: 28 }),
+          onProgress: ({ progress }) =>
+            o.onProgress?.(
+              from + progress * share,
+              layers === "overlay" ? "Rendering the graphics" : "Rendering the footage",
+            ),
+        });
+      };
+      try {
+        await attempt();
+      } catch (err) {
+        // No WebGL2 on this GPU (the colour grade needs it): again in software.
+        if (o.signal?.aborted || !isGlUnavailable(err) || !fallBackToSoftware()) throw err;
+        await attempt();
+      }
     };
     await render("overlay", overlay, 0, seenFaces ? 0.85 : 0.45);
     if (!seenFaces) await render("footage", footage, 0.45, 0.35);

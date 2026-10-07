@@ -16,6 +16,7 @@ const NOUN: Record<Collection, [one: string, many: string]> = {
   captionLooks: ["caption look", "caption looks"],
   inspirations: ["inspiration", "inspirations"],
   fonts: ["font", "fonts"],
+  luts: ["LUT", "LUTs"],
   shotLogs: ["shot log", "shot logs"],
   musicCues: ["music cue", "music cues"],
   musicClips: ["music clip", "music clips"],

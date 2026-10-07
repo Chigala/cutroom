@@ -13,6 +13,7 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from "nod
 import path from "node:path";
 import { diffDocs } from "../diff.ts";
 import { FONTS_DIR, fontFromFile } from "../fonts.ts";
+import { LUTS_DIR, lutFromFile } from "../grading.ts";
 import { type Commit, type CommitInput, makeCommit } from "../history.ts";
 import {
   changedFiles,
@@ -25,7 +26,7 @@ import {
   type ProjectFile,
 } from "../layout.ts";
 import type { Op } from "../ops.ts";
-import { type FontFile, type ProjectDoc, ProjectDocSchema } from "../schema.ts";
+import { type ProjectDoc, ProjectDocSchema } from "../schema.ts";
 
 export class ProjectLoadError extends Error {
   constructor(
@@ -95,20 +96,33 @@ async function readProjectDir(
   return { items, texts, seeded: false };
 }
 
-/** The project's own fonts: every font file in fonts/, named the way foundries name them. */
-async function readFonts(dir: string): Promise<FontFile[]> {
+/**
+ * Folders of the user's own files: fonts (named the way foundries name them) and colour LUTs. The app
+ * never writes them; it reads what's there by name, and removing an entry deletes its file.
+ */
+interface UserFolder {
+  readonly dir: string;
+  readonly coll: "fonts" | "luts";
+  fromFile(file: string): { id: string; file: string } | null;
+}
+const USER_FOLDERS: readonly UserFolder[] = [
+  { dir: FONTS_DIR, coll: "fonts", fromFile: fontFromFile },
+  { dir: LUTS_DIR, coll: "luts", fromFile: lutFromFile },
+];
+
+async function readUserFolder(dir: string, f: UserFolder) {
   let names: string[];
   try {
-    names = await readdir(path.join(dir, FONTS_DIR));
+    names = await readdir(path.join(dir, f.dir));
   } catch {
     return [];
   }
-  const fonts = new Map<string, FontFile>();
+  const items = new Map<string, { id: string; file: string }>();
   for (const name of names.sort()) {
-    const font = fontFromFile(name);
-    if (font && !fonts.has(font.id)) fonts.set(font.id, font);
+    const item = f.fromFile(name);
+    if (item && !items.has(item.id)) items.set(item.id, item);
   }
-  return [...fonts.values()];
+  return [...items.values()];
 }
 
 export interface StoreEvents {
@@ -122,8 +136,8 @@ export class ProjectStore {
   private written: ProjectDoc | null = null;
   private flushTimer: NodeJS.Timeout | null = null;
   private flushing: Promise<void> = Promise.resolve();
-  /** Font files known to be in fonts/. */
-  private fontsOnDisk = new Set<string>();
+  /** Files known to be in each user folder (fonts/, luts/). */
+  private onDisk = new Map<string, Set<string>>();
   private logQueue: string[] = [];
   /** Hash of what we last wrote per file, so the watcher can ignore our own writes. */
   private hashes = new Map<string, string>();
@@ -151,13 +165,15 @@ export class ProjectStore {
       {},
       ...parts.map((p) => p.part),
       ...PROJECT_DIRS.map((d, i) => ({ [d.section]: folders[i]!.items })),
-      { fonts: await readFonts(dir) },
+      Object.fromEntries(
+        await Promise.all(USER_FOLDERS.map(async (f) => [f.coll, await readUserFolder(dir, f)] as const)),
+      ),
     );
     const parsed = ProjectDocSchema.safeParse(merged);
     if (!parsed.success) throw new ProjectLoadError(`project is not valid: ${parsed.error.message}`);
     const store = new ProjectStore(dir, parsed.data, await lastCommitId(dir), events);
     store.written = parsed.data;
-    store.fontsOnDisk = new Set(parsed.data.fonts.map((f) => f.file));
+    for (const f of USER_FOLDERS) store.onDisk.set(f.dir, new Set(parsed.data[f.coll].map((i) => i.file)));
     const missing: ProjectFile[] = [];
     PROJECT_FILES.forEach((f, i) => {
       const text = parts[i]!.text;
@@ -177,8 +193,8 @@ export class ProjectStore {
       for (const [rel, text] of folder.texts) store.hashes.set(rel, sha(text));
       if (folder.seeded) await store.writeDir(d, null, parsed.data);
     }
-    // So people can see where their fonts go.
-    await mkdir(path.join(dir, FONTS_DIR), { recursive: true });
+    // So people can see where their fonts and LUTs go.
+    for (const f of USER_FOLDERS) await mkdir(path.join(dir, f.dir), { recursive: true });
     return store;
   }
 
@@ -239,7 +255,7 @@ export class ProjectStore {
         for (const d of PROJECT_DIRS)
           if (!this.written || this.written[d.section] !== next[d.section])
             await this.writeDir(d, this.written, next);
-        await this.removeFonts(next);
+        await this.removeUserFiles(next);
         this.written = next;
       }
       if (lines.length) {
@@ -252,34 +268,37 @@ export class ProjectStore {
   }
 
   /**
-   * Font files are the user's: the app never writes them, but removing a font deletes its file. Compared
-   * with what is on disk, not with the last write: flushes are debounced, so a font can arrive and be
-   * removed before one happens.
+   * Files in user folders are the user's: the app never writes them, but removing an entry deletes its
+   * file. Compared with what is on disk, not with the last write: flushes are debounced, so a file can
+   * arrive and be removed before one happens.
    */
-  private async removeFonts(next: ProjectDoc): Promise<void> {
-    const kept = new Set(next.fonts.map((f) => f.file));
-    const gone = [...this.fontsOnDisk].filter((file) => !kept.has(file));
-    for (const file of gone) this.fontsOnDisk.delete(file);
-    await Promise.all(gone.map((file) => rm(path.join(this.dir, FONTS_DIR, file), { force: true })));
+  private async removeUserFiles(next: ProjectDoc): Promise<void> {
+    for (const f of USER_FOLDERS) {
+      const onDisk = this.onDisk.get(f.dir) ?? new Set();
+      const kept = new Set(next[f.coll].map((i) => i.file));
+      const gone = [...onDisk].filter((file) => !kept.has(file));
+      for (const file of gone) onDisk.delete(file);
+      await Promise.all(gone.map((file) => rm(path.join(this.dir, f.dir, file), { force: true })));
+    }
   }
 
-  /** The fonts folder changed outside the app: an ordinary, undoable commit. */
-  private async rescanFonts(): Promise<void> {
-    const found = await readFonts(this.dir);
-    this.fontsOnDisk = new Set(found.map((f) => f.file));
-    const now = new Map(this.current.fonts.map((f) => [f.id, f]));
-    const seen = new Map(found.map((f) => [f.id, f]));
+  /** A user folder changed outside the app: an ordinary, undoable commit. */
+  private async rescan(f: UserFolder): Promise<void> {
+    const found = await readUserFolder(this.dir, f);
+    this.onDisk.set(f.dir, new Set(found.map((i) => i.file)));
+    const now = new Map(this.current[f.coll].map((i) => [i.id, i]));
+    const seen = new Map(found.map((i) => [i.id, i]));
     const ops: Op[] = [
       ...found
-        .filter((f) => !now.has(f.id))
-        .map((item) => ({ op: "insert" as const, coll: "fonts" as const, item })),
-      ...this.current.fonts
-        .filter((f) => !seen.has(f.id))
-        .map((f) => ({ op: "remove" as const, coll: "fonts" as const, id: f.id })),
+        .filter((i) => !now.has(i.id))
+        .map((item) => ({ op: "insert" as const, coll: f.coll, item: item as never })),
+      ...this.current[f.coll]
+        .filter((i) => !seen.has(i.id))
+        .map((i) => ({ op: "remove" as const, coll: f.coll, id: i.id })),
     ];
     if (!ops.length) return;
     try {
-      this.commitAndBroadcast({ author: "file", message: `Edited ${FONTS_DIR}/`, ops });
+      this.commitAndBroadcast({ author: "file", message: `Edited ${f.dir}/`, ops });
     } catch (err) {
       this.events.onError?.(err as Error);
     }
@@ -316,11 +335,12 @@ export class ProjectStore {
     this.watcher = watch(this.dir, { recursive: true }, (_event, name) => {
       if (!name) return;
       const rel = name.split(path.sep).join("/");
-      if (rel.startsWith(`${FONTS_DIR}/`)) {
-        clearTimeout(this.reloadTimers.get(FONTS_DIR));
+      const folder = USER_FOLDERS.find((f) => rel.startsWith(`${f.dir}/`));
+      if (folder) {
+        clearTimeout(this.reloadTimers.get(folder.dir));
         this.reloadTimers.set(
-          FONTS_DIR,
-          setTimeout(() => void this.rescanFonts(), 200),
+          folder.dir,
+          setTimeout(() => void this.rescan(folder), 200),
         );
         return;
       }

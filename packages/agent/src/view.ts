@@ -125,6 +125,7 @@ export function projectView(doc: ProjectDoc): string {
         note: "the project's own (fonts/)",
       })),
     ],
+    luts: doc.luts.map((l) => `luts/${l.file}`),
     sfx: doc.sfx.map((s) => ({ ...s, time: at(s.anchor) })),
     music: doc.music,
     musicCues: doc.musicCues.map((c) => ({ ...c, time: at(c.anchor) })),

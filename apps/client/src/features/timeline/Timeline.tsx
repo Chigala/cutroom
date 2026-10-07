@@ -192,6 +192,7 @@ function TimelineBody() {
                 </>
               )}
             </Row>
+            <Row label="Voiceover">{pps > 0 && <AnchoredTrack coll="voiceovers" tl={tl} pps={pps} />}</Row>
             <Row label="Sound">{pps > 0 && <AnchoredTrack coll="sfx" tl={tl} pps={pps} />}</Row>
             <Row label="Music">
               {pps > 0 && (
@@ -766,7 +767,7 @@ function Waveform({ source, from, to }: { source: string; from: number; to: numb
 
 type AnchoredColl = Extract<
   Collection,
-  "titles" | "captions" | "zooms" | "sfx" | "visuals" | "effects" | "musicClips" | "musicCues"
+  "titles" | "captions" | "zooms" | "sfx" | "visuals" | "effects" | "musicClips" | "musicCues" | "voiceovers"
 >;
 
 const STYLE: Record<AnchoredColl, string> = {
@@ -778,6 +779,7 @@ const STYLE: Record<AnchoredColl, string> = {
   sfx: "bg-[#1f2a33] text-fg justify-center",
   musicClips: "bg-[#24382f] text-[#d4f0e2]",
   musicCues: "bg-[#2f3a2a]/90 text-[#e2f0d4] justify-center",
+  voiceovers: "bg-[#33284a] text-[#e6dcff]",
 };
 
 /** What a block on the timeline says about its item. */
@@ -795,6 +797,8 @@ function blockLabel(
       return `♪ ${String(item.source ?? "")}`;
     case "musicCues":
       return `Music ×${Number(item.volume ?? 1).toFixed(2)}`;
+    case "voiceovers":
+      return `🎙 ${String(item.source ?? "")}`;
     case "effects":
       return String(item.kind ?? "Effect");
     case "titles":

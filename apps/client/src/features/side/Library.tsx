@@ -397,6 +397,7 @@ function ProjectClips({
     for (const v of d.visuals) if ("source" in v.content && v.content.source) ids.add(v.content.source);
     if (d.music.source) ids.add(d.music.source);
     for (const m of d.musicClips) ids.add(m.source);
+    for (const v of d.voiceovers) ids.add(v.source);
     return [...ids].sort().join(",");
   });
   const [kept, setKept] = useState<Set<string>>(new Set());

@@ -88,6 +88,8 @@ function describe(doc: ProjectDoc, coll: Collection, item: Item, n: number): str
     }
     case "musicClips":
       return `music clip ${source(i.source as string)}`;
+    case "voiceovers":
+      return `voiceover ${source(i.source as string)}`;
     case "effects":
       return `${i.kind} effect`;
     default:

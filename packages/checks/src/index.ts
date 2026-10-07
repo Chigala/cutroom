@@ -600,11 +600,16 @@ const rules: Rule[] = [
         ["sfx", doc.sfx],
         ["musicCues", doc.musicCues],
         ["musicClips", doc.musicClips],
+        ["voiceovers", doc.voiceovers],
       ] as const;
       const ops: Op[] = [];
       for (const [coll, items] of lists)
         for (const item of items)
           if (resolveAnchor(tl, item.anchor) === null) ops.push({ op: "remove", coll, id: item.id });
+      // A voiceover whose recording was removed from the project says nothing.
+      for (const v of doc.voiceovers)
+        if (!doc.sources.some((src) => src.id === v.source) && !ops.some((o) => "id" in o && o.id === v.id))
+          ops.push({ op: "remove", coll: "voiceovers", id: v.id });
       const missing = doc.scenes.filter((s) => !doc.sources.some((src) => src.id === s.source));
       if (!ops.length && !missing.length) return pass;
       return {

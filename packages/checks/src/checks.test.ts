@@ -112,4 +112,24 @@ describe("checks that use what the footage shows", () => {
       "pass",
     );
   });
+
+  it("clear a voiceover whose recording or shot is gone", () => {
+    const doc = demoProject();
+    const shot = doc.scenes[0]!.id;
+    const voice = (id: string, source: string, scene = shot) => ({
+      id,
+      anchor: { scene, at: 0 },
+      duration: 1,
+      source,
+      offset: 0,
+      volume: 1,
+      duck: 0.2,
+    });
+    const broken = { ...doc, voiceovers: [voice("v1", "deleted"), voice("v2", doc.sources[0]!.id, "gone")] };
+    const orphans = byId(broken).orphans!;
+    expect(orphans.status).not.toBe("pass");
+    const fixed = applyOps(broken, (orphans.fix?.ops ?? []) as Op[]).doc;
+    expect(fixed.voiceovers).toEqual([]);
+    expect(byId(fixed).orphans!.status).toBe("pass");
+  });
 });

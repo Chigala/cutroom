@@ -45,6 +45,7 @@ const COLLECTION_TARGETS: Partial<Record<Collection, string>> = {
   sfx: "Sound effects",
   visuals: "Pictures, stickers, memes, B-roll and graphics placed over the video",
   musicClips: "Extra music clips placed on the timeline",
+  voiceovers: "Voiceovers: recordings laid over the video as the voice",
   effects: "Effects on a moment of the video",
 };
 const SINGLETON_TARGETS: Partial<Record<Singleton, string>> = {
@@ -67,6 +68,7 @@ const SKIP = new Set([
   "scenes.out",
   "sfx.offset",
   "musicClips.offset",
+  "voiceovers.offset",
   "music.offset",
   "music.fitted",
   "visuals.layer",

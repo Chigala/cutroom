@@ -1,0 +1,17 @@
+{
+  "name": "@vedit/jev-proxy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "dev": "npx wrangler@4 dev",
+    "deploy": "npx wrangler@4 deploy"
+  },
+  "dependencies": {
+    "@vedit/instant": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3"
+  }
+}

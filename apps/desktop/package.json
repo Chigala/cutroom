@@ -28,6 +28,7 @@
     "@vedit/bridge": "workspace:*",
     "@vedit/checks": "workspace:*",
     "@vedit/client": "workspace:*",
+    "@vedit/instant": "workspace:*",
     "@vedit/media": "workspace:*",
     "@vedit/project": "workspace:*",
     "@vedit/render": "workspace:*",

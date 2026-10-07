@@ -31,6 +31,7 @@ import type {
 } from "@vedit/bridge";
 import { AgentRequest, CommitRequestSchema } from "@vedit/bridge";
 import { clearArea } from "@vedit/checks";
+import { type InstantResult, precheck, tryInstant } from "@vedit/instant";
 import {
   alignText,
   cutoutsAvailable,
@@ -84,6 +85,7 @@ import {
   OpError,
   type ProjectDoc,
   packFromProject,
+  revertOps,
   round,
   type Scene,
   SFX_NAMES,
@@ -118,6 +120,7 @@ import { makeNeededFootage } from "./footage.ts";
 import { History } from "./history.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
 import { InspirationStore } from "./inspirations.ts";
+import { jevEndpoint, logInstant } from "./instant.ts";
 import { copyKitFonts, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
 import { onWindowsDrive } from "./platform.ts";
@@ -1767,6 +1770,14 @@ export class ProjectService {
     const send = (e: AgentEventBody) => this.emit("agent", { runId, ...e } as AgentEvent);
     const started = Date.now();
     send({ type: "start", backend: settings.backend });
+    // A quick tweak to something already in the edit ("captions bigger", "undo the zooms"): done now,
+    // in about a second, without the agent. Anything else carries on to the agent below.
+    if (!thorough && (await this.instant(store, req, send, started, ctrl.signal))) {
+      this.runs.delete(runId);
+      this.asked.delete(runId);
+      void this.release(store);
+      return { runId };
+    }
     // Claude Code set to bill an API key (it uses one ahead of a signed-in plan) or signed out: say so
     // now, plainly, instead of a request that never answers.
     const claude = await claudeStatus();
@@ -1871,6 +1882,106 @@ export class ProjectService {
       });
 
     return { runId };
+  }
+
+  /**
+   * Tries the request as an instant edit: Jev picks what to change, code changes it, as one undoable
+   * change like the agent's. True when it's done (the run ends here); false hands it to the agent.
+   */
+  private async instant(
+    store: ProjectStore,
+    req: z.output<typeof AgentRequest>,
+    send: (e: AgentEventBody) => void,
+    started: number,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    if (!(await getSettings()).instantEdits) return false;
+    const endpoint = await jevEndpoint();
+    const early = precheck(req.prompt, req.attachments.length);
+    if (!endpoint && early?.kind !== "undo") return false;
+    // Changes "undo the …" can mean: the user's and the agent's, newest first, not undone already.
+    const log = await store
+      .flush()
+      .then(() => readLog(store.dir))
+      .catch(() => [] as Commit[]);
+    const undone = new Set(
+      log.flatMap((c) => (c.reverts && c.reverts.group === undefined ? [c.reverts.commit] : [])),
+    );
+    const undoable = log
+      .filter((c) => (c.author === "user" || c.author === "agent") && !c.reverts && !undone.has(c.id))
+      .toReversed();
+    const project = store.doc.meta.name;
+    let result: InstantResult;
+    try {
+      result = early
+        ? { instant: early }
+        : await tryInstant({
+            doc: store.doc,
+            request: req.prompt,
+            endpoint: endpoint!,
+            attachments: req.attachments.length,
+            focus: req.context,
+            earlier: req.history.map((h) => h.user),
+            recent: undoable.slice(0, 12).map((c) => ({ id: c.id, label: c.message.slice(0, 120) })),
+            signal,
+          });
+    } catch (err) {
+      void logInstant({
+        project,
+        request: req.prompt,
+        instant: { kind: "agent", why: "error" },
+        error: (err as Error).message,
+        ms: Date.now() - started,
+      });
+      return false;
+    }
+    const { instant } = result;
+    const done = (summary: string, commit: Commit | null) => {
+      if (commit) send({ type: "step", text: summary, status: "done" });
+      send({ type: "done", commit, elapsedMs: Date.now() - started, summary });
+      void logInstant({ project, request: req.prompt, ...result, ms: Date.now() - started });
+      return true;
+    };
+    try {
+      switch (instant.kind) {
+        case "edit":
+          return done(
+            instant.label,
+            store.commitAndBroadcast({ author: "agent", message: instant.label, ops: [...instant.ops] }),
+          );
+        case "undo": {
+          const target =
+            instant.commit === "last" ? undoable[0] : undoable.find((c) => c.id === instant.commit);
+          if (!target) break;
+          const label = `Undo: ${target.message.slice(0, 200)}`;
+          return done(
+            label,
+            store.commitAndBroadcast({
+              author: "agent",
+              message: label,
+              ops: revertOps(target),
+              reverts: { commit: target.id },
+            }),
+          );
+        }
+        case "same":
+          return done(`${instant.label}.`, null);
+        case "agent":
+          break;
+      }
+    } catch (err) {
+      // The edit no longer applies (the project moved on): the agent can work it out.
+      void logInstant({
+        project,
+        request: req.prompt,
+        ...result,
+        error: (err as Error).message,
+        ms: Date.now() - started,
+      });
+      return false;
+    }
+    void logInstant({ project, request: req.prompt, ...result, ms: Date.now() - started });
+    return false;
   }
 
   /**

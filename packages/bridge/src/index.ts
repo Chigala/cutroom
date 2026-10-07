@@ -262,6 +262,8 @@ export const Settings = z.object({
   style: z.string().max(20_000).default(""),
   /** Show the agent's thinking (a summary of it) in the chat as it works. */
   showThinking: z.boolean().default(true),
+  /** Quick tweaks ("captions bigger", "mute the music", "undo the zooms") done at once, without the agent. */
+  instantEdits: z.boolean().default(true),
   /** Claude Code to run the agent with. Empty: the one installed on this computer, else the app's own. */
   claudePath: z.string().max(1000).default(""),
   /** The shared asset library (sounds, music, memes). Empty: Cutroom Library in the videos folder. */

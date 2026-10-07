@@ -184,6 +184,9 @@ importers:
       '@vedit/client':
         specifier: workspace:*
         version: link:../client
+      '@vedit/instant':
+        specifier: workspace:*
+        version: link:../../packages/instant
       '@vedit/media':
         specifier: workspace:*
         version: link:../../packages/media
@@ -208,6 +211,16 @@ importers:
       zod:
         specifier: ^4.6.5
         version: 4.6.5
+
+  apps/jev-proxy:
+    dependencies:
+      '@vedit/instant':
+        specifier: workspace:*
+        version: link:../../packages/instant
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.3
+        version: 26.6.3
 
   packages/agent:
     dependencies:
@@ -273,6 +286,19 @@ importers:
       react:
         specifier: ^19.3.0
         version: 19.3.0
+
+  packages/instant:
+    dependencies:
+      '@vedit/project':
+        specifier: workspace:*
+        version: link:../project
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.3
+        version: 26.6.3
 
   packages/media:
     dependencies:

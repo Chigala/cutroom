@@ -7,13 +7,14 @@ import { tmpdir } from "node:os";
 import {
   createSdkMcpServer,
   type McpSdkServerConfigWithInstance,
+  type ModelInfo,
   type Query,
   query,
   type SDKRateLimitInfo,
   type SDKUserMessage,
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentUsage } from "@vedit/bridge";
+import type { AgentModel, AgentUsage } from "@vedit/bridge";
 import { SYSTEM_PROMPT } from "./prompt.ts";
 import { runTool, TOOLS, type ToolContext } from "./tools.ts";
 import {
@@ -216,6 +217,8 @@ export interface ClaudeAccount {
   readonly apiKeySource?: string;
   readonly apiProvider?: string;
   readonly limits?: AgentUsage["limits"];
+  /** The models Claude Code offers the account. */
+  readonly models: readonly AgentModel[];
 }
 
 /**
@@ -246,7 +249,7 @@ export async function probeClaude(timeoutMs = 25_000): Promise<ClaudeAccount | n
         env: claudeEnv(),
       },
     });
-    const { account } = await stream.initializationResult();
+    const { account, models } = await stream.initializationResult();
     const limits = account?.subscriptionType ? await planLimits(stream) : undefined;
     return {
       ...(account?.email && { email: account.email }),
@@ -255,6 +258,7 @@ export async function probeClaude(timeoutMs = 25_000): Promise<ClaudeAccount | n
       ...(account?.apiKeySource && account.apiKeySource !== "none" && { apiKeySource: account.apiKeySource }),
       ...(account?.apiProvider && { apiProvider: account.apiProvider }),
       ...(limits && { limits }),
+      models: claudeModels(models ?? []),
     };
   } catch (err) {
     console.warn(`[claude] couldn't start Claude Code to see its account: ${(err as Error).message}`);
@@ -263,6 +267,32 @@ export async function probeClaude(timeoutMs = 25_000): Promise<ClaudeAccount | n
     clearTimeout(timer);
     abort.abort();
   }
+}
+
+/**
+ * Claude Code's models for the account, one each, by the model it runs: an alias ("opus") as the model it
+ * stands for, so a setting saved as either finds it; "default" is the one it stands for, marked.
+ */
+export function claudeModels(rows: readonly ModelInfo[]): AgentModel[] {
+  const id = (m: ModelInfo) => m.resolvedModel ?? m.value;
+  const pick = rows.find((m) => m.value === "default");
+  const out = new Map<string, AgentModel>();
+  for (const m of [...rows.filter((m) => m !== pick), ...(pick ? [pick] : [])]) {
+    if (out.has(id(m))) continue;
+    // The default row is named "Default (recommended)", the model's own name leading its description.
+    const [name, about] =
+      m === pick && m.description.includes(" · ")
+        ? m.description.split(" · ", 2)
+        : [m.displayName, m.description];
+    out.set(id(m), {
+      id: id(m),
+      name: name || m.displayName,
+      ...(about && { description: about }),
+      efforts: m.supportedEffortLevels ?? [],
+      ...(pick && id(pick) === id(m) && { isDefault: true }),
+    });
+  }
+  return [...out.values()];
 }
 
 /** The Claude plan's 5-hour and weekly windows, from Claude Code's /usage; nothing if it can't say. */

@@ -6,6 +6,7 @@ import { readyBrowser } from "@vedit/render";
 import { app, BrowserWindow, Menu } from "electron";
 import { runBench } from "./bench.ts";
 import { claudeStatus } from "./claude.ts";
+import { codexStatus } from "./codex.ts";
 import { registerIpc } from "./ipc.ts";
 import { logWindow, startLog } from "./log.ts";
 import { userNamespacesBlocked } from "./platform.ts";
@@ -145,6 +146,8 @@ app.whenReady().then(() => {
   registerIpc(service);
   // Find Claude Code now (the user's own, or the app's copy), so the first request needn't wait.
   void claudeStatus();
+  // Codex too, so the agent can use it if it's the one chosen (and Settings shows it at once).
+  void codexStatus();
   // The asset library: made on first launch, catalogued as files arrive.
   if (!SMOKE && !BENCH)
     void service.library.start().catch((err: unknown) => console.warn("[library] couldn't start:", err));

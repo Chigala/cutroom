@@ -112,9 +112,9 @@ describe("usage", () => {
   it("keeps Claude's latest context and plan figures, merged, between launches", async () => {
     await chat.send("first");
     const runId = chat.useChat.getState().activeRun!;
-    event({ runId, type: "usage", limits: { fiveHour: { pct: 40 }, plan: "max" } });
-    event({ runId, type: "usage", limits: { weekly: { pct: 12 } } });
-    event({ runId, type: "usage", context: { used: 50_000, window: 200_000 } });
+    event({ runId, type: "usage", harness: "claude", limits: { fiveHour: { pct: 40 }, plan: "max" } });
+    event({ runId, type: "usage", harness: "claude", limits: { weekly: { pct: 12 } } });
+    event({ runId, type: "usage", harness: "claude", context: { used: 50_000, window: 200_000 } });
     expect(chat.useChat.getState().usage).toEqual({
       context: { used: 50_000, window: 200_000 },
       limits: { fiveHour: { pct: 40 }, weekly: { pct: 12 }, plan: "max" },

@@ -467,8 +467,10 @@ export const slowest = (scene: Pick<Scene, "speed" | "ramp">): number =>
   scene.ramp?.length ? Math.min(...scene.ramp.map((r) => r.speed)) : (scene.speed ?? 1);
 
 /**
- * Whether a shot needs in-between frames: slowed past the frames its footage has at `fps` (30 fps
- * footage at half speed has 15 a second for 30), and not asked to repeat frames instead.
+ * Whether a shot needs in-between frames: slowed down, past the frames its footage has at `fps` (30 fps
+ * footage at half speed has 15 a second for 30), and not asked to repeat frames instead. Footage shot at
+ * a lower frame rate and played at its own speed (24 or 25 fps in a 30 fps video) isn't slow motion: it
+ * plays as filmed, the way every editor shows it.
  */
 export function needsFlow(
   scene: Pick<Scene, "speed" | "ramp" | "interpolate">,
@@ -476,7 +478,8 @@ export function needsFlow(
   fps: number,
 ): boolean {
   if (scene.interpolate === false || source?.kind !== "video") return false;
-  return slowest(scene) * (source.fps ?? 30) < fps * 0.95;
+  const speed = slowest(scene);
+  return speed < 0.99 && speed * (source.fps ?? 30) < fps * 0.95;
 }
 
 /**

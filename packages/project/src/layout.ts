@@ -24,6 +24,7 @@
 import { z } from "zod";
 import { captionLookMeta, STARTER_CAPTION_LOOKS } from "./caption-looks.ts";
 import { FONTS_DIR } from "./fonts.ts";
+import { LUTS_DIR } from "./grading.ts";
 import { inspirationMeta } from "./inspiration.ts";
 import {
   Analysis,
@@ -305,7 +306,8 @@ export function fileEntries(doc: ProjectDoc): FileEntry[] {
     describe: `${f.family} ${f.weight}${f.style === "italic" ? " italic" : ""}`,
     count: null,
   }));
-  return [...files, ...dirs, ...fonts];
+  const luts = doc.luts.map((l) => ({ path: `${LUTS_DIR}/${l.file}`, describe: "Colour LUT", count: null }));
+  return [...files, ...dirs, ...fonts, ...luts];
 }
 
 /** The JSON header comment of a graphic: `<!-- graphic {...} -->`. */

@@ -1,6 +1,7 @@
 export * from "./caption-looks.ts";
 export * from "./diff.ts";
 export * from "./fonts.ts";
+export * from "./grading.ts";
 export * from "./graphic.ts";
 export * from "./graphic-preview.ts";
 export * from "./history.ts";

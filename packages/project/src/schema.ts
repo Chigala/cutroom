@@ -125,6 +125,13 @@ export const Keyframe = z.object({
 });
 export type Keyframe = z.infer<typeof Keyframe>;
 
+/** One value for all three channels, or [red, green, blue]. */
+const ShotRgb = (min: number, max: number) =>
+  z.union([
+    z.number().min(min).max(max),
+    z.tuple([z.number().min(min).max(max), z.number().min(min).max(max), z.number().min(min).max(max)]),
+  ]);
+
 /** The person's look on a shot or a cover: outline, glow, shadow. */
 const SubjectLook = z.object({
   outline: z
@@ -196,6 +203,14 @@ export const Scene = z
             "White balance: -1 cool/blue to 1 warm/orange. A clip measured warm (orange cast) wants about -0.4",
           ),
         tint: z.number().min(-1).max(1).default(0).describe("-1 green to 1 magenta"),
+        exposure: z.number().min(-4).max(4).optional().describe("Stops of light: 1 is twice as bright"),
+        lift: ShotRgb(-0.5, 0.5)
+          .optional()
+          .describe("Shadows: 0 neutral; raises (or crushes, below 0) the blacks. One number or [r, g, b]"),
+        gamma: ShotRgb(0.2, 5)
+          .optional()
+          .describe("Midtones: 1 neutral; above 1 brightens. One number or [r, g, b]"),
+        gain: ShotRgb(0, 4).optional().describe("Highlights: 1 neutral. One number or [r, g, b]"),
         blur: z.number().min(0).max(40).default(0).describe("Pixels"),
       })
       .optional()
@@ -637,6 +652,13 @@ export const FontFile = z.object({
   style: z.enum(["normal", "italic"]).default("normal"),
 });
 export type FontFile = z.infer<typeof FontFile>;
+
+/** luts/<file>: a colour LUT (.cube) the user dropped into the project, for a grade's color.lut. */
+export const LutFile = z.object({
+  id: Id,
+  file: z.string().regex(/^[^/\\]+\.cube$/i, "a .cube file name"),
+});
+export type LutFile = z.infer<typeof LutFile>;
 
 /**
  * effects/<id>.css, transitions/<id>.css, grades/<id>.css: how an effect, a transition between shots
@@ -1416,6 +1438,7 @@ export const CollectionSchemas = {
   transitionKinds: StyleFile,
   grades: StyleFile,
   fonts: FontFile,
+  luts: LutFile,
   visuals: Visual,
   effects: Effect,
   sfx: Sfx,

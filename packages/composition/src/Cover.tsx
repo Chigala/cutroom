@@ -7,15 +7,17 @@
 import {
   type Cover,
   coverKey,
+  gradeColorOf,
   type ProjectDoc,
   STARTER_GRADES,
   shotFace,
   sourceTime,
   timelineOf,
 } from "@vedit/project";
-import { type CSSProperties, useMemo, useRef, useState } from "react";
+import { type ComponentProps, type CSSProperties, useMemo, useRef, useState } from "react";
 import { AbsoluteFill, Img, Sequence, useVideoConfig } from "remotion";
 import { coverBox, FONT_STACK, SubjectLook } from "./Composition.tsx";
+import { GradeProvider, useColorEffects } from "./color.tsx";
 import { ProjectFontsContext, projectFontSources, useFonts } from "./fonts.ts";
 import { GraphicView } from "./GraphicView.tsx";
 import { StyleLayer } from "./StyleLayer.tsx";
@@ -55,6 +57,13 @@ export function CoverComposition({ doc, mediaBase }: CoverProps) {
   const grade = (
     doc.grades.find((g) => g.id === doc.look.grade) ?? STARTER_GRADES.find((g) => g.id === "clean")
   )?.css;
+  const gradeColor = useMemo(() => {
+    try {
+      return grade ? gradeColorOf(grade) : null;
+    } catch {
+      return null;
+    }
+  }, [grade]);
   const picture = useRef<HTMLDivElement>(null);
   const person = useRef<HTMLDivElement>(null);
   // Without a cutout (not on this machine, or none found) the headline comes forward, so it still reads.
@@ -157,58 +166,66 @@ export function CoverComposition({ doc, mediaBase }: CoverProps) {
 
   return (
     <ProjectFontsContext.Provider value={projectFonts}>
-      <AbsoluteFill style={{ backgroundColor: bg.color, fontFamily: font }}>
-        <AbsoluteFill ref={picture}>
-          {bg.kind === "gradient" ? (
-            <AbsoluteFill
-              style={{ background: `linear-gradient(180deg, ${bg.color} 0%, ${bg.color2 ?? accent} 100%)` }}
-            />
-          ) : bg.kind === "color" || !usable ? null : (
-            <AbsoluteFill style={push}>
-              {bg.kind === "blur" && !cutFailed ? (
-                <Img src={url(`blur${Math.round(bg.amount ?? 24)}`)} style={fill} {...WAIT} />
-              ) : (
-                <Img
-                  src={url("frame")}
-                  style={{
-                    ...fill,
-                    ...(bg.kind === "dim" && {
-                      filter: `brightness(${(1 - Math.min(1, bg.amount ?? 0.55)).toFixed(3)})`,
-                    }),
-                    ...(bg.kind === "blur" && { filter: `blur(${bg.amount ?? 24}px)` }),
-                  }}
-                  {...WAIT}
-                />
-              )}
-            </AbsoluteFill>
-          )}
-        </AbsoluteFill>
-        {textBehind && headline}
-        {cover.graphic?.place === "behind" && graphic}
-        {usable && needsCut && !cutFailed ? (
-          <AbsoluteFill
-            ref={person}
-            style={above?.drop ? { ...push, translate: `0 ${above.drop.toFixed(1)}px` } : push}
-          >
-            <SubjectLook look={cover.subject} id="cover" accent={accent} length={1}>
-              <Img src={url("cut")} style={fill} {...WAIT} onError={() => setCutFailed(true)} />
-            </SubjectLook>
+      <GradeProvider grade={gradeColor} doc={doc} mediaBase={mediaBase}>
+        <AbsoluteFill style={{ backgroundColor: bg.color, fontFamily: font }}>
+          <AbsoluteFill ref={picture}>
+            {bg.kind === "gradient" ? (
+              <AbsoluteFill
+                style={{ background: `linear-gradient(180deg, ${bg.color} 0%, ${bg.color2 ?? accent} 100%)` }}
+              />
+            ) : bg.kind === "color" || !usable ? null : (
+              <AbsoluteFill style={push}>
+                {bg.kind === "blur" && !cutFailed ? (
+                  <GradedImg src={url(`blur${Math.round(bg.amount ?? 24)}`)} style={fill} {...WAIT} />
+                ) : (
+                  <GradedImg
+                    src={url("frame")}
+                    style={{
+                      ...fill,
+                      ...(bg.kind === "dim" && {
+                        filter: `brightness(${(1 - Math.min(1, bg.amount ?? 0.55)).toFixed(3)})`,
+                      }),
+                      ...(bg.kind === "blur" && { filter: `blur(${bg.amount ?? 24}px)` }),
+                    }}
+                    {...WAIT}
+                  />
+                )}
+              </AbsoluteFill>
+            )}
           </AbsoluteFill>
-        ) : null}
-        {grade ? (
-          <StyleLayer
-            css={grade}
-            t={0}
-            duration={1}
-            accent={accent}
-            targets={{ picture: [picture, person] }}
-          />
-        ) : null}
-        {!textBehind && headline}
-        {cover.graphic?.place !== "behind" && graphic}
-      </AbsoluteFill>
+          {textBehind && headline}
+          {cover.graphic?.place === "behind" && graphic}
+          {usable && needsCut && !cutFailed ? (
+            <AbsoluteFill
+              ref={person}
+              style={above?.drop ? { ...push, translate: `0 ${above.drop.toFixed(1)}px` } : push}
+            >
+              <SubjectLook look={cover.subject} id="cover" accent={accent} length={1}>
+                <GradedImg src={url("cut")} style={fill} {...WAIT} onError={() => setCutFailed(true)} />
+              </SubjectLook>
+            </AbsoluteFill>
+          ) : null}
+          {grade ? (
+            <StyleLayer
+              css={grade}
+              t={0}
+              duration={1}
+              accent={accent}
+              targets={{ picture: [picture, person] }}
+            />
+          ) : null}
+          {!textBehind && headline}
+          {cover.graphic?.place !== "behind" && graphic}
+        </AbsoluteFill>
+      </GradeProvider>
     </ProjectFontsContext.Provider>
   );
+}
+
+/** The frame, in the video's grade (the GPU's colour; the grade file's CSS goes on through StyleLayer). */
+function GradedImg(props: ComponentProps<typeof Img>) {
+  const effects = useColorEffects();
+  return <Img {...props} {...(effects && { effects })} />;
 }
 
 /** The headline: huge, tight, balanced over its lines, with *starred* words in the accent. */

@@ -16,6 +16,7 @@ import {
   Graphic,
   Id,
   Look,
+  LutFile,
   Mix,
   Music,
   type ProjectDoc,
@@ -58,6 +59,8 @@ export const BrandKit = z.object({
   graphics: z.array(Graphic).default([]),
   /** Font files, kept in the kit's own fonts/ folder. */
   fonts: z.array(FontFile).default([]),
+  /** Colour LUTs its grades use, kept in the kit's own luts/ folder. */
+  luts: z.array(LutFile).default([]),
 });
 export type BrandKit = z.infer<typeof BrandKit>;
 
@@ -102,6 +105,7 @@ export function kitFromDoc(doc: ProjectDoc, id: string, name: string): BrandKit 
     grades: doc.grades,
     graphics: doc.graphics,
     fonts: doc.fonts,
+    luts: doc.luts,
   });
 }
 

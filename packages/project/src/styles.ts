@@ -23,6 +23,7 @@
  * (tag effect, transition or grade, without the spaces).
  */
 
+import { GradeColor } from "./grading.ts";
 import type { StyleFile } from "./schema.ts";
 
 export type StyleKind = "effect" | "transition" | "grade";
@@ -32,6 +33,8 @@ export interface StyleMeta {
   readonly description?: string;
   /** Suggested length in seconds, for effects and transitions. */
   readonly duration?: number;
+  /** A grade's colour: white balance, lift/gamma/gain, curves, a LUT (GradeColor in grading.ts). */
+  readonly color?: unknown;
 }
 
 /** The JSON header of an effect, transition or grade file. */
@@ -43,6 +46,20 @@ export function styleMeta(css: string): StyleMeta | null {
   } catch {
     return null;
   }
+}
+
+/** A grade file's colour (its header's "color"), or null when it has none. Throws on a bad one. */
+export function gradeColorOf(css: string): GradeColor | null {
+  const color = styleMeta(css)?.color;
+  if (color === undefined) return null;
+  const parsed = GradeColor.strict().safeParse(color);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new Error(
+      `the grade's color${issue?.path.length ? `.${issue.path.join(".")}` : ""}: ${issue?.message}`,
+    );
+  }
+  return parsed.data;
 }
 
 /** The layers each kind of file styles: stand-ins whose styles go onto the footage. */
@@ -58,8 +75,16 @@ export function validateStyle(kind: StyleKind, css: string): string | null {
   if (/url\(\s*['"]?\s*(https?:|\/\/)/i.test(css))
     return "style files can't load remote files (data: URLs are fine)";
   if (/<\/?style|<script/i.test(css)) return "this is plain CSS, without <style> or <script> tags";
+  let color: GradeColor | null = null;
+  if (kind === "grade")
+    try {
+      color = gradeColorOf(css);
+    } catch (err) {
+      return (err as Error).message;
+    }
   const layers = [...STYLE_LAYERS[kind], "overlay"];
-  if (!layers.some((l) => new RegExp(`\\.${l}\\b`).test(css)))
+  // A grade can be all colour (its header), with no CSS at all.
+  if (!color && !layers.some((l) => new RegExp(`\\.${l}\\b`).test(css)))
     return `a ${kind} styles ${layers.map((l) => `.${l}`).join(" or ")}`;
   return null;
 }
@@ -344,7 +369,7 @@ const TRANSITIONS: StyleFile[] = [
   ),
 ];
 
-/** Fine grain, as a tiny SVG noise texture that shifts every frame. */
+/** Fine grain, as a tiny SVG noise texture that shifts every frame (the first film grades; grain is now color.grain). */
 const GRAIN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`;
 
 const grain = (opacity: number) => `
@@ -365,7 +390,11 @@ const grain = (opacity: number) => `
       100% { transform: translate(0, 0); }
     }`;
 
-const GRADES: StyleFile[] = [
+/**
+ * The first built-in grades, as CSS filters. Kept so a project still holding one, unedited, gets its
+ * replacement (starters.ts): hue-rotate and sepia only ever approximated these looks.
+ */
+const GRADES_V1: StyleFile[] = [
   file("grade", "none", { name: "None", description: "The footage as shot" }, ".picture { filter: none; }"),
   file(
     "grade",
@@ -426,6 +455,118 @@ const GRADES: StyleFile[] = [
     "bleach",
     { name: "Bleach bypass", description: "Silvery, low saturation, hard contrast" },
     ".picture { filter: saturate(0.45) contrast(1.35) brightness(0.98); }",
+  ),
+];
+
+/** A grade file that is all colour: the header carries it (GradeColor in grading.ts), CSS is optional. */
+function gradeFile(
+  id: string,
+  meta: { name: string; description: string },
+  color: GradeColor,
+  css = "",
+): StyleFile {
+  // Readable when opened: one key per line, each list of numbers on one line.
+  const json = JSON.stringify({ ...meta, color }, null, 2).replace(
+    /\[\s+([^[\]{}]*?)\s+\]/g,
+    (_, inner: string) => `[${inner.replace(/\s+/g, " ")}]`,
+  );
+  const body = css.trim().replace(/^ {4}/gm, "");
+  return { id, css: `/* grade ${json} */\n${body ? `${body}\n` : ""}` };
+}
+
+/** A soft S: a little more contrast in the middle, the ends left alone. */
+const S_CURVE: [number, number][] = [
+  [0.25, 0.22],
+  [0.75, 0.79],
+];
+
+const GRADES: StyleFile[] = [
+  file("grade", "none", { name: "None", description: "The footage as shot" }, ".picture { filter: none; }"),
+  gradeFile(
+    "clean",
+    { name: "Clean", description: "A touch more contrast and colour; the safe default" },
+    { contrast: 1.05, saturation: 1.12 },
+  ),
+  gradeFile(
+    "warm",
+    { name: "Warm", description: "Golden and friendly: warmer light, creamy shadows" },
+    { warmth: 0.3, lift: [0.015, 0.008, -0.005], gain: [1.03, 1.01, 0.97], contrast: 1.04, saturation: 1.12 },
+  ),
+  gradeFile(
+    "teal-orange",
+    {
+      name: "Teal and orange",
+      description: "The blockbuster look: teal shadows, warm orange highlights and skin",
+    },
+    { lift: [-0.02, 0.012, 0.04], gain: [1.06, 1, 0.92], contrast: 1.08, saturation: 1.12 },
+  ),
+  gradeFile(
+    "moody",
+    { name: "Moody", description: "Darker and desaturated, cool in the shadows, for serious stories" },
+    { lift: [-0.01, 0, 0.012], gamma: 0.9, gain: 0.97, contrast: 1.1, saturation: 0.8 },
+  ),
+  gradeFile(
+    "punchy",
+    { name: "Punchy", description: "Bold contrast and colour" },
+    { contrast: 1.1, saturation: 1.3, curves: { all: S_CURVE } },
+  ),
+  gradeFile(
+    "mono",
+    { name: "Black and white", description: "Black and white throughout, with a little snap" },
+    { saturation: 0, contrast: 1.08, curves: { all: S_CURVE } },
+  ),
+  gradeFile(
+    "film",
+    {
+      name: "Film",
+      description: "Soft contrast, lifted blacks, rolled-off highlights and fine grain, like 35mm",
+    },
+    {
+      warmth: 0.08,
+      saturation: 0.9,
+      curves: {
+        all: [
+          [0, 0.05],
+          [0.25, 0.24],
+          [0.75, 0.78],
+          [1, 0.95],
+        ],
+      },
+      grain: 0.35,
+    },
+  ),
+  gradeFile(
+    "kodak-warm",
+    { name: "Kodak warm", description: "Warm, rich film stock with gentle grain" },
+    {
+      warmth: 0.22,
+      lift: [0.02, 0.01, 0],
+      gain: [1.04, 1, 0.95],
+      saturation: 1.18,
+      curves: {
+        all: [
+          [0, 0.03],
+          [0.25, 0.23],
+          [0.75, 0.79],
+          [1, 0.97],
+        ],
+      },
+      grain: 0.25,
+    },
+  ),
+  gradeFile(
+    "bleach",
+    { name: "Bleach bypass", description: "Silvery, low saturation, hard contrast" },
+    {
+      saturation: 0.45,
+      contrast: 1.25,
+      curves: {
+        all: [
+          [0.2, 0.16],
+          [0.8, 0.86],
+        ],
+      },
+    },
   ),
 ];
 
@@ -557,3 +698,8 @@ const byId = (a: StyleFile, b: StyleFile) => (a.id < b.id ? -1 : a.id > b.id ? 1
 export const STARTER_EFFECTS: readonly StyleFile[] = EFFECTS.toSorted(byId);
 export const STARTER_TRANSITIONS: readonly StyleFile[] = TRANSITIONS.toSorted(byId);
 export const STARTER_GRADES: readonly StyleFile[] = GRADES.toSorted(byId);
+
+/** Built-in grades an older version wrote, by id: a project's copy, unedited, is replaced by today's. */
+export const REPLACED_GRADES: ReadonlyMap<string, string> = new Map(
+  GRADES_V1.filter((g) => GRADES.find((n) => n.id === g.id)?.css !== g.css).map((g) => [g.id, g.css]),
+);

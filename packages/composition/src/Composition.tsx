@@ -32,7 +32,9 @@ import {
   flowKey,
   flowRange,
   followPath,
+  type GradeColor,
   type Graphic,
+  gradeColorOf,
   type Keyframe,
   keepTag,
   type Look,
@@ -57,6 +59,7 @@ import {
   sceneAt,
   sceneLength,
   scenesNeedingCutout,
+  shotColor,
   shotFocus,
   sourceTime,
   spokenWords,
@@ -98,6 +101,7 @@ import {
   type VolumeProp,
 } from "remotion";
 import { CaptionView } from "./CaptionView.tsx";
+import { GradeProvider, ShotColor, Ungraded, useColorEffects } from "./color.tsx";
 import { ProjectFontsContext, projectFontSources, useFonts } from "./fonts.ts";
 import {
   type FrameSpan,
@@ -376,6 +380,14 @@ export const VideoComposition = ({
     [doc.transitionKinds],
   );
   const gradeCss = (doc.grades.find((g) => g.id === doc.look.grade) ?? FALLBACK_GRADE)?.css ?? "";
+  // The grade's colour (its header): run on the GPU, on every piece of footage (color.tsx).
+  const gradeColor = useMemo(() => {
+    try {
+      return gradeColorOf(gradeCss);
+    } catch {
+      return null;
+    }
+  }, [gradeCss]);
   const gradeRef = useRef<HTMLDivElement>(null);
   const effectRefs = useMemo(
     () => Array.from({ length: EFFECT_SLOTS }, () => createRef<HTMLDivElement>()),
@@ -432,186 +444,188 @@ export const VideoComposition = ({
 
   return (
     <ProjectFontsContext.Provider value={projectFonts}>
-      <LivePreview.Provider value={quality === "preview" && !getRemotionEnvironment().isRendering}>
-        <FitContext.Provider value={{ fit: doc.look.fit, backdrop: doc.look.fitBackdrop }}>
-          <AbsoluteFill
-            style={{
-              backgroundColor: layers === "overlay" ? "transparent" : doc.look.background,
-              fontFamily: theme.font,
-            }}
-          >
-            {footage && (
-              <Camera
-                zooms={zooms}
-                splits={splits}
-                tl={tl}
-                faces={faces}
-                gradeRef={gradeRef}
-                effectRefs={effectRefs}
-              >
-                <Scenes
+      <GradeProvider grade={gradeColor} doc={doc} mediaBase={mediaBase}>
+        <LivePreview.Provider value={quality === "preview" && !getRemotionEnvironment().isRendering}>
+          <FitContext.Provider value={{ fit: doc.look.fit, backdrop: doc.look.fitBackdrop }}>
+            <AbsoluteFill
+              style={{
+                backgroundColor: layers === "overlay" ? "transparent" : doc.look.background,
+                fontFamily: theme.font,
+              }}
+            >
+              {footage && (
+                <Camera
+                  zooms={zooms}
+                  splits={splits}
                   tl={tl}
                   faces={faces}
-                  sources={sources}
-                  look={doc.look}
-                  mediaBase={mediaBase}
-                  quality={quality}
-                  muted={muteSources}
-                  transitions={transitionFiles}
-                  accent={theme.accent}
-                  jlFade={doc.mix.jlFade}
-                  cutFade={doc.mix.cutFade}
-                  cutouts={cutouts}
-                  ramps={ramps}
-                  flows={flows}
-                  steadies={steadies}
-                  framed={framed}
-                  layer="base"
+                  gradeRef={gradeRef}
+                  effectRefs={effectRefs}
+                >
+                  <Scenes
+                    tl={tl}
+                    faces={faces}
+                    sources={sources}
+                    look={doc.look}
+                    mediaBase={mediaBase}
+                    quality={quality}
+                    muted={muteSources}
+                    transitions={transitionFiles}
+                    accent={theme.accent}
+                    jlFade={doc.mix.jlFade}
+                    cutFade={doc.mix.cutFade}
+                    cutouts={cutouts}
+                    ramps={ramps}
+                    flows={flows}
+                    steadies={steadies}
+                    framed={framed}
+                    layer="base"
+                  />
+                </Camera>
+              )}
+              {/* Behind the subject: drawn over the footage, then the cut-out person over them. */}
+              {layers === "all" &&
+                layered(visuals)
+                  .filter((v) => behind(v.item))
+                  .map(visualNode)}
+              {layers === "all" && titles.filter((t) => behind(t.item)).map(titleNode)}
+              {footage && (
+                <Camera
+                  zooms={zooms}
+                  splits={splits}
+                  tl={tl}
+                  faces={faces}
+                  gradeRef={subjectGradeRef}
+                  effectRefs={subjectEffectRefs}
+                >
+                  <Scenes
+                    tl={tl}
+                    faces={faces}
+                    sources={sources}
+                    look={doc.look}
+                    mediaBase={mediaBase}
+                    quality={quality}
+                    muted
+                    transitions={transitionFiles}
+                    accent={theme.accent}
+                    jlFade={doc.mix.jlFade}
+                    cutFade={doc.mix.cutFade}
+                    cutouts={cutouts}
+                    ramps={ramps}
+                    flows={flows}
+                    steadies={steadies}
+                    framed={framed}
+                    layer="subject"
+                  />
+                </Camera>
+              )}
+              {footage && (
+                <GradeLayer css={gradeCss} target={[gradeRef, subjectGradeRef]} accent={theme.accent} />
+              )}
+              {footage && doc.look.vignette && (
+                <AbsoluteFill
+                  style={{
+                    background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,${doc.look.vignetteStrength}) 100%)`,
+                  }}
                 />
-              </Camera>
-            )}
-            {/* Behind the subject: drawn over the footage, then the cut-out person over them. */}
-            {layers === "all" &&
-              layered(visuals)
-                .filter((v) => behind(v.item))
+              )}
+              {layered(visuals)
+                .filter((v) => !behind(v.item))
+                // Cutaways, and graphics that fill the frame or a panel of it, are the picture; overlays are drawn over it.
+                .filter((v) =>
+                  v.item.content.kind === "cutaway" || v.item.layout !== "overlay" ? footage : overlays,
+                )
                 .map(visualNode)}
-            {layers === "all" && titles.filter((t) => behind(t.item)).map(titleNode)}
-            {footage && (
-              <Camera
-                zooms={zooms}
-                splits={splits}
-                tl={tl}
-                faces={faces}
-                gradeRef={subjectGradeRef}
-                effectRefs={subjectEffectRefs}
-              >
-                <Scenes
+              {overlays && titles.filter((t) => !behind(t.item)).map(titleNode)}
+              {/* Captions page on cue by design: left out of measuring motion. */}
+              {layers === "all" && (
+                <Captions
+                  manual={captions}
+                  pages={doc.captionStyle.speech ? pages : []}
+                  style={doc.captionStyle}
                   tl={tl}
                   faces={faces}
-                  sources={sources}
-                  look={doc.look}
-                  mediaBase={mediaBase}
-                  quality={quality}
-                  muted
-                  transitions={transitionFiles}
-                  accent={theme.accent}
-                  jlFade={doc.mix.jlFade}
-                  cutFade={doc.mix.cutFade}
-                  cutouts={cutouts}
-                  ramps={ramps}
-                  flows={flows}
-                  steadies={steadies}
-                  framed={framed}
-                  layer="subject"
+                  zooms={zooms}
+                  busy={busy}
+                  echoes={echoes}
+                  splits={splits}
+                  lookCss={lookCss}
                 />
-              </Camera>
-            )}
-            {footage && (
-              <GradeLayer css={gradeCss} target={[gradeRef, subjectGradeRef]} accent={theme.accent} />
-            )}
-            {footage && doc.look.vignette && (
-              <AbsoluteFill
-                style={{
-                  background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,${doc.look.vignetteStrength}) 100%)`,
-                }}
-              />
-            )}
-            {layered(visuals)
-              .filter((v) => !behind(v.item))
-              // Cutaways, and graphics that fill the frame or a panel of it, are the picture; overlays are drawn over it.
-              .filter((v) =>
-                v.item.content.kind === "cutaway" || v.item.layout !== "overlay" ? footage : overlays,
-              )
-              .map(visualNode)}
-            {overlays && titles.filter((t) => !behind(t.item)).map(titleNode)}
-            {/* Captions page on cue by design: left out of measuring motion. */}
-            {layers === "all" && (
-              <Captions
-                manual={captions}
-                pages={doc.captionStyle.speech ? pages : []}
-                style={doc.captionStyle}
-                tl={tl}
-                faces={faces}
-                zooms={zooms}
-                busy={busy}
-                echoes={echoes}
-                splits={splits}
-                lookCss={lookCss}
-              />
-            )}
-            {/* Camera effects (a flash, a shake) are moves on the footage, not graphics: left out of measuring. */}
-            {layers === "all" && (
-              <Effects
-                effects={effects}
-                files={effectFiles}
-                slots={effectRefs.map((r, i) => ({ base: r, subject: subjectEffectRefs[i]! }))}
-                cutAt={(t) => {
-                  const p = sceneAt(tl, t);
-                  return !!p && cutouts.has(p.scene.id);
-                }}
-                accent={theme.accent}
-              />
-            )}
-            {doc.exportSettings.creditsInVideo && doc.music.source && doc.music.credit ? (
-              <Sequence from={Math.max(0, tlFrames - Math.round(fps * 3))} layout="none">
-                <MusicCredit text={doc.music.credit} font={theme.font} />
-              </Sequence>
-            ) : null}
-            {audio && doc.music.source && sources.has(doc.music.source) ? (
-              <Music doc={doc} speech={speech} cues={musicCues} mediaBase={mediaBase} />
-            ) : null}
-            {(audio ? musicClips : [])
-              .filter((m) => sources.has(m.item.source))
-              .map((m) => (
+              )}
+              {/* Camera effects (a flash, a shake) are moves on the footage, not graphics: left out of measuring. */}
+              {layers === "all" && (
+                <Effects
+                  effects={effects}
+                  files={effectFiles}
+                  slots={effectRefs.map((r, i) => ({ base: r, subject: subjectEffectRefs[i]! }))}
+                  cutAt={(t) => {
+                    const p = sceneAt(tl, t);
+                    return !!p && cutouts.has(p.scene.id);
+                  }}
+                  accent={theme.accent}
+                />
+              )}
+              {doc.exportSettings.creditsInVideo && doc.music.source && doc.music.credit ? (
+                <Sequence from={Math.max(0, tlFrames - Math.round(fps * 3))} layout="none">
+                  <MusicCredit text={doc.music.credit} font={theme.font} />
+                </Sequence>
+              ) : null}
+              {audio && doc.music.source && sources.has(doc.music.source) ? (
+                <Music doc={doc} speech={speech} cues={musicCues} mediaBase={mediaBase} />
+              ) : null}
+              {(audio ? musicClips : [])
+                .filter((m) => sources.has(m.item.source))
+                .map((m) => (
+                  <Sequence
+                    key={m.item.id}
+                    from={m.from}
+                    durationInFrames={m.durationInFrames}
+                    // Loaded a second ahead, so it sounds on its frame. (Premounting needs a layer: an empty one.)
+                    premountFor={fps}
+                    style={SILENT_LAYER}
+                  >
+                    <MusicClipAudio
+                      clip={m}
+                      speech={speech}
+                      mediaBase={mediaBase}
+                      level={doc.mix.musicLevel}
+                      ramp={doc.music.duckRamp}
+                    />
+                  </Sequence>
+                ))}
+              {(audio ? sfx : []).map((s) => (
                 <Sequence
-                  key={m.item.id}
-                  from={m.from}
-                  durationInFrames={m.durationInFrames}
-                  // Loaded a second ahead, so it sounds on its frame. (Premounting needs a layer: an empty one.)
+                  key={s.item.id}
+                  from={s.from}
+                  durationInFrames={s.durationInFrames}
                   premountFor={fps}
                   style={SILENT_LAYER}
                 >
-                  <MusicClipAudio
-                    clip={m}
-                    speech={speech}
-                    mediaBase={mediaBase}
-                    level={doc.mix.musicLevel}
-                    ramp={doc.music.duckRamp}
-                  />
+                  <SoundEffect sfx={s} mediaBase={mediaBase} level={doc.mix.sfxLevel} />
                 </Sequence>
               ))}
-            {(audio ? sfx : []).map((s) => (
-              <Sequence
-                key={s.item.id}
-                from={s.from}
-                durationInFrames={s.durationInFrames}
-                premountFor={fps}
-                style={SILENT_LAYER}
-              >
-                <SoundEffect sfx={s} mediaBase={mediaBase} level={doc.mix.sfxLevel} />
-              </Sequence>
-            ))}
-            {(audio ? visuals : []).map((v) => {
-              const name = doc.mix.entrySounds ? ENTRY_SFX(v.item) : null;
-              return name ? (
-                <Sequence
-                  key={`${v.item.id}-sfx`}
-                  from={v.from}
-                  durationInFrames={Math.round(fps * 2)}
-                  // Loaded a second ahead, so it sounds on its frame. (Premounting needs a layer: an empty one.)
-                  premountFor={fps}
-                  style={SILENT_LAYER}
-                >
-                  <Sound
-                    src={`${mediaBase}sfx/${name}`}
-                    volume={(v.item.sfxVolume ?? 0.7) * doc.mix.sfxLevel}
-                  />
-                </Sequence>
-              ) : null;
-            })}
-          </AbsoluteFill>
-        </FitContext.Provider>
-      </LivePreview.Provider>
+              {(audio ? visuals : []).map((v) => {
+                const name = doc.mix.entrySounds ? ENTRY_SFX(v.item) : null;
+                return name ? (
+                  <Sequence
+                    key={`${v.item.id}-sfx`}
+                    from={v.from}
+                    durationInFrames={Math.round(fps * 2)}
+                    // Loaded a second ahead, so it sounds on its frame. (Premounting needs a layer: an empty one.)
+                    premountFor={fps}
+                    style={SILENT_LAYER}
+                  >
+                    <Sound
+                      src={`${mediaBase}sfx/${name}`}
+                      volume={(v.item.sfxVolume ?? 0.7) * doc.mix.sfxLevel}
+                    />
+                  </Sequence>
+                ) : null;
+              })}
+            </AbsoluteFill>
+          </FitContext.Provider>
+        </LivePreview.Provider>
+      </GradeProvider>
     </ProjectFontsContext.Provider>
   );
 };
@@ -941,9 +955,8 @@ const Scenes = memo(function Scenes({
                 <ShotWindow
                   from={0}
                   to={early + own + late}
-                  filter={adjustFilter(p.scene.adjust, `${p.scene.id}-s`)}
-                  balance={whiteBalance(p.scene.adjust)}
-                  balanceId={`wb-${p.scene.id}-s`}
+                  filter={adjustFilter(p.scene.adjust)}
+                  color={adjustColor(p.scene.adjust)}
                   flip={p.scene.flip ?? false}
                 >
                   <ShotMotion
@@ -1037,9 +1050,8 @@ const Scenes = memo(function Scenes({
               <ShotWindow
                 from={lead - Math.min(picEarly, lead)}
                 to={lead + own + picLate}
-                filter={adjustFilter(p.scene.adjust, p.scene.id)}
-                balance={whiteBalance(p.scene.adjust)}
-                balanceId={`wb-${p.scene.id}`}
+                filter={adjustFilter(p.scene.adjust)}
+                color={adjustColor(p.scene.adjust)}
                 flip={p.scene.flip ?? false}
               >
                 <ShotMotion
@@ -1271,17 +1283,15 @@ function ShotWindow({
   from,
   to,
   filter,
-  balance,
-  balanceId,
+  color,
   flip,
   children,
 }: {
   from: number;
   to: number;
   filter: string;
-  /** A white-balance colour matrix, referenced from `filter` as url(#balanceId). */
-  balance: string | null;
-  balanceId: string;
+  /** The shot's own colour correction, run on its footage under the grade. */
+  color: GradeColor | null;
   flip: boolean;
   children: ReactNode;
 }) {
@@ -1294,43 +1304,19 @@ function ShotWindow({
         ...(flip && { transform: "scaleX(-1)" }),
       }}
     >
-      {balance && (
-        <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
-          <filter id={balanceId} colorInterpolationFilters="sRGB">
-            <feColorMatrix type="matrix" values={balance} />
-          </filter>
-        </svg>
-      )}
-      {children}
+      <ShotColor color={color}>{children}</ShotColor>
     </AbsoluteFill>
   );
 }
 
-/**
- * White balance as a colour matrix: warmth scales red against blue, tint green against magenta, the
- * way a camera's white balance does (a hue rotation would twist skin tones instead).
- */
-function whiteBalance(a: Scene["adjust"]): string | null {
-  const w = a?.warmth ?? 0;
-  const t = a?.tint ?? 0;
-  if (!w && !t) return null;
-  const r = 1 + 0.25 * w;
-  const g = 1 + 0.03 * w - 0.12 * t;
-  const b = 1 - 0.25 * w;
-  const n = (v: number) => v.toFixed(4);
-  return `${n(r)} 0 0 0 0  0 ${n(g)} 0 0 0  0 0 ${n(b)} 0 0  0 0 0 1 0`;
+/** A shot's own colour and exposure (scene.adjust), corrected on the GPU before the grade. */
+function adjustColor(a: Scene["adjust"]): GradeColor | null {
+  return a ? shotColor(a) : null;
 }
 
-/** A shot's own colour and exposure (scene.adjust), as CSS filters on top of the grade. */
-function adjustFilter(a: Scene["adjust"], id: string): string {
-  if (!a) return "";
-  const parts: string[] = [];
-  if (a.warmth || a.tint) parts.push(`url(#wb-${id})`);
-  if (a.brightness !== 1) parts.push(`brightness(${a.brightness})`);
-  if (a.contrast !== 1) parts.push(`contrast(${a.contrast})`);
-  if (a.saturation !== 1) parts.push(`saturate(${a.saturation})`);
-  if (a.blur > 0) parts.push(`blur(${a.blur}px)`);
-  return parts.join(" ");
+/** What of a shot's adjustment is CSS: its blur (the colour is the GPU's, adjustColor). */
+function adjustFilter(a: Scene["adjust"]): string {
+  return a?.blur ? `blur(${a.blur}px)` : "";
 }
 
 /** How loud a shot's sound is at output time `t`: full inside its span, ramping across crossfades. */
@@ -1790,6 +1776,9 @@ function ClipMedia({
   const { fps } = useVideoConfig();
   const fitting = useContext(FitContext);
   const live = useContext(LivePreview);
+  // The shot's correction and the grade, on the GPU (color.tsx); none when they'd change nothing.
+  const effects = useColorEffects();
+  const graded = effects ? { effects } : {};
   const fit = fitsInside(fitting.fit, source, { width, height });
   const b = fitting.backdrop;
   const style = fit
@@ -1817,9 +1806,14 @@ function ClipMedia({
             muted
             objectFit="fill"
             style={coverBox(width, height, source, undefined)}
+            {...graded}
           />
         ) : source.kind === "image" ? (
-          <Img src={src} style={{ ...coverBox(width, height, source, undefined), objectFit: "fill" }} />
+          <Img
+            src={src}
+            style={{ ...coverBox(width, height, source, undefined), objectFit: "fill" }}
+            {...graded}
+          />
         ) : null}
       </AbsoluteFill>
     ) : null;
@@ -1839,6 +1833,7 @@ function ClipMedia({
           muted={apart || muted}
           objectFit={style.position ? "fill" : "cover"}
           style={style}
+          {...graded}
         />
         {apart && (
           <Sound
@@ -1856,7 +1851,7 @@ function ClipMedia({
     return (
       <>
         {behind}
-        <Img src={src} style={{ ...style, objectFit: style.position ? "fill" : "cover" }} />
+        <Img src={src} style={{ ...style, objectFit: style.position ? "fill" : "cover" }} {...graded} />
       </>
     );
   if (source.kind === "solid") return <Placeholder color={source.color ?? "#333"} />;
@@ -2038,13 +2033,16 @@ function VisualView({
 
   if (content.kind === "media")
     return (
-      <MediaBox
-        content={content}
-        source={sources.get(content.source)}
-        mediaBase={mediaBase}
-        quality={quality}
-        enterSeconds={visual.enter ?? 0.35}
-      />
+      // A picture-in-picture box keeps its own colours, as it always has.
+      <Ungraded>
+        <MediaBox
+          content={content}
+          source={sources.get(content.source)}
+          mediaBase={mediaBase}
+          quality={quality}
+          enterSeconds={visual.enter ?? 0.35}
+        />
+      </Ungraded>
     );
 
   const body =

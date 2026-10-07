@@ -51,6 +51,7 @@ export function emptyProject(name: string, style = DEFAULT_STYLE): ProjectDoc {
     transitionKinds: [...STARTER_TRANSITIONS],
     grades: [...STARTER_GRADES],
     fonts: [],
+    voiceovers: [],
     luts: [],
     shotLogs: [],
     musicCues: [],

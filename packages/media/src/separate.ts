@@ -12,7 +12,8 @@ import { mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Writable } from "node:stream";
 import { CancelledError, findBinary } from "./exec.ts";
-import { ONNX_PLATFORMS, onnx, session } from "./models.ts";
+import { ensureModel, ONNX_PLATFORMS } from "./models.ts";
+import { startVoiceWorker } from "./voice-worker.ts";
 
 /** Recorded with a clip's parts (analysis.stems): a better model makes them again. */
 export const STEMS_MODEL = "htdemucs-ft-vocals-fp16";
@@ -26,17 +27,16 @@ const STRIDE = STEM_WINDOW - OVERLAP;
 /** Whether this computer can separate a voice (ONNX Runtime has no build for Intel Macs). */
 export const canSeparate = () => ONNX_PLATFORMS.includes(`${process.platform}-${process.arch}`);
 
-/** The voice in one window: left then right channel (planar), STEM_WINDOW samples each, in and out. */
-export type VoiceModel = (mix: Float32Array) => Promise<Float32Array>;
+/**
+ * The voice in one window: left then right channel (planar), STEM_WINDOW samples each, in and out.
+ * `close` ends whatever runs it.
+ */
+export type VoiceModel = ((mix: Float32Array) => Promise<Float32Array>) & { close?(): void };
 
-/** The model on ONNX Runtime: its four stems come back, the voice is the last. */
+/** The model (downloaded once), run in a process of its own (voice-worker.ts): a crash there isn't the app's. */
 async function demucs(): Promise<VoiceModel> {
-  const [ort, s] = await Promise.all([onnx(), session("voices")]);
-  return async (mix) => {
-    const out = await s.run({ [s.inputNames[0]!]: new ort.Tensor("float32", mix, [1, 2, STEM_WINDOW]) });
-    const stems = out[s.outputNames[0]!]!.data as Float32Array;
-    return stems.slice(3 * 2 * STEM_WINDOW, 4 * 2 * STEM_WINDOW);
-  };
+  const worker = await startVoiceWorker(await ensureModel("voices"));
+  return Object.assign((mix: Float32Array) => worker.run(mix, STEM_WINDOW), { close: () => worker.close() });
 }
 
 export interface SeparateOptions {
@@ -117,6 +117,7 @@ export async function separateVoice(
     decoder.kill("SIGKILL");
     voiceOut.kill();
     musicOut.kill();
+    if (!o.model) model.close?.();
   };
   o.signal?.addEventListener("abort", stop, { once: true });
 
@@ -213,5 +214,7 @@ export async function separateVoice(
     throw o.signal?.aborted ? new CancelledError() : err;
   } finally {
     o.signal?.removeEventListener("abort", stop);
+    // The model's process ends with the clip (each clip is a while; it isn't kept loaded between).
+    if (!o.model) model.close?.();
   }
 }

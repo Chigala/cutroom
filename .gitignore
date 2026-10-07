@@ -15,3 +15,11 @@ apps/desktop/resources/tools/
 
 # Your own benchmark cases (copy bench/cases.example.json): they point at your footage.
 bench/cases.json
+
+# Your own requests, gathered for the Jev evaluation (apps/desktop/scripts/jev-prompts.mjs).
+bench/jev-prompts.json
+bench/jev-results*.json
+
+# Cloudflare Worker secrets for local runs (wrangler dev).
+.dev.vars*
+.wrangler/

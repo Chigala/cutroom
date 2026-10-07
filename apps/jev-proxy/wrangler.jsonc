@@ -1,0 +1,14 @@
+// The Worker between Cutroom and Jev: it holds the TypeSafe key, so the app never ships one.
+//   npx wrangler@4 secret put TYPESAFE_API_KEY
+//   pnpm --filter @vedit/jev-proxy deploy
+{
+  "name": "cutroom-jev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  // Each install, and each address, gets a fair share; a leaked URL can't run up the bill.
+  "ratelimits": [
+    { "name": "PER_INSTALL", "namespace_id": "4101", "simple": { "limit": 30, "period": 60 } },
+    { "name": "PER_ADDRESS", "namespace_id": "4102", "simple": { "limit": 120, "period": 60 } }
+  ]
+}

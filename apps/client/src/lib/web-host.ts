@@ -74,6 +74,7 @@ export function createWebHost(): EditorApi {
     kit: "",
     style: "",
     showThinking: true,
+    instantEdits: false,
     claudePath: "",
     libraryDir: "",
   };

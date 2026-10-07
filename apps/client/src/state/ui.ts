@@ -20,6 +20,7 @@ export type InspectableColl =
   | "effects"
   | "sfx"
   | "musicClips"
+  | "voiceovers"
   | "musicCues";
 
 /** What's selected on the timeline: one item of a collection. */

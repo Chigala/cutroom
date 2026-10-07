@@ -1,5 +1,5 @@
-# Installers for macOS (Apple silicon), Windows (x64) and Linux (x64), each built on its own system with
-# its own bundled tools. Run it by hand (Actions → Build installers → Run workflow) or by pushing a tag
+# Installers for macOS (Apple silicon and Intel), Windows (x64) and Linux (x64), each with its own bundled
+# tools. The Intel Mac one is built on the Apple silicon runner for x64 and self-tested under Rosetta. Run it by hand (Actions → Build installers → Run workflow) or by pushing a tag
 # like v0.2.0. The installers are unsigned for now: they appear as downloadable artifacts of the run.
 name: Build installers
 
@@ -18,16 +18,25 @@ jobs:
           - name: macOS (Apple silicon)
             # Xcode 16: the newest Vision requests (the tools still run on macOS 13.3+, see bundle-tools.mts).
             os: macos-15
+            arch: arm64
             # Unsigned, but consistently ad-hoc signed so Gatekeeper's "Open Anyway" works.
             args: --mac --arm64 -c.mac.identity=- -c.mac.hardenedRuntime=false
             files: apps/desktop/release/*.dmg
+          - name: macOS (Intel)
+            # Built for x64 on the same runner (the tools cross-compile), and self-tested under Rosetta.
+            os: macos-15
+            arch: x64
+            args: --mac --x64 -c.mac.identity=- -c.mac.hardenedRuntime=false
+            files: apps/desktop/release/*.dmg
           - name: Windows (x64)
             os: windows-2022
+            arch: x64
             args: --win --x64
             files: apps/desktop/release/*.exe
           - name: Linux (x64)
             # The oldest supported Ubuntu: what's built here runs on newer systems, not the other way round.
             os: ubuntu-22.04
+            arch: x64
             args: --linux --x64
             files: |
               apps/desktop/release/*.AppImage
@@ -49,7 +58,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: apps/desktop/.tmp/tools-cache
-          key: tools-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/bundle-tools.mts', 'packages/media/src/whisper.ts', 'packages/media/src/clean.ts') }}
+          key: tools-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('apps/desktop/scripts/bundle-tools.mts', 'packages/media/src/whisper.ts', 'packages/media/src/clean.ts') }}
 
       - name: Build the app
         run: pnpm --filter @vedit/desktop build
@@ -58,9 +67,9 @@ jobs:
           # (the key stays in the Worker). Unset, the app does without instant edits.
           VEDIT_JEV_URL: ${{ vars.VEDIT_JEV_URL }}
       - name: Bundle ffmpeg, whisper and the voice cleaner
-        run: pnpm --filter @vedit/desktop tools
+        run: pnpm --filter @vedit/desktop tools --arch ${{ matrix.arch }}
       - name: Stage the runtime packages
-        run: pnpm --filter @vedit/desktop runtime-deps
+        run: pnpm --filter @vedit/desktop runtime-deps --arch ${{ matrix.arch }}
       - name: Package
         working-directory: apps/desktop
         run: pnpm exec electron-builder --config electron-builder.yml --publish never ${{ matrix.args }}
@@ -78,6 +87,9 @@ jobs:
         with:
           path: ${{ runner.temp }}/whisper
           key: whisper-small.en-${{ runner.os }}
+      - name: Rosetta for the self-test (an Intel Mac build on Apple silicon)
+        if: runner.os == 'macOS' && matrix.arch == 'x64'
+        run: /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null || softwareupdate --install-rosetta --agree-to-license
       - name: Screen for the self-test (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb libnss3 libgbm1 libasound2
@@ -88,7 +100,11 @@ jobs:
           VEDIT_WHISPER_DIR: ${{ runner.temp }}/whisper
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            xvfb-run -a node apps/desktop/scripts/smoke-run.mjs
+            xvfb-run -a node apps/desktop/scripts/smoke-run.mjs --arch ${{ matrix.arch }}
+          elif [ "$RUNNER_OS" = "macOS" ] && [ "${{ matrix.arch }}" = "x64" ]; then
+            # Under Rosetta, Chrome's first start (translated once, then cached) can outlast the
+            # renderer's wait for it: a second run starts it at once.
+            node apps/desktop/scripts/smoke-run.mjs --arch x64 || node apps/desktop/scripts/smoke-run.mjs --arch x64
           else
-            node apps/desktop/scripts/smoke-run.mjs
+            node apps/desktop/scripts/smoke-run.mjs --arch ${{ matrix.arch }}
           fi

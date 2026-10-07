@@ -1,11 +1,12 @@
 /**
- * In the composer: how full Claude's context got on the last request (the ring), and how much of the
- * Claude plan's 5-hour and weekly limits are used, with when each resets (the popover). Figures come
- * from Claude Code as requests run; until the first one there's nothing to show.
+ * In the composer: how full the agent's context got on its last request (the ring), and how much of its
+ * plan's 5-hour and weekly limits are used, with when each resets (the popover). Figures are the chosen
+ * agent's own (Claude's plan and ChatGPT's apart) and come as requests run; until then, nothing.
  */
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import { type Usage, useChat } from "../../state/chat.ts";
+import { useSettings } from "../../state/settings.ts";
 
 /** A limit this far used is worth a glance; past the second, a warning. */
 const NOTE = 75;
@@ -22,10 +23,21 @@ function resets(at: number): string {
   return `resets ${d.toLocaleDateString([], { weekday: "short" })} at ${time}`;
 }
 
-const PLANS: Record<string, string> = { pro: "Pro", max: "Max", team: "Team", enterprise: "Enterprise" };
+const PLANS: Record<string, string> = {
+  pro: "Pro",
+  max: "Max",
+  plus: "Plus",
+  team: "Team",
+  business: "Business",
+  enterprise: "Enterprise",
+  edu: "Edu",
+};
+
+const NONE: Usage = {};
 
 export function UsageMeter() {
-  const usage = useChat((s) => s.usage);
+  const harness = useSettings((s) => s.settings?.harness ?? "claude");
+  const usage = useChat((s) => s.usage[harness] ?? NONE);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {

@@ -19,3 +19,8 @@ export async function saveSettings(patch: Partial<Settings>): Promise<Settings> 
   useSettings.setState({ settings });
   return settings;
 }
+
+/** The agent that edits, by name ("Claude", "Codex"), for what the app says while it works. */
+export function agentName(): string {
+  return useSettings.getState().settings?.harness === "codex" ? "Codex" : "Claude";
+}

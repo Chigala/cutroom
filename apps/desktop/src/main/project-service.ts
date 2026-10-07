@@ -14,6 +14,7 @@ import {
   type Backend,
   defaultBackend,
   type Effort,
+  HARNESSES,
   handEdits,
   runAgent,
 } from "@vedit/agent";
@@ -25,6 +26,7 @@ import type {
   ChatRecord,
   CommitResult,
   EditorEvents,
+  HarnessId,
   ProjectFolder,
   ProjectSnapshot,
   RecentProject,
@@ -107,6 +109,7 @@ import { app, type BrowserWindow, dialog, Notification, nativeImage, shell } fro
 import { z } from "zod";
 import { capturePage } from "./capture.ts";
 import { claudeStatus, claudeTasks } from "./claude.ts";
+import { codexStatus } from "./codex.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
@@ -146,6 +149,9 @@ type AgentEventBody = AgentEvent extends infer E ? (E extends AgentEvent ? Omit<
 
 export interface AgentSettings {
   readonly backend: Backend;
+  /** Which agent edits: Claude or Codex. */
+  readonly harness: HarnessId;
+  /** The model, for that agent ("" for Codex: its default for the plan). */
   readonly model: string;
   readonly effort: Effort;
   readonly showThinking: boolean;
@@ -789,7 +795,8 @@ export class ProjectService {
     }
     return Promise.all(
       list.map(async (f) => {
-        const onDisk = await videosIn(f.dir);
+        // Newest made first, and kept there: opening one doesn't move it.
+        const onDisk = (await videosIn(f.dir)).sort((a, b) => b.createdAt - a.createdAt);
         const videos: RecentProject[] = onDisk.map((v) => {
           const seen = recent.find((r) => samePath(r.dir, v.dir));
           return {
@@ -803,7 +810,7 @@ export class ProjectService {
           dir: f.dir,
           name: await projectName(f.dir),
           ...(f.pinned && { pinned: true }),
-          videos: videos.sort((a, b) => b.openedAt - a.openedAt),
+          videos,
         };
       }),
     );
@@ -1492,10 +1499,13 @@ export class ProjectService {
     // Which Claude Code to run (found at startup; this waits for it), looked at again when it wasn't
     // signed in then: someone may have signed in since, in their own terminal. Always the subscription
     // for now: the API-key backend is switched off (defaultBackend).
-    if ((await claudeStatus()).signedIn !== true) await claudeStatus(true);
+    if (s.harness === "codex") {
+      if ((await codexStatus()).signedIn !== true) await codexStatus(true);
+    } else if ((await claudeStatus()).signedIn !== true) await claudeStatus(true);
     return {
       backend: defaultBackend(),
-      model: s.model,
+      harness: s.harness,
+      model: s.harness === "codex" ? s.codexModel : s.model,
       effort: s.effort,
       showThinking: s.showThinking,
     };
@@ -1775,6 +1785,8 @@ export class ProjectService {
     const store =
       req.dir && req.dir !== this.store?.dir ? await this.backgroundStore(req.dir) : this.requireStore();
     const settings = await this.agentSettings();
+    // Named in its notifications: the agent this request ran on.
+    const agent = HARNESSES[settings.harness].name;
     const runId = newId("run");
     // A first cut, or a request the size of one (a long brief, a project with nothing edited yet, or
     // carrying on with one), gets a first cut's thought and room, however it was sent.
@@ -1801,7 +1813,23 @@ export class ProjectService {
     }
     // Claude Code set to bill an API key (it uses one ahead of a signed-in plan) or signed out: say so
     // now, plainly, instead of a request that never answers.
-    const claude = await claudeStatus();
+    // Codex not installed or signed in: say so now, the same way.
+    if (settings.harness === "codex") {
+      const codex = await codexStatus();
+      if (!codex.installed || codex.signedIn === false) {
+        this.runs.delete(runId);
+        this.asked.delete(runId);
+        send({
+          type: "error",
+          message: !codex.installed
+            ? "Codex isn't installed. Install the Codex app (or its CLI), then open Settings → Agent."
+            : "Codex isn't signed in. Sign in with ChatGPT from Settings → Agent.",
+        });
+        return { runId };
+      }
+    }
+    const claude =
+      settings.harness === "claude" ? await claudeStatus() : { apiKey: undefined, signedIn: true };
     if (claude.apiKey || claude.signedIn === false) {
       this.runs.delete(runId);
       this.asked.delete(runId);
@@ -1829,6 +1857,7 @@ export class ProjectService {
       handEdits: hand,
       host: this.agentHost(store),
       backend: settings.backend,
+      harness: settings.harness,
       model: settings.model,
       effort: thorough && settings.effort !== "max" ? "high" : settings.effort,
       showThinking: settings.showThinking,
@@ -1839,7 +1868,7 @@ export class ProjectService {
       onText: (delta, turn) => send({ type: "text", delta, ...(turn && { turn: true }) }),
       onThinking: (delta, block) => send({ type: "thinking", delta, ...(block && { block: true }) }),
       onActivity: (text) => send({ type: "activity", text }),
-      onUsage: (usage) => send({ type: "usage", ...usage }),
+      onUsage: (usage) => send({ type: "usage", harness: settings.harness, ...usage }),
       onTool: (call) => send({ type: "tool", ...call }),
       // The editor's live draft: each change as it's made, also held here in case the run doesn't finish.
       onDraft: (label, ops) => {
@@ -1875,7 +1904,7 @@ export class ProjectService {
           summary: result.summary,
           ...(result.next && { next: result.next }),
         });
-        this.notify(store, result.summary || "Done.");
+        this.notify(store, agent, result.summary || "Done.");
       })
       .catch((err: unknown) => {
         const message =
@@ -1894,7 +1923,7 @@ export class ProjectService {
         const held = err instanceof OpError ? undefined : this.partials.get(runId);
         if (!held) this.partials.delete(runId);
         send({ type: "error", message, ...(held?.groups.length && { kept: held.groups.length }) });
-        if (!ctrl.signal.aborted) this.notify(store, message, true);
+        if (!ctrl.signal.aborted) this.notify(store, agent, message, true);
       })
       .finally(() => {
         this.runs.delete(runId);
@@ -2009,14 +2038,14 @@ export class ProjectService {
    * Says Claude finished, by a system notification, when it can't be seen: the request was in a project
    * not on screen, or the app isn't in front. A click opens that project.
    */
-  private notify(store: ProjectStore, text: string, failed = false): void {
+  private notify(store: ProjectStore, agent: string, text: string, failed = false): void {
     const win = this.window();
     const elsewhere = store !== this.store;
     if (!elsewhere && win?.isFocused()) return;
     if (!Notification.isSupported()) return;
     const name = store.doc.meta.name;
     const note = new Notification({
-      title: failed ? `Claude stopped in ${name}` : `Claude finished ${name}`,
+      title: failed ? `${agent} stopped in ${name}` : `${agent} finished ${name}`,
       body: text.replace(/\s+/g, " ").slice(0, 180),
       silent: false,
     });

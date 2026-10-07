@@ -1,13 +1,14 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentResult } from "@vedit/agent";
 import type { AgentEvent, ProjectSnapshot } from "@vedit/bridge";
 import { emptyProject } from "@vedit/project";
 import { ProjectStore } from "@vedit/project/node";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const data = mkdtempSync(path.join(tmpdir(), "vedit-bg-"));
+afterAll(() => rmSync(data, { recursive: true, force: true }));
 
 // Claude, driven by the test: each request waits until the test finishes it.
 const agent = vi.hoisted(() => ({

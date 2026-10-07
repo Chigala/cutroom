@@ -24,9 +24,11 @@ import {
 import type { AgentStatus, Diagnostics, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AgentChoice } from "../../components/AgentChoice.tsx";
 import { Button, Segmented } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
-import { useClaude } from "../../state/claude.ts";
+import { claudeModels, useClaude } from "../../state/claude.ts";
+import { useCodex } from "../../state/codex.ts";
 import { followLibrary, useLibrary } from "../../state/library.ts";
 import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
@@ -34,13 +36,14 @@ import { setSideOpen, setUi, useUi } from "../../state/ui.ts";
 import { EFFORTS, RECOMMENDED } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
+import { CodexSetup } from "./CodexSetup.tsx";
 
 /** The sections, in two groups: how Cutroom edits, and this computer. */
 const GROUPS = [
   {
     label: "Cutroom",
     sections: [
-      { id: "claude", label: "Claude", icon: SparkleIcon },
+      { id: "claude", label: "Agent", icon: SparkleIcon },
       { id: "editing", label: "Editing", icon: ScissorsIcon },
       { id: "transcription", label: "Transcription", icon: ClosedCaptioningIcon },
       { id: "media", label: "Media sources", icon: ImagesIcon },
@@ -58,11 +61,6 @@ const GROUPS = [
   sections: readonly { id: string; label: string; icon: Icon }[];
 }[];
 type Section = (typeof GROUPS)[number]["sections"][number]["id"];
-
-const MODELS = [
-  ["claude-opus-5-5", "Opus 5.5 · best edits"],
-  ["claude-sonnet-5-5", "Sonnet 5.5 · faster"],
-] as const;
 
 const WHISPER = [
   { value: "large-v3-turbo", label: "Best" },
@@ -124,6 +122,16 @@ export function SettingsDialog() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [section, setSection] = useState<Section>(useUi.getState().settingsSection ?? "claude");
+  // Codex's models for the plan it's signed in with: "Default" first, then each.
+  const codex = useCodex((s) => s.status);
+  const fallback = codex?.models.find((m) => m.isDefault)?.name;
+  const codexModels: readonly (readonly [string, string])[] = [
+    ["", fallback ? `Default (${fallback})` : "Codex's default"],
+    ...(codex?.models ?? []).map((m) => [m.id, m.name] as const),
+  ];
+  // Claude's models for the account it's signed in with, newest first.
+  const claude = useClaude((s) => s.status);
+  const models = claudeModels(claude).map((m) => [m.id, m.name] as const);
   const [saved, setSaved] = useState<{ ok: boolean; at: number } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   // Each section opens at its top, not wherever the last one was scrolled to.
@@ -188,20 +196,46 @@ export function SettingsDialog() {
       <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-10 pt-12 pb-16">
           {section === "claude" && (
-            <Page title="Claude" intro="The model that edits with you, on your own Claude plan.">
+            <Page
+              title="Agent"
+              intro="The AI that edits with you, on your own plan: Claude, or ChatGPT's Codex."
+            >
               <div className="pb-5">
-                <ClaudeSetup />
+                <AgentChoice value={settings.harness} onChange={(harness) => void update({ harness })} />
               </div>
-              <Row title="Model" hint="Opus makes the best edits; Sonnet answers sooner.">
-                <Select
-                  value={settings.model}
-                  onChange={(model) => void update({ model })}
-                  options={withCurrent(MODELS, settings.model)}
-                />
-              </Row>
+              {settings.harness === "codex" ? (
+                <>
+                  <div className="pb-5">
+                    <CodexSetup />
+                  </div>
+                  <Row title="Model" hint="Codex's models for your ChatGPT plan.">
+                    <Select
+                      value={settings.codexModel}
+                      onChange={(codexModel) => void update({ codexModel })}
+                      options={codexModels}
+                    />
+                  </Row>
+                </>
+              ) : (
+                <>
+                  <div className="pb-5">
+                    <ClaudeSetup />
+                  </div>
+                  <Row
+                    title="Model"
+                    hint="Claude's models for your plan. Opus makes the best edits; Sonnet answers sooner."
+                  >
+                    <Select
+                      value={settings.model}
+                      onChange={(model) => void update({ model })}
+                      options={withCurrent(models, settings.model)}
+                    />
+                  </Row>
+                </>
+              )}
               <Row
                 title="Effort"
-                hint={`How long Claude thinks before it acts. Higher is smarter on big edits, slower, and uses more of your plan. ${EFFORTS.find((e) => e.value === RECOMMENDED)?.label} suits most edits; first cuts think harder on their own.`}
+                hint={`How long the agent thinks before it acts. Higher is smarter on big edits, slower, and uses more of your plan. ${EFFORTS.find((e) => e.value === RECOMMENDED)?.label} suits most edits; first cuts think harder on their own.`}
                 wide
               >
                 <Segmented

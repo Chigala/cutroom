@@ -13,6 +13,7 @@ import {
   beatMap,
   CancelledError,
   contactSheets,
+  cutToSpeech,
   decodes,
   detectFace,
   detectShots,
@@ -20,10 +21,12 @@ import {
   ensureHear,
   ensureWhisper,
   extractSpeechWav,
+  fromSpeechCut,
   hearSounds,
   loudStretches,
   makeProxy,
   measureLoudness,
+  needsTranscript,
   pictureProfile,
   type Segment,
   seeClip,
@@ -97,6 +100,8 @@ export const cachePaths = (dir: string, id: string) => {
   return {
     proxy: path.join(cache, "proxy", `${id}.mp4`),
     wav: path.join(cache, "audio", `${id}.wav`),
+    /** Just where someone talks, for the transcriber (cutToSpeech). */
+    speechWav: path.join(cache, "audio", `${id}.speech.wav`),
     peaks: path.join(cache, "peaks", `${id}.bin`),
     master: path.join(cache, "master", `${id}.mov`),
   };
@@ -341,13 +346,15 @@ export class Indexer {
       const analysis = doc?.analyses.find((a) => a.id === src.id);
       const transcript = doc?.transcripts.find((t) => t.id === src.id);
       const needSounds = !!analysis && analysis.sounds === undefined;
+      // Where someone talks: for clips indexed before it was heard for (their transcripts stay).
+      const needSpeech = !!analysis && src.kind === "video" && analysis.speech === undefined;
       const needStress = !!transcript?.words.length && transcript.words.some((w) => w.stress === undefined);
-      if (!needSounds && !needStress) continue;
+      if (!needSounds && !needStress && !needSpeech) continue;
       const wav = path.join(store.dir, CACHE_DIR, "audio", `${src.id}.hear.wav`);
       try {
         await extractSpeechWav(src.path, wav, signal);
         const ops: Op[] = [];
-        if (needSounds) {
+        if (needSounds || needSpeech) {
           const heard = await this.hear(wav, signal);
           if (heard)
             ops.push({
@@ -355,8 +362,11 @@ export class Indexer {
               coll: "analyses",
               id: src.id,
               patch: {
-                sounds: heard.sounds,
-                ...(src.kind === "audio" && heard.instruments.length && { instruments: heard.instruments }),
+                ...(needSounds && { sounds: heard.sounds }),
+                ...(needSounds &&
+                  src.kind === "audio" &&
+                  heard.instruments.length && { instruments: heard.instruments }),
+                ...(needSpeech && { speech: heard.speech.spans.map(([a, b]) => [a, b]) }),
               },
             });
         }
@@ -613,6 +623,8 @@ export class Indexer {
           });
       }
 
+      // What the clip sounds like, and where someone talks in it (before transcribing: only that is).
+      let heard: Awaited<ReturnType<Indexer["hear"]>> = null;
       if (source.hasAudio && (source.kind === "video" || source.kind === "audio")) {
         emit("audio", 0.32, "Listening");
         await extractSpeechWav(source.path, files.wav, signal);
@@ -627,9 +639,10 @@ export class Indexer {
           if (voice) analysis.voice = { bands: [...voice.bands], noiseFloor: voice.noiseFloor };
         }
         // What it sounds like: laughter, applause, music... and a track's instruments. Never fatal.
-        const heard = await this.hear(files.wav, signal);
+        heard = await this.hear(files.wav, signal);
         if (heard) {
           analysis.sounds = heard.sounds;
+          if (source.kind === "video") analysis.speech = heard.speech.spans.map(([a, b]) => [a, b]);
           if (source.kind === "audio" && heard.instruments.length) analysis.instruments = heard.instruments;
         }
       }
@@ -647,15 +660,35 @@ export class Indexer {
           const shape = soundShape(new Uint8Array(await readFile(files.peaks)), { beats: analysis.beats });
           if (shape.hit !== null) analysis.drop = shape.hit;
         }
+      } else if (
+        source.kind === "video" &&
+        source.hasAudio &&
+        heard &&
+        !needsTranscript(heard.speech, source.duration)
+      ) {
+        // Nobody talks (scenery, b-roll, music, ambience): nothing to transcribe, and nothing for the
+        // transcriber to invent over it ("thanks for watching" over a song).
+        patch.speech = false;
+        analysis.speech = [];
       } else if (source.kind === "video" && source.hasAudio) {
         const setup = whisperSetup(settings);
         emit("transcribe", 0.4, "Transcribing");
         await ensureWhisper(setup, (label, f) => emit("setup", 0.4, `${label} ${Math.round(f * 100)}%`));
-        const { words, language } = await transcribeWords(files.wav, setup, {
+        // Talk in part of it (a vlog's pieces to camera between scenery): only those stretches are heard.
+        // Heard nothing (the classifier isn't here): all of it, as before.
+        const spans = heard?.speech.spans ?? [];
+        const talked = spans.reduce((n, [a, b]) => n + b - a, 0);
+        const cut =
+          spans.length && talked < source.duration * 0.85
+            ? await cutToSpeech(files.wav, spans, files.speechWav)
+            : null;
+        const said = await transcribeWords(cut ? files.speechWav : files.wav, setup, {
           glossary: settings.glossary,
           signal,
           onProgress: (f) => emit("transcribe", 0.4 + f * 0.5, "Transcribing"),
         });
+        const { language } = said;
+        const words = cut ? fromSpeechCut(said.words, cut) : said.words;
         // Word starts the transcriber put early (after pauses) move to where the voice really starts.
         const envelope = await voiceEnvelope(files.wav, signal).catch(() => null);
         const edged = alignToSilences(envelope ? alignToOnsets(words, envelope) : words, analysis.silences);
@@ -686,6 +719,7 @@ export class Indexer {
       };
 
       await rm(files.wav, { force: true });
+      await rm(files.speechWav, { force: true });
       const current = this.deps.store()?.doc;
       if (!current?.sources.some((s) => s.id === id)) return; // removed meanwhile
       const ops: Op[] = [{ op: "update", coll: "sources", id, patch }];

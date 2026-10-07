@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { probe } from "./probe.ts";
 import { checkGraph, filterReport, graphFilters, makeProcessed, measureProcessed } from "./process.ts";
 import { renderableAsIs, seeThrough } from "./transcode.ts";
 
 const dir = mkdtempSync(path.join(tmpdir(), "vedit-process-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const out = path.join(dir, "processed");
 const make = (name: string, args: string[]) => {
   const file = path.join(dir, name);
@@ -214,6 +215,18 @@ describe("measuring", () => {
     expect(report).not.toMatch(/Stream #|@ 0x/);
   });
 
+  it("reads Windows' logs, whose addresses have no 0x", () => {
+    const log = [
+      "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'clip.mp4':",
+      "  Duration: 00:00:02.00, start: 0.000000, bitrate: 25 kb/s",
+      "[Parsed_metadata_3 @ 000001F2A3B4C5D0] lavfi.signalstats.YAVG=16",
+      "[blackdetect @ 000001f2a3b4c600] black_start:0 black_end:1 black_duration:1",
+    ].join("\r\n");
+    expect(filterReport(log, ["blackdetect", "metadata"])).toBe(
+      "[Parsed_metadata_3] lavfi.signalstats.YAVG=16\n[blackdetect] black_start:0 black_end:1 black_duration:1",
+    );
+  });
+
   it("keeps a long report readable", () => {
     const log = [
       "Input #0, mov",
@@ -224,8 +237,4 @@ describe("measuring", () => {
     expect(report).toMatch(/lines left out/);
     expect(report).not.toMatch(/Input #0/);
   });
-});
-
-it("cleans up", () => {
-  expect(existsSync(out)).toBe(true);
 });

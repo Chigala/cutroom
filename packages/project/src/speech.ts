@@ -8,7 +8,8 @@ import { nextId } from "./history.ts";
 import { rampSpeed, sourceOffset } from "./motion.ts";
 import type { Op } from "./ops.ts";
 import type { Anchor, Collection, ProjectDoc, Scene, TimedWord, WordEdit } from "./schema.ts";
-import { audioPlan, round, sourceTime, type Timeline, timelineOf } from "./time.ts";
+import { audioPlan, round, sceneAt, sourceTime, type Timeline, timelineOf } from "./time.ts";
+import { UNHEARD, voicePlan } from "./voiceover.ts";
 
 export const wordRef = (source: string, index: number) => `${source}:${index}`;
 
@@ -158,6 +159,8 @@ export interface SpokenWord {
   readonly scene: string;
   readonly emphasis: boolean;
   readonly hidden: boolean;
+  /** For a voiceover's word: the voiceover it's heard in (scene is then the shot it plays over). */
+  readonly voice?: string;
 }
 
 /** Index of the first word whose midpoint is at or after `t`. Words are sorted by start. */
@@ -173,19 +176,25 @@ function firstWordAfter(words: readonly TimedWord[], t: number): number {
   return lo;
 }
 
-const spokenCache = new WeakMap<object, WeakMap<object, WeakMap<object, SpokenWord[]>>>();
+const spokenCache = new WeakMap<object, WeakMap<object, WeakMap<object, WeakMap<object, SpokenWord[]>>>>();
+/** The voiceovers of a doc without any, as a cache key. */
+const NO_VOICES: readonly never[] = [];
 
 /** Every word that plays in the cut, in output order and output time. Memoized on the inputs. */
-export function spokenWords(doc: Pick<ProjectDoc, "scenes" | "transcripts" | "wordEdits">): SpokenWord[] {
+export function spokenWords(
+  doc: Pick<ProjectDoc, "scenes" | "transcripts" | "wordEdits"> & Partial<Pick<ProjectDoc, "voiceovers">>,
+): SpokenWord[] {
+  const voices = doc.voiceovers ?? NO_VOICES;
   const a = spokenCache.get(doc.scenes) ?? new WeakMap();
   const b = a.get(doc.transcripts) ?? new WeakMap();
-  const hit = b.get(doc.wordEdits);
+  const c = b.get(doc.wordEdits) ?? new WeakMap();
+  const hit = c.get(voices);
   if (hit) return hit;
 
   const tl = timelineOf(doc);
   const transcripts = new Map(doc.transcripts.map((t) => [t.id, t.words]));
   const edits = new Map<string, WordEdit>(doc.wordEdits.map((e) => [e.id, e]));
-  const out: SpokenWord[] = [];
+  let out: SpokenWord[] = [];
   // Words follow the sound, not the picture: a J-cut's words are heard (and captioned) before its shot.
   for (const span of audioPlan(tl)) {
     const p = span.placed;
@@ -214,7 +223,42 @@ export function spokenWords(doc: Pick<ProjectDoc, "scenes" | "transcripts" | "wo
       });
     }
   }
-  b.set(doc.wordEdits, out);
+  // Voiceovers: their words where they're heard. Under one, the shots' own speech is background (its
+  // sound steps back), so its words aren't captioned there: one voice at a time.
+  const plan = voicePlan(doc, tl);
+  if (plan.length) {
+    const under = (t: number) => plan.some((v) => v.item.duck < UNHEARD && t >= v.start && t < v.end);
+    out = out.filter((w) => !under((w.start + w.end) / 2));
+    for (const v of plan) {
+      const words = transcripts.get(v.item.source);
+      if (!words?.length) continue;
+      const from = v.item.offset;
+      const to = from + (v.end - v.start);
+      for (let i = firstWordAfter(words, from); i < words.length; i++) {
+        const w = words[i]!;
+        if ((w.start + w.end) / 2 >= to) break;
+        const ref = wordRef(v.item.source, i);
+        const edit = edits.get(ref);
+        const start = Math.max(v.start, v.start + w.start - from);
+        out.push({
+          ref,
+          source: v.item.source,
+          index: i,
+          text: edit?.text ?? w.text.trim(),
+          heard: w.text.trim(),
+          start,
+          end: Math.min(v.end, v.start + w.end - from),
+          scene: sceneAt(tl, start)?.scene.id ?? "",
+          emphasis: edit?.emphasis ?? false,
+          hidden: edit?.hidden ?? false,
+          voice: v.item.id,
+        });
+      }
+    }
+    out.sort((x, y) => x.start - y.start);
+  }
+  c.set(voices, out);
+  b.set(doc.wordEdits, c);
   a.set(doc.transcripts, b);
   spokenCache.set(doc.scenes, a);
   return out;
@@ -456,6 +500,7 @@ export function moveEdgesWithWords(
     "comments",
     "musicCues",
     "musicClips",
+    "voiceovers",
   ] as const;
   for (const coll of colls)
     for (const item of doc[coll] as readonly Pinned[]) {
@@ -706,6 +751,7 @@ export function cleanCutOps(
     "comments",
     "musicCues",
     "musicClips",
+    "voiceovers",
   ] as const;
   for (const coll of colls)
     for (const item of doc[coll] as readonly Pinned[]) {
@@ -866,6 +912,7 @@ export function replaceTimelineOps(doc: ProjectDoc, ranges: readonly CutRange[])
     "sfx",
     "musicCues",
     "musicClips",
+    "voiceovers",
     "comments",
   ] as const;
   for (const coll of anchored)
@@ -898,6 +945,7 @@ const ANCHORED: readonly Collection[] = [
   "sfx",
   "musicCues",
   "musicClips",
+  "voiceovers",
   "comments",
 ];
 
@@ -1013,7 +1061,8 @@ export function cutWordsOps(doc: ProjectDoc, refs: ReadonlySet<string>): Op[] {
   const words = spokenWords(doc);
   const tl = timelineOf(doc);
   const byScene = new Map<string, SpokenWord[]>();
-  for (const w of words) byScene.set(w.scene, [...(byScene.get(w.scene) ?? []), w]);
+  // A voiceover's words aren't the shots' (it's trimmed on its own, by its offset and duration).
+  for (const w of words) if (!w.voice) byScene.set(w.scene, [...(byScene.get(w.scene) ?? []), w]);
   const transcripts = new Map(doc.transcripts.map((t) => [t.id, t.words]));
   const ops: Op[] = [];
   const taken: { id: string }[] = [...doc.scenes];

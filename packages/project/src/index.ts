@@ -26,3 +26,4 @@ export * from "./styles.ts";
 export * from "./summary.ts";
 export * from "./templates.ts";
 export * from "./time.ts";
+export * from "./voiceover.ts";

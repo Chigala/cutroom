@@ -317,6 +317,9 @@ export function measureArgs(o: Pick<MakeOptions, "inputs" | "graph">): string[] 
   ];
 }
 
+/** The address ffmpeg logs after a context's name: "@ 0x7f8a..." on macOS and Linux, "@ 000001F2..." on Windows. */
+const ADDRESS = / @ (?:0x)?[0-9a-fA-F]+\]/;
+
 /** Lines of a measurement it hands back at most. */
 const MAX_LINES = 300;
 
@@ -352,7 +355,7 @@ export async function measureProcessed(o: Pick<MakeOptions, "inputs" | "graph" |
 export function filterReport(log: string, filters: readonly string[] = []): string {
   const names = new Set(filters);
   const ours = (l: string) => {
-    const m = /^\[([A-Za-z0-9_]+) @ 0x[0-9a-f]+\]/.exec(l);
+    const m = /^\[([A-Za-z0-9_]+) @ (?:0x)?[0-9a-fA-F]+\]/.exec(l);
     return !!m && (m[1]!.startsWith("Parsed_") || names.has(m[1]!));
   };
   const kept: string[] = [];
@@ -369,7 +372,7 @@ export function filterReport(log: string, filters: readonly string[] = []): stri
       continue;
     }
     skipping = false;
-    if (ours(l)) kept.push(l.replace(/ @ 0x[0-9a-f]+\]/, "]"));
+    if (ours(l)) kept.push(l.replace(ADDRESS, "]"));
   }
   if (!kept.length)
     return "(the filters reported nothing: add metadata=print, or a filter that reports, such as blackdetect or silencedetect)";
@@ -391,7 +394,7 @@ function readableError(err: unknown): string {
         l,
       ),
     )
-    .map((l) => l.replace(/ @ 0x[0-9a-f]+\]/, "]").trim())
+    .map((l) => l.replace(ADDRESS, "]").trim())
     .slice(-6);
   return useful.length ? useful.join("\n") : text.slice(-800);
 }

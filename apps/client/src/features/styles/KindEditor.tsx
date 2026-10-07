@@ -22,6 +22,7 @@ import { Button } from "../../components/ui.tsx";
 import { STYLE_COLL, STYLE_FOLDER, styleName, stylePreview } from "../../lib/style-preview.ts";
 import { send } from "../../state/chat.ts";
 import { edit, useDoc, useProject } from "../../state/project.ts";
+import { agentName } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 import { AskClaude, CodeArea, PreviewPlayer } from "../code/parts.tsx";
@@ -305,7 +306,7 @@ function AskAboutFile({ kind, id, dirty }: { kind: StyleKind; id: string; dirty:
   const copy = COPY[kind];
   const go = (prompt: string) => {
     void send(prompt, {}, "thorough");
-    toast("Claude is on it. Follow along in the chat.");
+    toast(`${agentName()} is on it. Follow along in the chat.`);
     return true;
   };
   return (

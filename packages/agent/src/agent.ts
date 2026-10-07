@@ -4,14 +4,15 @@
  * them on top of whatever the user did meanwhile; ops are id-addressed, so that rebase almost always
  * just works.
  *
- * Two backends, same tools: the Claude Agent SDK on the user's Claude subscription (what runs today),
- * and the Claude API loop (api.ts), kept for a later cloud tier but switched off.
+ * Several agents, same tools: each harness (harness.ts) runs the conversation on the user's own sign-in:
+ * Claude Code on their Claude plan, Codex on their ChatGPT plan. The Claude API loop (api.ts) is kept
+ * for a later cloud tier but switched off.
  */
-import type { AgentContext, AgentUsage, ToolCall } from "@vedit/bridge";
+import type { AgentContext, AgentUsage, HarnessId, ToolCall } from "@vedit/bridge";
 import type { ChangeGroup, Op, ProjectDoc, Source } from "@vedit/project";
 import { runWithApi } from "./api.ts";
 import { buildPrompt, type Turn } from "./context.ts";
-import { runWithSubscription } from "./sdk.ts";
+import { HARNESSES } from "./harness.ts";
 import { type AgentHost, refitMusic, type Scratch, type ToolContext } from "./tools.ts";
 import { type Backend, type Effort, Stalled, StepLimit } from "./types.ts";
 
@@ -28,6 +29,8 @@ export interface AgentOptions {
   readonly handEdits?: readonly string[];
   readonly host: AgentHost;
   readonly backend?: Backend;
+  /** Which agent runs it (Claude by default). */
+  readonly harness?: HarnessId;
   readonly model?: string;
   /** Editing is interactive, so latency matters: medium by default, high for first cuts. */
   readonly effort?: Effort;
@@ -90,17 +93,18 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     onUsage: (usage: AgentUsage) => opts.onUsage?.(usage),
   };
   const backend = opts.backend ?? defaultBackend();
+  const harness = HARNESSES[opts.harness ?? "claude"];
   for (let resumed = 0; ; resumed++) {
     try {
-      const reply = backend === "api" ? await runWithApi(run, ctx) : await runWithSubscription(run, ctx);
+      const reply = backend === "api" ? await runWithApi(run, ctx) : await harness.run(run, ctx);
       await refitMusic(ctx);
       const { summary, next } = splitNext(reply);
       return { ops: scratch.ops, groups: scratch.groups, summary, ...(next && { next }), doc: scratch.doc };
     } catch (err) {
-      // Claude went silent mid-request (a stalled connection): pick up where it stopped, on the work so
-      // far, rather than end the request half done. Twice at most.
+      // The agent went silent mid-request (a stalled connection): pick up where it stopped, on the work
+      // so far, rather than end the request half done. Twice at most.
       if (err instanceof Stalled && resumed < MAX_RESUMES && !opts.signal?.aborted) {
-        ctx.step("Claude stalled; picking up where it stopped", "warn");
+        ctx.step(`${harness.name} stalled; picking up where it stopped`, "warn");
         run = {
           ...run,
           prompt: buildPrompt(
@@ -121,10 +125,10 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       // it all away.
       if (!(err instanceof StepLimit) || !scratch.ops.length) throw err;
       const stalled = err instanceof Stalled;
-      ctx.step(stalled ? "Claude stopped responding" : "Ran out of steps before finishing", "warn");
+      ctx.step(stalled ? `${harness.name} stopped responding` : "Ran out of steps before finishing", "warn");
       const summary = [
         err.partial,
-        `${stalled ? "Claude stopped responding partway through" : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
+        `${stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
       ]
         .filter(Boolean)
         .join("\n\n");

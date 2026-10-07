@@ -109,15 +109,20 @@ describe("queueing messages", () => {
 });
 
 describe("usage", () => {
-  it("keeps Claude's latest context and plan figures, merged, between launches", async () => {
+  it("keeps each agent's latest context and plan figures, merged and apart, between launches", async () => {
     await chat.send("first");
     const runId = chat.useChat.getState().activeRun!;
-    event({ runId, type: "usage", limits: { fiveHour: { pct: 40 }, plan: "max" } });
-    event({ runId, type: "usage", limits: { weekly: { pct: 12 } } });
-    event({ runId, type: "usage", context: { used: 50_000, window: 200_000 } });
+    event({ runId, type: "usage", harness: "claude", limits: { fiveHour: { pct: 40 }, plan: "max" } });
+    event({ runId, type: "usage", harness: "claude", limits: { weekly: { pct: 12 } } });
+    event({ runId, type: "usage", harness: "claude", context: { used: 50_000, window: 200_000 } });
+    // ChatGPT's plan is its own: it doesn't touch Claude's figures.
+    event({ runId, type: "usage", harness: "codex", limits: { fiveHour: { pct: 7 }, plan: "plus" } });
     expect(chat.useChat.getState().usage).toEqual({
-      context: { used: 50_000, window: 200_000 },
-      limits: { fiveHour: { pct: 40 }, weekly: { pct: 12 }, plan: "max" },
+      claude: {
+        context: { used: 50_000, window: 200_000 },
+        limits: { fiveHour: { pct: 40 }, weekly: { pct: 12 }, plan: "max" },
+      },
+      codex: { limits: { fiveHour: { pct: 7 }, plan: "plus" } },
     });
     expect(JSON.parse(localStorage.getItem("cutroom.usage")!)).toEqual(chat.useChat.getState().usage);
   });

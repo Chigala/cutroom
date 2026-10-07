@@ -28,6 +28,7 @@ import {
   cutoutCovering,
   cutoutKey,
   cutoutRange,
+  duckAt,
   type Effect,
   entrySound,
   fitsInside,
@@ -74,6 +75,7 @@ import {
   timelineOf,
   type Visual,
   type VisualContent,
+  voicePlan,
   type Zoom,
 } from "@vedit/project";
 
@@ -324,6 +326,9 @@ export const VideoComposition = ({
     [tl, doc.sfx, fps, sources, beatFrames, tolerance],
   );
   const musicClips = useMemo(() => placeAll(tl, doc.musicClips, fps), [tl, doc.musicClips, fps]);
+  // Voiceovers: heard at their moments, the shots' own sound stepping back under them.
+  const voices = useMemo(() => voicePlan({ voiceovers: doc.voiceovers }, tl), [doc.voiceovers, tl]);
+  const duck = useMemo(() => (voices.length ? (t: number) => duckAt(voices, t) : null), [voices]);
   const spoken = spokenWords(doc);
   const pages = useMemo(() => captionPages(spoken, doc.captionStyle), [spoken, doc.captionStyle]);
   const speech = useMemo(() => speechSpans(pages, fps), [pages, fps]);
@@ -498,6 +503,7 @@ export const VideoComposition = ({
                     steadies={steadies}
                     framed={framed}
                     layer="base"
+                    duck={duck}
                   />
                 </Camera>
               )}
@@ -615,6 +621,31 @@ export const VideoComposition = ({
                     />
                   </Sequence>
                 ))}
+              {/* Voiceovers (the preview's: an export mixes them into its voice track, with the dialogue). */}
+              {(audio && !muteSources ? voices : []).map((v) => {
+                const src = sources.get(v.item.source);
+                if (!src?.path) return null;
+                const from = toFrame(v.start, fps);
+                const end = v.item.offset + (v.end - v.start);
+                return (
+                  <Sequence
+                    key={v.item.id}
+                    from={from}
+                    durationInFrames={Math.max(1, toFrame(v.end, fps) - from)}
+                    // Loaded a second ahead, so it speaks on its frame. (Premounting needs a layer: an empty one.)
+                    premountFor={fps}
+                    style={SILENT_LAYER}
+                  >
+                    <Sound
+                      // A video's sound from its preview copy, as its shots play (the original may not decode).
+                      src={`${mediaBase}${encodeURIComponent(src.id)}${quality === "preview" && src.proxy ? "?proxy" : ""}`}
+                      trimBefore={trimFrom(v.item.offset, fps)}
+                      trimAfter={trimTo(end, fps, v.item.offset)}
+                      volume={v.item.volume}
+                    />
+                  </Sequence>
+                );
+              })}
               {(audio ? sfx : []).map((s) => (
                 <Sequence
                   key={s.item.id}
@@ -938,6 +969,7 @@ const Scenes = memo(function Scenes({
   steadies,
   framed,
   layer,
+  duck,
 }: {
   tl: Timeline;
   faces: Faces;
@@ -957,6 +989,8 @@ const Scenes = memo(function Scenes({
   cutouts: ReadonlyMap<string, { key: string; from: number; to: number; plate?: string }>;
   /** Ramped shots: their rendered footage's media key. */
   ramps: ReadonlyMap<string, string>;
+  /** How loud the shots' own sound is at an output time, under voiceovers (null: none, always full). */
+  duck?: ((t: number) => number) | null;
   /** Shots slowed by their speed, made smooth: the file and the stretch of the clip it covers. */
   flows: ReadonlyMap<string, { key: string; from: number; to: number }>;
   steadies: ReadonlyMap<string, Steadied>;
@@ -1157,8 +1191,13 @@ const Scenes = memo(function Scenes({
                             ramp
                               ? 0
                               : extended
-                                ? (f: number) => p.scene.volume * gainAt(sound, (seqFrom + f) / fps)
-                                : p.scene.volume
+                                ? (f: number) =>
+                                    p.scene.volume *
+                                    gainAt(sound, (seqFrom + f) / fps) *
+                                    (duck ? duck((seqFrom + f) / fps) : 1)
+                                : duck
+                                  ? (f: number) => p.scene.volume * duck((seqFrom + f) / fps)
+                                  : p.scene.volume
                           }
                         />
                       </AbsoluteFill>

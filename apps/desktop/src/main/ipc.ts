@@ -3,6 +3,7 @@ import { Channel } from "@vedit/bridge/channels";
 import { app, type IpcMainInvokeEvent, ipcMain, shell } from "electron";
 import { z } from "zod";
 import { claudeStatus } from "./claude.ts";
+import { codexCancelLogin, codexLogin, codexLogout, codexStatus } from "./codex.ts";
 import { checkKey } from "./keys.ts";
 import { logsDir, recentProblems } from "./log.ts";
 import type { ProjectService } from "./project-service.ts";
@@ -54,6 +55,10 @@ export function registerIpc(service: ProjectService): void {
     [Channel.peaks]: (id) => service.indexer.peaks(str(id)),
     [Channel.retryIndex]: (id) => service.retryIndex(id),
     [Channel.describeShots]: () => service.describeMissing(),
+    [Channel.codexStatus]: (refresh) => codexStatus(refresh === true),
+    [Channel.codexLogin]: () => codexLogin(),
+    [Channel.codexCancelLogin]: () => codexCancelLogin(),
+    [Channel.codexLogout]: () => codexLogout(),
     [Channel.agentRun]: (req) => service.runAgent(req),
     [Channel.agentCancel]: (runId) => service.cancel(runId),
     [Channel.agentStatus]: () => service.agentStatus(),
@@ -126,6 +131,7 @@ export function registerIpc(service: ProjectService): void {
         const saved = publicSettings(await setSettings(patch));
         console.log(`[settings] saved ${fields}`);
         if (patch && typeof patch === "object" && "claudePath" in patch) await claudeStatus(true);
+        if (patch && typeof patch === "object" && "codexPath" in patch) await codexStatus(true);
         void service.describeMissing();
         return saved;
       } catch (err) {

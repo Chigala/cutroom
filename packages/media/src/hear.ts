@@ -162,6 +162,72 @@ export interface SoundEvent {
 }
 
 /**
+ * Someone talking: Apple's labels, and the open model's (AudioSet's) in its words. Singing isn't speech
+ * (a song's lyrics aren't what a video says), and neither is a crowd's babble.
+ */
+const SPEECH_LABELS = new Set([
+  "speech",
+  "shout",
+  "yell",
+  "whispering",
+  "male_speech_man_speaking",
+  "female_speech_woman_speaking",
+  "child_speech_kid_speaking",
+  "conversation",
+  "narration_monologue",
+]);
+
+/** Where someone talks in a clip: its stretches (padded, close ones joined), and how much there is. */
+export interface SpeechMap {
+  /** [start, end] in the clip's seconds. */
+  readonly spans: readonly (readonly [number, number])[];
+  /** Seconds heard as speech (before padding). */
+  readonly seconds: number;
+  /** The surest any window was that someone talks, 0..1. */
+  readonly peak: number;
+}
+
+/**
+ * The speech in a clip, from the classifier's windows (a second each, every half second). Tuned on real
+ * clips against their transcripts: at 0.3 it finds 99.6% of the words said, a shout or a two-word
+ * exclamation included, and none of what the transcriber invents over music or silence.
+ */
+export function speechMap(
+  windows: readonly HeardWindow[],
+  { threshold = 0.3, pad = 0.75, gap = 1.5, end = Infinity } = {},
+): SpeechMap {
+  const spans: [number, number][] = [];
+  let heard = 0;
+  let peak = 0;
+  for (const w of windows) {
+    let c = 0;
+    for (const [id, confidence] of w.c) if (SPEECH_LABELS.has(id)) c = Math.max(c, confidence);
+    peak = Math.max(peak, c);
+    if (c < threshold) continue;
+    heard++;
+    const from = Math.max(0, w.t - pad);
+    const to = Math.min(end, w.t + w.d + pad);
+    const last = spans.at(-1);
+    if (last && from - last[1] <= gap) last[1] = Math.max(last[1], to);
+    else spans.push([from, to]);
+  }
+  const hop = windows.length > 1 ? windows[1]!.t - windows[0]!.t : 0.5;
+  return {
+    spans: spans.map(([a, b]) => [round(a), round(b)] as const),
+    seconds: round(heard * hop),
+    peak: round(peak),
+  };
+}
+
+/**
+ * Whether a clip is worth transcribing: someone clearly talks, for a second at least (or for a quarter
+ * of a clip shorter than four seconds: "Hey, buddy." in a clip of a second and a half).
+ */
+export function needsTranscript(map: SpeechMap, duration: number): boolean {
+  return map.peak >= 0.3 && map.seconds >= Math.min(1, duration * 0.25);
+}
+
+/**
  * The sounds worth knowing about for editing, by Apple's name: what we call each, how sure the
  * classifier must be, and whether one window (half a second) is enough (short sounds) or it must last.
  */
@@ -237,19 +303,20 @@ const INSTRUMENTS: Readonly<Record<string, string>> = {
   vibraphone: "mallets",
 };
 
-interface Window {
+export interface HeardWindow {
   readonly t: number;
   readonly d: number;
   readonly c: readonly [string, number][];
 }
 
-async function classify(bin: string, file: string, signal?: AbortSignal): Promise<Window[]> {
+/** A clip's sound, a second at a time: each window's likeliest sounds (for speechMap, and tuning). */
+export async function classify(bin: string, file: string, signal?: AbortSignal): Promise<HeardWindow[]> {
   if (bin.endsWith(".onnx")) return classifyOpen(file, signal);
   const { stdout } = await run(bin, [file, "1.0", "0.5"], signal ? { signal } : {});
   return stdout
     .split("\n")
     .filter((l) => l.startsWith("{"))
-    .map((l) => JSON.parse(l) as Window);
+    .map((l) => JSON.parse(l) as HeardWindow);
 }
 
 /** What a clip's sound is, over time: the editing-relevant sounds heard, and (for music) its instruments. */
@@ -257,7 +324,7 @@ export async function hearSounds(
   bin: string,
   file: string,
   signal?: AbortSignal,
-): Promise<{ sounds: SoundEvent[]; instruments: { name: string; share: number }[] }> {
+): Promise<{ sounds: SoundEvent[]; instruments: { name: string; share: number }[]; speech: SpeechMap }> {
   const windows = await classify(bin, file, signal);
   // Sounds: each label's qualifying windows, joined across short gaps into events.
   const open = new Map<
@@ -307,7 +374,7 @@ export async function hearSounds(
     .filter((i) => i.share >= 0.08)
     .sort((a, b) => b.share - a.share)
     .slice(0, 6);
-  return { sounds, instruments };
+  return { sounds, instruments, speech: speechMap(windows) };
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -480,6 +547,12 @@ const OPEN_MIN: Readonly<Record<string, number>> = {
   silence: 0.5,
 };
 const OTHER_SCALE = 2.5;
+/**
+ * The open model's speech scores, scaled to read like Apple's (where speechMap's threshold was tuned).
+ * Measured on the same 26 clips: the quietest real line ("Hey, buddy.") scales to 0.57, music the
+ * transcriber had put words in to 0.20, so 0.3 keeps the same 99.6% of words as on the Mac.
+ */
+const SPEECH_SCALE = 1.5;
 
 /** 16 kHz audio heard a second at a time, every half second (as the Mac helper is asked to). */
 const RATE = 16_000;
@@ -491,9 +564,10 @@ const HOP = RATE / 2;
  * 0.1 (after scaling), eight at most. The audio streams through ffmpeg, so a long recording never sits
  * in memory.
  */
-async function classifyOpen(file: string, signal?: AbortSignal): Promise<Window[]> {
+async function classifyOpen(file: string, signal?: AbortSignal): Promise<HeardWindow[]> {
   const [ort, model, names] = await Promise.all([onnx(), session("sounds"), soundLabels()]);
   const scale = names.map((id) => {
+    if (SPEECH_LABELS.has(id)) return SPEECH_SCALE;
     const open = OPEN_MIN[id];
     const apple = EDIT_SOUNDS[id]?.min;
     return open && apple ? apple / open : OTHER_SCALE;
@@ -506,7 +580,7 @@ async function classifyOpen(file: string, signal?: AbortSignal): Promise<Window[
   const exited = once(child, "close") as Promise<[number | null]>;
   const abort = () => child.kill("SIGKILL");
   signal?.addEventListener("abort", abort, { once: true });
-  const windows: Window[] = [];
+  const windows: HeardWindow[] = [];
   let samples = new Float32Array(0);
   // Where `samples` starts in the recording, in samples.
   let offset = 0;

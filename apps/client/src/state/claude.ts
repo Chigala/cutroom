@@ -2,7 +2,7 @@
  * Claude Code as the editor runs it: where it is, who it's signed in as, and the install, sign-in or
  * update in progress (kept here, not in the dialog, so closing Settings mid-sign-in loses nothing).
  */
-import type { ClaudeStatus, ClaudeTask } from "@vedit/bridge";
+import type { AgentModel, ClaudeStatus, ClaudeTask } from "@vedit/bridge";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { host } from "../lib/host.ts";
@@ -22,10 +22,31 @@ export async function checkClaude(refresh = false): Promise<void> {
     const status = await host.claude.status(refresh);
     useClaude.setState({ status });
     // The check reads the plan's limits too: the usage meter has them before the first request.
-    if (status.limits) notePlanLimits(status.limits);
+    if (status.limits) notePlanLimits("claude", status.limits);
   } finally {
     useClaude.setState({ checking: false });
   }
+}
+
+/** Until Claude Code has said what the account offers. */
+const KNOWN: readonly AgentModel[] = [
+  { id: "claude-opus-5-5", name: "Opus 5.5", description: "Best edits", efforts: [], isDefault: true },
+  { id: "claude-sonnet-5-5", name: "Sonnet 5.5", description: "Faster", efforts: [] },
+];
+
+/** The models Claude Code offers the account, newest first. */
+export const claudeModels = (status: ClaudeStatus | null): readonly AgentModel[] =>
+  status?.models?.length ? status.models : KNOWN;
+
+/** The newest of each kind (Opus, Fable, Sonnet, Haiku), for a short list; Settings lists them all. */
+export function newestEach(models: readonly AgentModel[]): AgentModel[] {
+  const seen = new Set<string>();
+  return models.filter((m) => {
+    const kind = m.name.split(" ")[0]!;
+    if (seen.has(kind)) return false;
+    seen.add(kind);
+    return true;
+  });
 }
 
 let listening = false;

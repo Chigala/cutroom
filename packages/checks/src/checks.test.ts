@@ -1,4 +1,4 @@
-import { applyOps, demoProject, type Op, type ProjectDoc } from "@vedit/project";
+import { applyOps, demoProject, emptyProject, type Op, type ProjectDoc } from "@vedit/project";
 import { describe, expect, it } from "vitest";
 import { runChecks } from "./index.ts";
 
@@ -111,5 +111,129 @@ describe("checks that use what the footage shows", () => {
     expect(byId(withSeen({ quality: quality.map((q) => ({ ...q, face: 0.6 })) }))["clear-face"]!.status).toBe(
       "pass",
     );
+  });
+
+  it("clear a voiceover whose recording or shot is gone", () => {
+    const doc = demoProject();
+    const shot = doc.scenes[0]!.id;
+    const voice = (id: string, source: string, scene = shot) => ({
+      id,
+      anchor: { scene, at: 0 },
+      duration: 1,
+      source,
+      offset: 0,
+      volume: 1,
+      duck: 0.2,
+    });
+    const broken = { ...doc, voiceovers: [voice("v1", "deleted"), voice("v2", doc.sources[0]!.id, "gone")] };
+    const orphans = byId(broken).orphans!;
+    expect(orphans.status).not.toBe("pass");
+    const fixed = applyOps(broken, (orphans.fix?.ops ?? []) as Op[]).doc;
+    expect(fixed.voiceovers).toEqual([]);
+    expect(byId(fixed).orphans!.status).toBe("pass");
+  });
+});
+
+describe("checks on a video where people talk only some of the time", () => {
+  /**
+   * A vlog clip: someone talks at 0-10s and 40-50s; between, the street (audible, nobody talking) unless
+   * `quiet` makes that stretch silence. Low face, so headroom would want to reframe a talking shot.
+   */
+  const vlog = (
+    scenes: { id: string; in: number; out: number }[],
+    { quiet = false, mapped = true }: { quiet?: boolean; mapped?: boolean } = {},
+  ): ProjectDoc => {
+    const words = [
+      ...Array.from({ length: 12 }, (_, i) => ({ text: `w${i}`, start: 1 + i * 0.6, end: 1.4 + i * 0.6 })),
+      ...Array.from({ length: 12 }, (_, i) => ({ text: `v${i}`, start: 41 + i * 0.6, end: 41.4 + i * 0.6 })),
+    ];
+    const doc = emptyProject("Vlog");
+    return {
+      ...doc,
+      sources: [
+        {
+          id: "vlog",
+          kind: "video",
+          label: "vlog",
+          path: "/vlog.mp4",
+          duration: 60,
+          width: 1080,
+          height: 1920,
+          hdr: false,
+          hasAudio: true,
+          status: "ready",
+          proxy: false,
+          speech: true,
+          summary: "",
+          tags: [],
+        },
+      ],
+      transcripts: [{ id: "vlog", language: "en", words }],
+      analyses: [
+        {
+          id: "vlog",
+          silences: quiet ? [[10.5, 40.5]] : [],
+          shots: [],
+          // A small face: in the scenery that's a passer-by; while talking, the speaker filmed wide.
+          face: { x: 0.5, y: 0.7, size: 0.1 },
+          ...(mapped && {
+            speech: [
+              [0, 10.5],
+              [40, 50.5],
+            ] as [number, number][],
+          }),
+        },
+      ],
+      scenes: scenes.map((s) => ({ ...s, source: "vlog", note: "", volume: 1 })),
+      captionStyle: { ...doc.captionStyle, speech: false },
+    } as ProjectDoc;
+  };
+
+  it("judges the scenery as picture: long holds and jump cuts there are flagged", () => {
+    const doc = vlog([
+      { id: "talk", in: 0, out: 10 },
+      { id: "walk", in: 15, out: 27 },
+      { id: "walk2", in: 27, out: 30 },
+      { id: "talk2", in: 40, out: 50 },
+    ]);
+    const r = byId(doc);
+    expect(r["shot-length"]!.scenes).toEqual(["walk"]);
+    expect(r.repeats!.scenes).toEqual(["walk2"]);
+    // Clips heard before speech was mapped: the whole clip talks, as before.
+    const old = byId(vlog([{ id: "walk", in: 15, out: 27 }], { mapped: false }));
+    expect(old["shot-length"]!.status).toBe("pass");
+  });
+
+  it("doesn't call the scenery between two pieces to camera dead air, but does a silent pause", () => {
+    const shot = [{ id: "all", in: 0, out: 50 }];
+    expect(byId(vlog(shot))["dead-air"]!.status).toBe("pass");
+    expect(byId(vlog(shot, { quiet: true }))["dead-air"]!.status).toBe("warn");
+    // Opening on the scenery isn't a slow start.
+    expect(byId(vlog([{ id: "open", in: 20, out: 50 }]))["dead-air"]!.status).toBe("pass");
+  });
+
+  it("frames speakers, not the people in the scenery", () => {
+    expect(byId(vlog([{ id: "walk", in: 15, out: 27 }])).headroom!.status).toBe("pass");
+    expect(byId(vlog([{ id: "talk", in: 0, out: 10 }])).headroom!.status).toBe("warn");
+    // A big face is the subject even when nobody talks (a reaction, a portrait).
+    const portrait = vlog([{ id: "walk", in: 15, out: 27 }]);
+    const big = {
+      ...portrait,
+      analyses: portrait.analyses.map((a) => ({ ...a, face: { x: 0.5, y: 0.7, size: 0.3 } })),
+    };
+    expect(byId(big).headroom!.status).toBe("warn");
+  });
+
+  it("only asks the music to duck, and the captions to move, when they matter", () => {
+    const scenery = vlog([{ id: "walk", in: 15, out: 27 }]);
+    const withMusic = (doc: ProjectDoc) => ({
+      ...doc,
+      music: { ...doc.music, source: "vlog", duckUnderSpeech: false },
+    });
+    expect(byId(withMusic(scenery)).ducking!.status).toBe("pass");
+    expect(byId(withMusic(vlog([{ id: "talk", in: 0, out: 10 }]))).ducking!.status).toBe("warn");
+    // Captions set low, but nothing is captioned: nothing to move.
+    const low = { ...scenery, captionStyle: { ...scenery.captionStyle, y: 0.95 } };
+    expect(byId(low)["safe-zones"]!.status).toBe("pass");
   });
 });

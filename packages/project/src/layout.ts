@@ -54,6 +54,7 @@ import {
   Title,
   Transcript,
   Visual,
+  Voiceover,
   WordEdit,
   Zoom,
 } from "./schema.ts";
@@ -159,6 +160,13 @@ export const PROJECT_FILES: readonly ProjectFile[] = [
     empty,
   ),
   jsonFile("audio/music-clips.json", "musicClips", z.array(MusicClip), "More music placed in the cut", empty),
+  jsonFile(
+    "audio/voiceovers.json",
+    "voiceovers",
+    z.array(Voiceover),
+    "Recordings laid over the cut as the voice",
+    empty,
+  ),
   jsonFile("comments/comments.json", "comments", z.array(Comment), "Notes pinned to moments", empty),
 ];
 

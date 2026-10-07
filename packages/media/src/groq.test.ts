@@ -1,13 +1,16 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { run } from "./exec.ts";
 import { transcribeGroq } from "./groq.ts";
 
+const dir = mkdtempSync(path.join(tmpdir(), "vedit-groq-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
 /** Silent 16 kHz mono speech audio this long. */
 async function silence(seconds: number): Promise<string> {
-  const file = path.join(mkdtempSync(path.join(tmpdir(), "vedit-groq-")), "speech.wav");
+  const file = path.join(dir, `speech-${seconds}s.wav`);
   await run("ffmpeg", [
     "-v",
     "error",

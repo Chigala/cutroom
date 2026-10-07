@@ -109,6 +109,7 @@ const EDIT: readonly Collection[] = [
   "sfx",
   "musicCues",
   "musicClips",
+  "voiceovers",
   "comments",
 ];
 

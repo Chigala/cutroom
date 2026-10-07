@@ -39,7 +39,7 @@ export interface ProjectFolder {
   readonly dir: string;
   readonly name: string;
   readonly pinned?: boolean;
-  /** Its videos, most recently opened first. */
+  /** Its videos, newest made first (opening one doesn't move it). */
   readonly videos: readonly RecentProject[];
 }
 
@@ -125,8 +125,8 @@ export type AgentEvent =
       /** How many of the run's changes came before these: where they go in the draft. */
       readonly at: number;
     }
-  /** How much of Claude's context the request filled, and how much of the plan's limits are used. */
-  | ({ readonly runId: string; readonly type: "usage" } & AgentUsage);
+  /** How much of the agent's context the request filled, and how much of its plan's limits are used. */
+  | ({ readonly runId: string; readonly type: "usage"; readonly harness: HarnessId } & AgentUsage);
 
 /** One of the Claude plan's usage windows: how much of it is used, and when it starts over. */
 export interface PlanWindow {
@@ -150,6 +150,10 @@ export interface AgentUsage {
 }
 
 export type Backend = "api" | "subscription";
+
+/** The agent that edits: Claude Code on a Claude plan, or Codex on a ChatGPT plan. */
+export const HARNESS_IDS = ["claude", "codex"] as const;
+export type HarnessId = (typeof HARNESS_IDS)[number];
 
 /** A request still running, with the changes it has made so far. */
 export interface ActiveRun {
@@ -266,10 +270,47 @@ export const Settings = z.object({
   instantEdits: z.boolean().default(true),
   /** Claude Code to run the agent with. Empty: the one installed on this computer, else the app's own. */
   claudePath: z.string().max(1000).default(""),
+  /** The agent that edits: Claude Code (a Claude plan) or Codex (a ChatGPT plan). */
+  harness: z.enum(HARNESS_IDS).default("claude"),
+  /** Codex's model; empty: Codex's default for the plan. */
+  codexModel: z.string().max(100).default(""),
+  /** Codex to run. Empty: the Codex app's, or the first codex on this computer. */
+  codexPath: z.string().max(1000).default(""),
   /** The shared asset library (sounds, music, memes). Empty: Cutroom Library in the videos folder. */
   libraryDir: z.string().max(1000).default(""),
 });
 export type Settings = z.infer<typeof Settings>;
+
+/** A Codex model, as Codex lists it for the signed-in plan. */
+/** A model an agent offers the signed-in account, as it reports it. */
+export interface AgentModel {
+  /** What the agent is asked to run. */
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  /** Reasoning efforts it takes, least to most (none: it doesn't take one). */
+  readonly efforts: readonly string[];
+  readonly defaultEffort?: string;
+  /** The agent's own pick for the account. */
+  readonly isDefault?: boolean;
+}
+
+/** Codex for the agent: installed where, signed in as whom (in Cutroom's own Codex folder), its models. */
+export interface CodexStatus {
+  readonly installed: boolean;
+  readonly path?: string;
+  readonly version?: string;
+  /** Null when Codex couldn't be asked. */
+  readonly signedIn: boolean | null;
+  readonly email?: string;
+  /** "plus", "pro", "team"... */
+  readonly plan?: string;
+  /** How it's signed in when not with ChatGPT ("API key"). */
+  readonly method?: string;
+  readonly models: readonly AgentModel[];
+  readonly limits?: AgentUsage["limits"];
+  readonly error?: string;
+}
 
 export interface AgentStatus {
   readonly backend: Backend;
@@ -350,6 +391,8 @@ export interface ClaudeStatus {
   readonly apiKey?: string;
   /** The plan's 5-hour and weekly limits, as Claude Code reported them when it was checked. */
   readonly limits?: AgentUsage["limits"];
+  /** The models Claude Code offers the account, newest first, as it reported them when it was checked. */
+  readonly models?: readonly AgentModel[];
 }
 
 /** Installing, signing in to or updating Claude Code, as it goes. */
@@ -497,6 +540,14 @@ export interface EditorApi {
     retry(source: string): Promise<void>;
     /** Describes the shots of clips that have none yet (Claude was unreachable when they indexed). */
     describe(): Promise<void>;
+  };
+  readonly codex: {
+    /** Codex's state; `refresh` asks again rather than reusing what was last found. */
+    status(refresh?: boolean): Promise<CodexStatus>;
+    /** Sign in with ChatGPT in the browser; resolves when it's done (or given up). */
+    login(): Promise<CodexStatus>;
+    cancelLogin(): Promise<void>;
+    logout(): Promise<CodexStatus>;
   };
   readonly agent: {
     run(req: AgentRequest): Promise<{ runId: string }>;

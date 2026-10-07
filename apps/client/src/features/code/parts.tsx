@@ -13,6 +13,7 @@ import { Button } from "../../components/ui.tsx";
 import { MEDIA_BASE } from "../../lib/host.ts";
 import { AUDIO_TAGS } from "../../lib/player.ts";
 import { useChat } from "../../state/chat.ts";
+import { agentName } from "../../state/settings.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
 
 /** The code of a graphic, look or effect, in a real editor (highlighting, brackets, search; ⌘S saves). */
@@ -152,7 +153,7 @@ export function AskClaude({
           Make a new one
         </Button>
         <Button size="sm" variant="accent" disabled={!text.trim() || busy} onClick={() => ask(change)}>
-          {busy ? "Claude is working…" : "Change this one"}
+          {busy ? `${agentName()} is working…` : "Change this one"}
         </Button>
       </div>
     </div>

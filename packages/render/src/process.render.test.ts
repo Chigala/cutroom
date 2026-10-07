@@ -12,13 +12,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeProcessed, probe, renderableAsIs } from "@vedit/media";
 import { applyOps, emptyProject } from "@vedit/project";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { renderStills } from "./stills.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 describe.skipIf(!process.env.VEDIT_RENDER_TESTS)("a keyed clip, rendered", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "vedit-keyed-"));
+  let dir: string;
+  beforeAll(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "vedit-keyed-"));
+  });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
   it("shows the shot under it where the green was", async () => {

@@ -6,16 +6,29 @@ import type { EditorApi, EditorEvents } from "@vedit/bridge";
 import { Channel } from "@vedit/bridge/channels";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
-const invoke = <T>(channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args) as Promise<T>;
+/**
+ * A call to the main process. Its errors arrive as "Error invoking remote method 'x': Error: …": the
+ * window gets just the message, as written for people.
+ */
+const invoke = <T>(channel: string, ...args: unknown[]) =>
+  (ipcRenderer.invoke(channel, ...args) as Promise<T>).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(message.replace(/^Error invoking remote method '[^']+': (?:[A-Za-z]*Error: )?/, ""));
+  });
 
 const api: EditorApi = {
   kind: "desktop",
   project: {
     restore: () => invoke(Channel.restore),
     open: (dir) => invoke(Channel.open, dir),
-    create: (name) => invoke(Channel.create, name),
+    create: (name, folder) => invoke(Channel.create, name, folder),
     openDemo: () => invoke(Channel.openDemo),
     recent: () => invoke(Channel.recent),
+    folders: () => invoke(Channel.folders),
+    newFolder: (name) => invoke(Channel.newFolder, name),
+    pin: (dir, pinned) => invoke(Channel.pin, dir, pinned),
+    rename: (dir, name) => invoke(Channel.rename, dir, name),
+    move: (dir, folder) => invoke(Channel.move, dir, folder),
     thumbnail: (dir) => invoke(Channel.thumbnail, dir),
     duplicate: (dir, from) => invoke(Channel.duplicate, dir, from),
     trash: (dir) => invoke(Channel.trash, dir),
@@ -23,7 +36,7 @@ const api: EditorApi = {
     commit: (req) => invoke(Channel.commit, req),
     importFiles: (paths) => invoke(Channel.importFiles, paths),
     pickAndImport: () => invoke(Channel.pickAndImport),
-    newFromVideos: () => invoke(Channel.newFromVideos),
+    newFromVideos: (folder) => invoke(Channel.newFromVideos, folder),
     attach: (paths) => invoke(Channel.attach, paths),
     attachData: (name, bytes) => invoke(Channel.attachData, name, bytes),
     reveal: (rel) => invoke(Channel.reveal, rel),

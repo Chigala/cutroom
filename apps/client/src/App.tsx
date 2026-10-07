@@ -24,7 +24,7 @@ import { connectJobs } from "./state/jobs.ts";
 import { offerToKeep } from "./state/library.ts";
 import { currentTime, holdStep, releaseStep, seekTime, togglePlay } from "./state/playback.ts";
 import { connectHost, edit, receive, redo, undo, useProject } from "./state/project.ts";
-import { connectProjects, openProject, useProjects } from "./state/projects.ts";
+import { connectProjects, openProject, railOrder, useProjects } from "./state/projects.ts";
 import { loadSettings, useSettings } from "./state/settings.ts";
 import { fitTimeline, setRange, zoomBy } from "./state/timeline.ts";
 import { dismissToast, toast, useToasts } from "./state/toast.ts";
@@ -201,7 +201,8 @@ function useHotkeys(): void {
         // By key position, so ⌘1 is ⌘1 on any layout (AZERTY's is "&").
         const n = /^Digit([1-9])$/.exec(e.code) ? Number(e.code.slice(5)) : 0;
         if (n >= 1 && n <= PROJECT_SHORTCUTS) {
-          const target = useProjects.getState().recent[n - 1];
+          const { recent, folders } = useProjects.getState();
+          const target = railOrder(recent, folders, useUi.getState().folded)[n - 1];
           e.preventDefault();
           if (target && target.dir !== useProject.getState().dir)
             void openProject(() => host.project.open(target.dir));

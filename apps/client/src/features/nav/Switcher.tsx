@@ -57,7 +57,7 @@ export function Switcher() {
     const projects = matching(byTime, query).map(
       (r): Row => ({
         key: r.dir,
-        icon: <ProjectThumb dir={r.dir} name={r.name} className="!h-[34px] !w-[24px] text-[11px]" />,
+        icon: <ProjectThumb dir={r.dir} name={r.name} size={34} />,
         label: r.name,
         meta: working.includes(r.dir) ? "Claude is editing" : r.dir === dir ? "Open" : ago(r.openedAt),
         ...(working.includes(r.dir) && { metaClass: "shimmer" }),

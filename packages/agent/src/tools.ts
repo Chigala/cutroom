@@ -235,6 +235,26 @@ export interface ToolContext {
   running?(busy: boolean): void;
   /** A tool call started or ended, for the chat's record of the work. */
   tool?(call: ToolCall): void;
+  /** Indexing reaches the scratch copy as it lands (runAgent), so a clip being indexed is worth waiting for. */
+  readonly followsIndexing?: boolean;
+}
+
+/** How long a tool waits for a clip that's still being indexed (an attachment, usually under a minute). */
+const INDEX_WAIT = 90_000;
+
+/**
+ * The clip once indexing is done with it: at once when it is, or after waiting for it (up to
+ * INDEX_WAIT) when this request's copy follows indexing. Null when there's no such clip.
+ */
+async function indexedClip(ctx: ToolContext, id: string | undefined): Promise<Source | null> {
+  const clip = () => ctx.scratch.doc.sources.find((s) => s.id === id) ?? null;
+  const busy = () => clip()?.status === "pending" || clip()?.status === "indexing";
+  if (busy() && ctx.followsIndexing) {
+    ctx.activity?.(`Waiting for ${id} to finish indexing…`);
+    const until = Date.now() + INDEX_WAIT;
+    while (busy() && Date.now() < until) await new Promise((r) => setTimeout(r, 500));
+  }
+  return clip();
 }
 
 let calls = 0;
@@ -915,11 +935,14 @@ ${compactFields()}`,
           inspirationOps(doc, pack, { keepLook: keep }),
         );
       if (action === "measure") {
-        const clip = doc.sources.find((s) => s.id === source);
+        const clip = await indexedClip(ctx, source);
         if (!clip) return { text: `No clip "${source ?? ""}".`, isError: true };
         if (clip.status === "pending" || clip.status === "indexing")
-          return { text: `${clip.id} is still being indexed; measure it once it's ready.`, isError: true };
-        const report = measureReference(doc, clip.id);
+          return {
+            text: `${clip.id} is still being indexed. Carry on with the rest of the request and measure it last.`,
+            isError: true,
+          };
+        const report = measureReference(ctx.scratch.doc, clip.id);
         return report
           ? { text: referenceText(report) }
           : { text: `${clip.id} isn't a video.`, isError: true };
@@ -1225,9 +1248,10 @@ ${compactFields()}`,
       const b = sc ? sc.out : to;
       if (!src || a === undefined || b === undefined || b <= a)
         return { text: "Give a scene, or a source with from < to.", isError: true };
+      await indexedClip(ctx, src);
       const prefix = `t${Math.round(a * 10)}_`;
       const tracks = await ctx.host.track(src, a, b, prefix);
-      const analysis = doc.analyses.find((x) => x.id === src);
+      const analysis = ctx.scratch.doc.analyses.find((x) => x.id === src);
       if (!analysis) return { text: `${src} has no analysis yet (still indexing?).`, isError: true };
       // New tracks replace any earlier ones over the same stretch.
       const kept = (analysis.tracks ?? []).filter((t) => t.end < a || t.start > b);

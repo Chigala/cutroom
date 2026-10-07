@@ -206,6 +206,19 @@ export class ProjectService {
 
   private readonly listeners = new Map<string, Set<(payload: never) => void>>();
 
+  /** Requests running in a project, taking in what indexing writes there meanwhile (runAgent). */
+  private readonly indexWatchers = new Map<string, Set<(ops: readonly Op[]) => void>>();
+
+  private watchIndexing(dir: string, listener: (ops: readonly Op[]) => void): () => void {
+    const set = this.indexWatchers.get(dir) ?? new Set();
+    set.add(listener);
+    this.indexWatchers.set(dir, set);
+    return () => {
+      set.delete(listener);
+      if (!set.size) this.indexWatchers.delete(dir);
+    };
+  }
+
   /** Listens to the events the window gets (the benchmark runs without one). Returns the unsubscribe. */
   on<E extends keyof EditorEvents>(event: E, listener: (payload: EditorEvents[E]) => void): () => void {
     const set = this.listeners.get(event) ?? new Set();
@@ -443,6 +456,7 @@ export class ProjectService {
   private events(dir: string) {
     return {
       onCommit: (commit: Commit) => {
+        if (commit.author === "index") for (const l of this.indexWatchers.get(dir) ?? []) l(commit.ops);
         // A project working in the background: its changes stay in it (the window shows another one),
         // and its thumbnail follows its shots.
         if (this.store?.dir !== dir) {
@@ -1856,6 +1870,7 @@ export class ProjectService {
       attachments: req.attachments.map((a) => a.source),
       handEdits: hand,
       host: this.agentHost(store),
+      indexed: (listener) => this.watchIndexing(store.dir, listener),
       backend: settings.backend,
       harness: settings.harness,
       model: settings.model,

@@ -1035,7 +1035,9 @@ function Composer({ dir }: { dir: string | null }) {
             className="relative block w-full resize-none bg-transparent pb-3 text-sm leading-[1.45] text-fg outline-none placeholder:text-faint"
           />
         </div>
-        {/* A narrow column drops words before anything wraps: Point and the Tab hint keep just their icon and key. */}
+        {/* A narrow column drops words before anything wraps: Point, the effort, the usage's window and the
+            Tab hint keep just their icon, figure and key. The right side never gives way, so nothing slides
+            under it. */}
         <div className="@container flex items-center justify-between gap-2">
           <div className="flex min-w-0 gap-1.5">
             <button
@@ -1075,7 +1077,7 @@ function Composer({ dir }: { dir: string | null }) {
             <ThinkingPicker />
             <InspirationChip />
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-2.5">
             <UsageMeter />
             {/* Beside Send, so it never sits under a suggestion that runs to two lines. */}
             {offer && text !== offer && (

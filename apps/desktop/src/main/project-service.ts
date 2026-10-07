@@ -392,6 +392,9 @@ export class ProjectService {
     await this.remember(next.dir, next.doc.meta.name);
     this.refreshThumbnail(0);
     this.indexer.resume();
+    // Footage made from its clips (cutouts, steadied shots, music taken out) that's missing or failed
+    // last time: made now, not only after the next edit.
+    this.scheduleCutouts();
     void this.library.setProject(next.dir);
     if (onWindowsDrive(next.dir))
       // Once the window has the project (its warning toasts are listening by then).

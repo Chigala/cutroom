@@ -67,6 +67,24 @@ export type Meta = z.infer<typeof Meta>;
 
 export const SourceKind = z.enum(["video", "image", "audio", "solid"]);
 
+/** How a clip was made from others by process_media: its inputs and the ffmpeg filter graph run on them. */
+export const ProcessRecipe = z.object({
+  inputs: z
+    .array(
+      z.object({
+        source: Id,
+        in: Seconds.optional().describe("Seconds into the clip; its start when unset"),
+        out: Seconds.optional().describe("Seconds into the clip; its end when unset"),
+      }),
+    )
+    .min(1)
+    .max(4),
+  graph: z.string().min(1).max(4000).describe("The ffmpeg filter graph, outputs labelled [v] and [a]"),
+  kind: z.enum(["video", "audio", "image"]),
+  alpha: z.boolean().optional().describe("A see-through video (after a key)"),
+});
+export type ProcessRecipe = z.infer<typeof ProcessRecipe>;
+
 /** sources/index.json: written by import and indexing, read-only to the agent. */
 export const Source = z.object({
   id: Id,
@@ -98,6 +116,7 @@ export const Source = z.object({
     })
     .optional()
     .describe("Where a file the agent fetched came from, for credits"),
+  recipe: ProcessRecipe.optional().describe("How process_media made this clip: run it again to remake it"),
 });
 export type Source = z.infer<typeof Source>;
 

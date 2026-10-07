@@ -27,6 +27,7 @@ import {
   pictureProfile,
   type Segment,
   seeClip,
+  seeThrough,
   segmentsOf,
   transcribeWords,
   voiceEnvelope,
@@ -582,7 +583,8 @@ export class Indexer {
       const analysis: Analysis = { id, silences: [], shots: [] };
       let transcript: Transcript | null = null;
 
-      if (source.kind === "video") {
+      // A see-through clip (a keyed one) plays as it is: an H.264 preview copy would lose its transparency.
+      if (source.kind === "video" && !(await seeThrough(source.path))) {
         emit("preview", 0, "Making a preview copy");
         await makeProxy(source.path, files.proxy, {
           hdr: source.hdr,

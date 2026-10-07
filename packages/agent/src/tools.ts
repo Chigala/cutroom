@@ -40,6 +40,7 @@ import {
   type Op,
   OpError,
   opSchemaFor,
+  ProcessRecipe,
   type ProjectDoc,
   packFromProject,
   parseWordRef,
@@ -49,6 +50,7 @@ import {
   replaceTimelineOps,
   replaceWordsOps,
   SHAPES,
+  type Source,
   STARTER_INSPIRATIONS,
   sceneAt,
   searchAssets,
@@ -170,6 +172,12 @@ export interface AgentHost {
     /** Saves one to the user's inspirations (replacing one with the same id). */
     save(pack: InspirationPack): Promise<InspirationInfo>;
   };
+  /**
+   * Runs an ffmpeg filter graph on the project's clips (process.ts in @vedit/media): makes a clip,
+   * which the ops add (the same recipe reuses the clip it made before), or measures and reports.
+   */
+  makeMedia?(recipe: ProcessRecipe, name: string, doc: ProjectDoc): Promise<{ ops: Op[]; source: Source }>;
+  measureMedia?(recipe: ProcessRecipe, doc: ProjectDoc): Promise<string>;
   /** Keeps a picture the agent saw for the chat to show; its media key. */
   keepPicture?(jpeg: Buffer): Promise<string>;
   /** Screenshots a web page into the project; the ops add it as a source. */
@@ -1327,6 +1335,72 @@ export const TOOLS: readonly AgentTool[] = [
         : {
             text: `Made the steadied and slowed footage of ${ops.length} ${ops.length === 1 ? "clip" : "clips"}.`,
           };
+    },
+  }),
+  tool({
+    name: "process_media",
+    description: `Process the project's clips with ffmpeg, for what nothing else here does: write a filter graph, and get a new clip (make) or numbers back (measure). The inputs are clips by id (up to 4, each trimmed with in/out seconds into it), [0:v] [0:a] [1:v]... in the graph; label the final outputs [v] (picture) and [a] (sound), and leave out [a] for a silent result. kind: video (an .mp4; alpha: true makes a see-through .webm, after a key), audio, or image (one frame, a .png). The new clip is added to the project (place it with apply_ops, like any clip); the same recipe again gives back the same clip, and clips list each one's recipe, so remake one by changing it. Making takes about as long as the clip, more for heavy filters; keep inputs trimmed to what you need.
+Some recipes: reverse ([0:v]reverse[v];[0:a]areverse[a]; keep it under a minute) and a boomerang (split, reverse, concat); green screen ([0:v]chromakey=0x00FF00:0.15:0.05,despill=green,format=yuva420p[v] with alpha); an audiogram ([0:a]asplit[w][a];[w]showwaves=s=1080x480:mode=cline:rate=30:colors=white[v]); a voice higher or lower (asetrate=44100*1.4,aresample=44100,atempo=1/1.4) or with echo (aecho); grain off dark footage (hqdn3d or nlmeans); sharpening (cas); flicker off (deflicker); a fixed logo hidden (delogo); fisheye straightened (lenscorrection); a still from a frame (kind image); a timelapse (setpts=PTS/8, select). Not here: anything reading or writing other files (movie, lut3d, drawtext, subtitles, a file= option), plugins and models, and hardware-only filters. Titles and text are the project's own, not ffmpeg's.
+measure: true runs the graph and returns what its filters report instead: signalstats with metadata=print (YAVG, UAVG, VAVG, SATAVG: levels and colour, to match shots or check exposure), blackdetect, freezedetect, silencedetect, astats, ebur128, cropdetect, idet. Sample with fps=1 or select first: the report keeps 300 lines.`,
+    input: z.object({
+      label: Label,
+      inputs: z
+        .array(
+          z.object({
+            source: z.string().describe("A clip id"),
+            in: z.number().nonnegative().optional().describe("Seconds into the clip; its start when unset"),
+            out: z.number().nonnegative().optional().describe("Seconds into the clip; its end when unset"),
+          }),
+        )
+        .min(1)
+        .max(4),
+      graph: z
+        .string()
+        .min(1)
+        .max(4000)
+        .describe("An ffmpeg filter graph, final outputs labelled [v] and [a]"),
+      measure: z
+        .boolean()
+        .default(false)
+        .describe("Report what the filters measure instead of making a clip"),
+      kind: z.enum(["video", "audio", "image"]).default("video"),
+      alpha: z.boolean().default(false).describe("A see-through video (after a key)"),
+      name: z.string().min(1).max(120).optional().describe("The new clip's name; the label when unset"),
+    }),
+    async run({ label, inputs, graph, measure, kind, alpha, name }, ctx) {
+      const doc = ctx.scratch.doc;
+      for (const i of inputs) {
+        const s = doc.sources.find((x) => x.id === i.source);
+        if (!s) return { text: `There's no clip ${i.source}.`, isError: true };
+        if (i.out !== undefined && i.out <= (i.in ?? 0))
+          return { text: `${i.source}: out (${i.out}) must come after in (${i.in ?? 0}).`, isError: true };
+        if (s.duration > 0 && (i.in ?? 0) >= s.duration)
+          return {
+            text: `${i.source} is ${s.duration.toFixed(2)}s long: in is past its end.`,
+            isError: true,
+          };
+      }
+      const recipe = ProcessRecipe.parse({ inputs, graph, kind, ...(alpha && { alpha: true }) });
+      if (measure) {
+        if (!ctx.host.measureMedia) return { text: "Processing media isn't available here.", isError: true };
+        try {
+          return { text: await ctx.host.measureMedia(recipe, doc) };
+        } catch (err) {
+          return { text: `Couldn't measure: ${(err as Error).message}`, isError: true };
+        }
+      }
+      if (!ctx.host.makeMedia) return { text: "Processing media isn't available here.", isError: true };
+      let made: { ops: Op[]; source: Source };
+      try {
+        made = await ctx.host.makeMedia(recipe, name ?? label, doc);
+      } catch (err) {
+        return { text: `Not made: ${(err as Error).message}`, isError: true };
+      }
+      const s = made.source;
+      const what = `${s.kind}${s.width ? ` ${s.width}x${s.height}` : ""}${s.duration ? `, ${s.duration.toFixed(2)}s` : ""}${s.kind === "video" ? (s.hasAudio ? ", with sound" : ", silent") : ""}`;
+      if (!made.ops.length) return { text: `That recipe made ${s.id} before (${what}): use it.` };
+      const result = commit(ctx, label, made.ops);
+      return result.isError ? result : { text: `Made ${s.id} (${what}). Place it with apply_ops.` };
     },
   }),
   tool({

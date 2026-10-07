@@ -25,6 +25,7 @@ import type {
   ChatRecord,
   CommitResult,
   EditorEvents,
+  ProjectFolder,
   ProjectSnapshot,
   RecentProject,
 } from "@vedit/bridge";
@@ -102,6 +103,17 @@ import { claudeStatus, claudeTasks } from "./claude.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
+import {
+  type FolderEntry,
+  isProjectFolder,
+  makeProjectFolder,
+  moveVideo,
+  projectName,
+  projectOf,
+  renameProject,
+  samePath,
+  videosIn,
+} from "./folders.ts";
 import { makeNeededFootage } from "./footage.ts";
 import { History } from "./history.ts";
 import { cachePaths, Indexer, stopUpgrades } from "./indexer.ts";
@@ -472,11 +484,18 @@ export class ProjectService {
       if (files.length) return this.startWith(files);
       target = result.filePaths[0];
     }
+    // A project (a folder of videos), not a video: it joins the sidebar, and its latest video opens.
+    if (isProjectFolder(target)) {
+      await this.addFolder(target);
+      const [latest] = (await videosIn(target)).sort((a, b) => b.changedAt - a.changedAt);
+      return latest ? this.switchTo(await this.openStore(latest.dir)) : null;
+    }
     return this.switchTo(await this.openStore(target));
   }
 
   /** "New project from videos…": pick clips, get a fresh project with them in it. */
-  async newFromVideos(): Promise<ProjectSnapshot | null> {
+  async newFromVideos(rawFolder?: unknown): Promise<ProjectSnapshot | null> {
+    const folder = rawFolder ? await this.knownFolder(rawFolder) : undefined;
     const win = this.window();
     const options = {
       title: "Start a new project from videos",
@@ -487,17 +506,17 @@ export class ProjectService {
     };
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
     if (result.canceled || !result.filePaths.length) return null;
-    return this.startWith(result.filePaths);
+    return this.startWith(result.filePaths, folder);
   }
 
   /**
    * A new project in Movies, named after the first clip, with the clips imported. The import lands a
    * moment after the project opens, so the window shows it arriving (and indexing) like a drop.
    */
-  private async startWith(files: string[]): Promise<ProjectSnapshot> {
+  private async startWith(files: string[], folder?: string): Promise<ProjectSnapshot> {
     this.lastImportDir = path.dirname(files[0]!);
     const name = sanitize(path.basename(files[0]!, path.extname(files[0]!))) || "Untitled";
-    const dir = await freeDir(path.join(app.getPath("videos"), name));
+    const dir = await freeDir(path.join(folder ?? app.getPath("videos"), name));
     await mkdir(dir, { recursive: true });
     const snapshot = await this.switchTo(
       await ProjectStore.create(dir, await this.fresh(dir), this.events(dir)),
@@ -510,7 +529,13 @@ export class ProjectService {
     return snapshot;
   }
 
-  async create(name: string): Promise<ProjectSnapshot | null> {
+  async create(name: string, rawFolder?: unknown): Promise<ProjectSnapshot | null> {
+    if (rawFolder) {
+      // Inside a project: straight there, no picker.
+      const dir = await freeDir(path.join(await this.knownFolder(rawFolder), sanitize(name)));
+      await mkdir(dir, { recursive: true });
+      return this.switchTo(await ProjectStore.create(dir, await this.fresh(dir), this.events(dir)));
+    }
     const win = this.window();
     const options = {
       title: "Where should the project folder go?",
@@ -685,12 +710,194 @@ export class ProjectService {
    */
   private remember(dir: string, name: string): Promise<void> {
     return this.updateRecent((list) => {
-      const entry = { dir, name, openedAt: Date.now() };
       const at = list.findIndex((r) => r.dir === dir);
+      const entry = { ...list[at], dir, name, openedAt: Date.now() };
       if (at >= 0) list[at] = entry;
       else list.unshift(entry);
       return list.slice(0, 300);
     });
+  }
+
+  // --- Projects: folders of videos ------------------------------------------------------------------
+
+  private async folderList(): Promise<FolderEntry[]> {
+    try {
+      const list = JSON.parse(await readFile(paths.folders(), "utf8")) as FolderEntry[];
+      return list.filter((f) => isProjectFolder(f.dir));
+    } catch {
+      return [];
+    }
+  }
+
+  private folderWrites: Promise<unknown> = Promise.resolve();
+
+  /** Like the video list: one change at a time, written whole and renamed into place. */
+  private updateFolders(change: (list: FolderEntry[]) => FolderEntry[]): Promise<void> {
+    const run = this.folderWrites.then(async () => {
+      const list = change(await this.folderList());
+      const tmp = `${paths.folders()}.${process.pid}.tmp`;
+      await writeFile(tmp, JSON.stringify(list, null, 2));
+      await rename(tmp, paths.folders());
+    });
+    this.folderWrites = run.catch(() => undefined);
+    return run;
+  }
+
+  private async addFolder(dir: string): Promise<void> {
+    const name = await projectName(dir);
+    await this.updateFolders((list) =>
+      list.some((f) => samePath(f.dir, dir)) ? list : [{ dir, name, addedAt: Date.now() }, ...list],
+    );
+  }
+
+  /** A project in the sidebar (the window can't name any other folder). */
+  private async knownFolder(raw: unknown): Promise<string> {
+    const dir = z.string().max(4096).parse(raw);
+    const found = (await this.folderList()).find((f) => samePath(f.dir, dir));
+    if (!found) throw new Error("That project isn't in your sidebar.");
+    return found.dir;
+  }
+
+  /**
+   * The projects, each with its videos: the ones opened here and any others in its folder (made on
+   * another computer, synced in). A video opened here inside a project's folder brings the project in.
+   */
+  async folders(): Promise<ProjectFolder[]> {
+    const recent = await this.recent();
+    let list = await this.folderList();
+    const found = new Set<string>();
+    for (const r of recent) {
+      const parent = path.dirname(r.dir);
+      if (!found.has(parent) && !list.some((f) => samePath(f.dir, parent)) && isProjectFolder(parent))
+        found.add(parent);
+    }
+    if (found.size) {
+      for (const dir of found) await this.addFolder(dir);
+      list = await this.folderList();
+    }
+    return Promise.all(
+      list.map(async (f) => {
+        const onDisk = await videosIn(f.dir);
+        const videos: RecentProject[] = onDisk.map((v) => {
+          const seen = recent.find((r) => samePath(r.dir, v.dir));
+          return {
+            dir: seen?.dir ?? v.dir,
+            name: seen?.name ?? v.name,
+            openedAt: seen?.openedAt ?? v.changedAt,
+            ...(seen?.pinned && { pinned: true }),
+          };
+        });
+        return {
+          dir: f.dir,
+          name: await projectName(f.dir),
+          ...(f.pinned && { pinned: true }),
+          videos: videos.sort((a, b) => b.openedAt - a.openedAt),
+        };
+      }),
+    );
+  }
+
+  async newFolder(name: string): Promise<ProjectFolder> {
+    const made = await makeProjectFolder(app.getPath("videos"), name.trim() || "Untitled project");
+    await this.updateFolders((list) => [made, ...list]);
+    return { dir: made.dir, name: made.name, videos: [] };
+  }
+
+  /** Pins a video or a project, or unpins it. */
+  async pin(raw: unknown, rawPinned: unknown): Promise<void> {
+    const dir = z.string().max(4096).parse(raw);
+    const pinned = z.boolean().parse(rawPinned);
+    const folders = await this.folderList();
+    if (folders.some((f) => samePath(f.dir, dir))) {
+      await this.updateFolders((list) =>
+        list
+          .map((f) => (samePath(f.dir, dir) ? { ...f, pinned } : f))
+          .map(({ pinned: p, ...f }) => (p ? { ...f, pinned: p } : f)),
+      );
+      return;
+    }
+    const video = await this.listed(dir);
+    const name = (await videosIn(path.dirname(video))).find((v) => samePath(v.dir, video))?.name;
+    await this.updateRecent((list) => {
+      const at = list.findIndex((r) => samePath(r.dir, video));
+      // A video found in a project's folder but never opened here joins the list to keep its pin.
+      const entry =
+        at >= 0 ? list[at]! : { dir: video, name: name ?? path.basename(video), openedAt: Date.now() };
+      const { pinned: _, ...rest } = entry;
+      const next = pinned ? { ...rest, pinned: true } : rest;
+      if (at >= 0) list[at] = next;
+      else list.push(next);
+      return list;
+    });
+  }
+
+  /**
+   * Renames a video or a project. A video takes the name as its edit's name (project.json, as the title
+   * bar renames it): in its open copy when it's open or Claude works in it, else opened just for that.
+   */
+  async rename(raw: unknown, rawName: unknown): Promise<void> {
+    const dir = z.string().max(4096).parse(raw);
+    const name = z.string().trim().min(1).max(200).parse(rawName);
+    const folder = (await this.folderList()).find((f) => samePath(f.dir, dir));
+    if (folder) {
+      const clean = await renameProject(folder.dir, name);
+      await this.updateFolders((list) => list.map((f) => (samePath(f.dir, dir) ? { ...f, name: clean } : f)));
+      return;
+    }
+    const video = await this.listed(dir);
+    const ops: Op[] = [{ op: "merge", key: "meta", patch: { name } }];
+    const live = this.store && samePath(this.store.dir, video) ? this.store : this.background.get(video);
+    if (live) {
+      const commit = live.commitAndBroadcast({ author: "user", message: `Renamed to ${name}`, ops });
+      if (live === this.store) this.renamed(commit);
+      else await this.updateRecent((list) => list.map((r) => (samePath(r.dir, video) ? { ...r, name } : r)));
+      return;
+    }
+    await this.closing.get(video);
+    const store = await ProjectStore.open(video, this.events(video));
+    store.commit({ author: "user", message: `Renamed to ${name}`, ops });
+    await store.flush();
+    await store.close();
+    await this.updateRecent((list) => list.map((r) => (samePath(r.dir, video) ? { ...r, name } : r)));
+  }
+
+  /**
+   * Moves a video into a project's folder, or out of one into the videos folder. The open one is closed,
+   * moved and opened again where it is now (its chat and history go with it). Files it owns (attachments,
+   * converted photos, stock) moved with it: the edit points at them there. Not while Claude works in it.
+   */
+  async move(raw: unknown, rawFolder: unknown): Promise<{ dir: string; snapshot: ProjectSnapshot | null }> {
+    const video = await this.listed(raw);
+    const to = rawFolder ? await this.knownFolder(rawFolder) : app.getPath("videos");
+    if (samePath(path.dirname(video), to)) return { dir: video, snapshot: null };
+    if (this.background.has(video) || [...this.asked.values()].some((a) => samePath(a.dir, video)))
+      throw new Error("Claude is working in that video. Move it when it's done.");
+    const wasOpen = this.store !== null && samePath(this.store.dir, video);
+    if (wasOpen) {
+      this.indexer.reset();
+      this.exporter.stop();
+      await this.store?.close();
+      this.store = null;
+      // What was writing into it (a proxy, a render, a thumbnail) winds down first: its files must be
+      // free to move (Windows won't move a folder with a file open in it).
+      await Promise.all([this.indexer.settled(), this.exporter.settled(), this.thumbs]);
+    }
+    await this.closing.get(video);
+    let moved: string;
+    try {
+      moved = await moveVideo(video, to);
+    } catch (err) {
+      if (wasOpen) await this.switchTo(await this.openStore(video));
+      throw err;
+    }
+    await this.updateRecent((list) => list.map((r) => (samePath(r.dir, video) ? { ...r, dir: moved } : r)));
+    const store = await ProjectStore.open(moved, this.events(moved));
+    const ops = relinkOps(store.doc, video, moved);
+    if (ops.length) store.commit({ author: "index", message: "Moved with its folder", ops });
+    if (wasOpen) return { dir: moved, snapshot: await this.switchTo(store) };
+    await store.flush();
+    await store.close();
+    return { dir: moved, snapshot: null };
   }
 
   private recentWrites: Promise<unknown> = Promise.resolve();
@@ -715,9 +922,13 @@ export class ProjectService {
   /** A project from the user's list (the window can't name any other folder). */
   private async listed(raw: unknown): Promise<string> {
     const dir = z.string().max(4096).parse(raw);
-    if (!(await this.recent()).some((r) => r.dir === dir))
-      throw new Error("That project isn't in your list.");
-    return dir;
+    if ((await this.recent()).some((r) => r.dir === dir)) return dir;
+    // A video in one of the projects (made elsewhere, never opened here), or a project itself.
+    const folders = await this.folderList();
+    if (folders.some((f) => samePath(f.dir, dir))) return dir;
+    const home = projectOf(dir, folders);
+    if (home && (await videosIn(home.dir)).some((v) => samePath(v.dir, dir))) return dir;
+    throw new Error("That video isn't in your sidebar.");
   }
 
   private thumbs: Promise<unknown> = Promise.resolve();

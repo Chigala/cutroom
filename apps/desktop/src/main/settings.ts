@@ -8,6 +8,8 @@ import { readSecrets, SECRET_FIELDS, type SecretField, type Secrets, writeSecret
 export const paths = {
   settings: () => path.join(app.getPath("userData"), "settings.json"),
   recent: () => path.join(app.getPath("userData"), "recent.json"),
+  /** The projects (folders of videos) in the sidebar. */
+  folders: () => path.join(app.getPath("userData"), "folders.json"),
   demo: () => path.join(app.getPath("userData"), "Demo Project"),
   cache: () => path.join(app.getPath("userData"), "cache"),
   remotionBundle: () => path.join(app.getPath("userData"), "cache", "remotion-bundle"),

@@ -25,10 +25,22 @@ export interface ProjectSnapshot {
   readonly commits: readonly Commit[];
 }
 
+/** A video: one edit, in its own folder. (Older code calls these projects.) */
 export interface RecentProject {
   readonly dir: string;
   readonly name: string;
   readonly openedAt: number;
+  /** Kept at the top of the sidebar. */
+  readonly pinned?: boolean;
+}
+
+/** A project: a folder holding several videos. */
+export interface ProjectFolder {
+  readonly dir: string;
+  readonly name: string;
+  readonly pinned?: boolean;
+  /** Its videos, most recently opened first. */
+  readonly videos: readonly RecentProject[];
 }
 
 export type CommitResult = { ok: true; commit: Commit } | { ok: false; error: string };
@@ -426,10 +438,23 @@ export interface EditorApi {
     restore(): Promise<ProjectSnapshot>;
     /** Shows a folder picker unless `dir` is given. Null when the user cancels. */
     open(dir?: string): Promise<ProjectSnapshot | null>;
-    /** New empty project in a folder the user picks. */
-    create(name: string): Promise<ProjectSnapshot | null>;
+    /** A new empty video: in a project folder when given one, else in a folder the user picks. */
+    create(name: string, folder?: string): Promise<ProjectSnapshot | null>;
     openDemo(): Promise<ProjectSnapshot>;
     recent(): Promise<RecentProject[]>;
+    /** Projects (folders of videos), each with its videos. */
+    folders(): Promise<ProjectFolder[]>;
+    /** A new project folder, in the videos folder. */
+    newFolder(name: string): Promise<ProjectFolder>;
+    /** Pins a video or a project to the top of the sidebar, or unpins it. */
+    pin(dir: string, pinned: boolean): Promise<void>;
+    /** Renames a video or a project (its name in the app; folders on disk keep theirs). */
+    rename(dir: string, name: string): Promise<void>;
+    /**
+     * Moves a video's folder into a project, or out of one (null). Returns where it is now, and, when it
+     * was the open video, the project as it opened again there.
+     */
+    move(dir: string, folder: string | null): Promise<{ dir: string; snapshot: ProjectSnapshot | null }>;
     /** A small frame of a recent project's first shot (a data URL), or null when it has none yet. */
     thumbnail(dir: string): Promise<string | null>;
     /**
@@ -446,8 +471,8 @@ export interface EditorApi {
     importFiles(paths: string[]): Promise<CommitResult>;
     /** Asks for clips with the system file picker, then imports them. Null when the user cancels. */
     pickAndImport(): Promise<CommitResult | null>;
-    /** Picks clips and starts a new project with them. Null when the user cancels. */
-    newFromVideos(): Promise<ProjectSnapshot | null>;
+    /** Picks clips and starts a new video with them, in a project folder when given one. Null when cancelled. */
+    newFromVideos(folder?: string): Promise<ProjectSnapshot | null>;
     /**
      * Adds reference media for a request ("put this after scene one"): clips go in the library and get
      * indexed, but nothing goes on the timeline. Files are read in place, like imports.

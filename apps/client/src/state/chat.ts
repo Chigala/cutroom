@@ -715,3 +715,17 @@ async function showDraftSoFar(dir: string): Promise<void> {
 
 /** Resolves once the open project's conversation is in (after a switch, before sending into it). */
 export const chatReady = (): Promise<void> => chatLoading;
+
+/**
+ * What was asked in this project, newest first, for ↑ in the chat box: each request once (asking the
+ * same thing twice in a row doesn't make ↑ stop on it twice).
+ */
+export function sentRequests(items: readonly { kind: string; text?: string }[]): string[] {
+  const out: string[] = [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const m = items[i]!;
+    const text = m.kind === "user" ? m.text?.trim() : undefined;
+    if (text && text !== out.at(-1)) out.push(text);
+  }
+  return out;
+}

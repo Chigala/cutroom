@@ -45,6 +45,7 @@ export function projectView(doc: ProjectDoc): string {
       })(),
       ...(s.summary && { summary: s.summary }),
       ...(s.origin && { from: `${s.origin.provider} ${s.origin.url}` }),
+      ...(s.recipe && { recipe: s.recipe }),
       ...(s.tags.length && { tags: s.tags }),
       status: s.status,
       ...(doc.analyses.find((a) => a.id === s.id)?.face && {

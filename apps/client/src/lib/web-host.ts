@@ -48,7 +48,24 @@ const SAMPLE_PROJECTS =
       ]
     : null;
 
+/** In development with ?projects: a couple of projects (folders of videos) to work on the sidebar. */
+const SAMPLE_FOLDERS = SAMPLE_PROJECTS
+  ? [
+      { name: "Patek campaign", videos: ["Patek teaser", "Patek reel", "Watch close-ups"] },
+      { name: "Podcast clips", videos: ["Episode 12 hook", "Guest story"] },
+    ]
+  : [];
+
 export function createWebHost(): EditorApi {
+  // The sample sidebar's state, so pins and moves can be tried in the browser.
+  const pins = new Set<string>();
+  const inFolder = new Map<string, string>(
+    SAMPLE_FOLDERS.flatMap((f) => f.videos.map((v) => [`(sample) ${v}`, `(folder) ${f.name}`] as const)),
+  );
+  const sampleVideos = [...(SAMPLE_PROJECTS ?? []), ...SAMPLE_FOLDERS.flatMap((f) => f.videos)].map(
+    (name, i) => ({ dir: `(sample) ${name}`, name, openedAt: Date.now() - (i + 1) * 3_600_000 }),
+  );
+  const folders = SAMPLE_FOLDERS.map((f) => ({ dir: `(folder) ${f.name}`, name: f.name }));
   let doc: ProjectDoc = demoProject();
   let head: string | null = null;
   const commits: Commit[] = [];
@@ -74,6 +91,7 @@ export function createWebHost(): EditorApi {
     kit: "",
     style: "",
     showThinking: true,
+    instantEdits: false,
     claudePath: "",
     libraryDir: "",
   };
@@ -133,16 +151,39 @@ export function createWebHost(): EditorApi {
         return snapshot();
       },
       // One project here: the demo (in development, ?projects lists a few more, to work on the rail).
-      recent: async () => [
-        { dir: "(in memory)", name: doc.meta.name, openedAt: Date.now() },
-        ...(SAMPLE_PROJECTS
-          ? SAMPLE_PROJECTS.map((name, i) => ({
-              dir: `(sample) ${name}`,
-              name,
-              openedAt: Date.now() - (i + 1) * 3_600_000,
-            }))
-          : []),
-      ],
+      recent: async () =>
+        [{ dir: "(in memory)", name: doc.meta.name, openedAt: Date.now() }, ...sampleVideos].map((v) =>
+          pins.has(v.dir) ? { ...v, pinned: true } : v,
+        ),
+      folders: async () =>
+        folders.map((f) => ({
+          ...f,
+          ...(pins.has(f.dir) && { pinned: true }),
+          videos: sampleVideos
+            .filter((v) => inFolder.get(v.dir) === f.dir)
+            .map((v) => (pins.has(v.dir) ? { ...v, pinned: true } : v)),
+        })),
+      newFolder: async (name) => {
+        const folder = { dir: `(folder) ${name}`, name };
+        folders.unshift(folder);
+        return { ...folder, videos: [] };
+      },
+      rename: async (dir, name) => {
+        const folder = folders.find((f) => f.dir === dir);
+        if (folder) folder.name = name;
+        const video = sampleVideos.find((v) => v.dir === dir);
+        if (video) video.name = name;
+        if (dir === "(in memory)") doc = { ...doc, meta: { ...doc.meta, name } };
+      },
+      pin: async (dir, pinned) => {
+        if (pinned) pins.add(dir);
+        else pins.delete(dir);
+      },
+      move: async (dir, folder) => {
+        if (folder) inFolder.set(dir, folder);
+        else inFolder.delete(dir);
+        return { dir, snapshot: null };
+      },
       thumbnail: async () => null,
       duplicate: async () => {
         throw new Error(DESKTOP_ONLY);
@@ -188,7 +229,18 @@ export function createWebHost(): EditorApi {
         const send = (e: AgentEvent) => emit("agent", e);
         setTimeout(() => {
           send({ runId, type: "start", backend: "subscription" });
-          send({ runId, type: "error", message: `The agent runs in the desktop app. ${DESKTOP_ONLY}` });
+          // In development, ?reply answers with a made-up reply and a suggested next request, to work on
+          // the chat without the desktop app.
+          if (import.meta.env.DEV && new URLSearchParams(location.search).has("reply"))
+            send({
+              runId,
+              type: "done",
+              commit: null,
+              elapsedMs: 1200,
+              summary: "Made the hook bigger and moved it up a little.",
+              next: "Make the captions a bit bigger",
+            });
+          else send({ runId, type: "error", message: `The agent runs in the desktop app. ${DESKTOP_ONLY}` });
         }, 0);
         return { runId };
       },

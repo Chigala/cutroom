@@ -43,7 +43,12 @@ export function buildMain({ mode = "production", watch = false } = {}) {
   const base = shared(mode, watch);
   return build({
     ...base,
-    define: { ...base.define, __RENDER_ENTRY__: JSON.stringify(renderEntry) },
+    define: {
+      ...base.define,
+      __RENDER_ENTRY__: JSON.stringify(renderEntry),
+      // Cutroom's Jev proxy (instant edits), when the build is given one.
+      __JEV_URL__: JSON.stringify(process.env.VEDIT_JEV_URL ?? ""),
+    },
     ssr: { noExternal: true, external: NATIVE, target: "node" },
     build: {
       ...base.build,

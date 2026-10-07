@@ -53,6 +53,10 @@ jobs:
 
       - name: Build the app
         run: pnpm --filter @vedit/desktop build
+        env:
+          # Cutroom's Jev proxy (instant edits), baked into the app: a repository variable, not a secret
+          # (the key stays in the Worker). Unset, the app does without instant edits.
+          VEDIT_JEV_URL: ${{ vars.VEDIT_JEV_URL }}
       - name: Bundle ffmpeg, whisper and the voice cleaner
         run: pnpm --filter @vedit/desktop tools
       - name: Stage the runtime packages

@@ -7,6 +7,8 @@ const started: string[] = [];
 const stopped: string[] = [];
 vi.mock("@vedit/media", async (real) => ({
   ...(await real<typeof import("@vedit/media")>()),
+  // Not see-through: answered at once (a real ffprobe of a file that isn't there finishes in any order).
+  seeThrough: async () => false,
   makeProxy: (_in: string, out: string, o: { signal?: AbortSignal }) =>
     new Promise((_, no) => {
       const id = path.basename(out, ".mp4");

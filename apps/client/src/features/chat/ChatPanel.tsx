@@ -43,6 +43,7 @@ import {
   STARTERS,
   send,
   sendNextQueued,
+  sentRequests,
   setAutoFirstCut,
   stop,
   useChat,
@@ -769,6 +770,51 @@ function Composer({ dir }: { dir: string | null }) {
       : null;
 
   const selected = useUi((s) => (s.selection ? s.selection.id : null));
+
+  // ↑ in an empty box brings back what was sent before (again for older ones), ↓ comes back down, to
+  // what was being typed.
+  const sent = useChat((s) => s.items);
+  const recall = useRef<{ at: number; draft: string } | null>(null);
+  const browse = (step: 1 | -1): boolean => {
+    const list = sentRequests(sent);
+    const at = (recall.current?.at ?? -1) + step;
+    if (at >= list.length) return false;
+    if (at < 0) {
+      setText(recall.current?.draft ?? "");
+      recall.current = null;
+      return true;
+    }
+    recall.current = { at, draft: recall.current?.draft ?? text };
+    setText(list[at]!);
+    return true;
+  };
+
+  // Tab takes the suggestion even when the box doesn't have focus (after a click on the video, the
+  // timeline or the reply), unless focus is on a control being tabbed through or a field being typed in.
+  const offered = useRef(offer);
+  offered.current = text === offer ? null : offer;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const take = offered.current;
+      const el = document.activeElement;
+      if (!take || el === ref.current || document.querySelector('[role="dialog"], [role="menu"]')) return;
+      if (
+        el instanceof HTMLElement &&
+        el !== document.body &&
+        el.matches(
+          'button, a[href], input, textarea, select, [contenteditable="true"], [role="menuitem"], [role="tab"]',
+        )
+      )
+        return;
+      e.preventDefault();
+      setText(take);
+      ref.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   useEffect(() => {
     composerRef.current = ref.current;
     return () => {
@@ -931,34 +977,64 @@ function Composer({ dir }: { dir: string | null }) {
         <label htmlFor="composer" className="sr-only">
           Tell the agent what to change
         </label>
-        <textarea
-          id="composer"
-          ref={ref}
-          rows={1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onPaste={(e) => {
-            // A pasted screenshot (or copied file) attaches; pasted text stays text.
-            const files = [...e.clipboardData.files];
-            if (!files.length) return;
-            e.preventDefault();
-            attach(files);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Tab" && !e.shiftKey && offer && text !== offer) {
+        <div className="relative">
+          {/* The rest of the suggestion, faint, after what's typed: Tab finishes it. */}
+          {offer && text && text !== offer && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 pb-3 text-sm leading-[1.45] break-words whitespace-pre-wrap text-faint"
+            >
+              <span className="invisible">{text}</span>
+              {offer.slice(text.length)}
+            </div>
+          )}
+          <textarea
+            id="composer"
+            ref={ref}
+            rows={1}
+            value={text}
+            onChange={(e) => {
+              recall.current = null;
+              setText(e.target.value);
+            }}
+            onPaste={(e) => {
+              // A pasted screenshot (or copied file) attaches; pasted text stays text.
+              const files = [...e.clipboardData.files];
+              if (!files.length) return;
               e.preventDefault();
-              setText(offer);
-              return;
-            }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-            if (e.key === "Escape") e.currentTarget.blur();
-          }}
-          placeholder={placeholder}
-          className="block w-full resize-none bg-transparent pb-3 text-sm leading-[1.45] text-fg outline-none placeholder:text-faint"
-        />
+              attach(files);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Tab" && !e.shiftKey && offer && text !== offer) {
+                e.preventDefault();
+                setText(offer);
+                return;
+              }
+              // ↑ at the start of an empty box (or one showing an earlier request), ↓ back down.
+              const browsing = recall.current !== null;
+              if (
+                (e.key === "ArrowUp" || (e.key === "ArrowDown" && browsing)) &&
+                !e.shiftKey &&
+                !e.altKey &&
+                !e.metaKey &&
+                !e.ctrlKey &&
+                !e.nativeEvent.isComposing &&
+                (text === "" || browsing) &&
+                browse(e.key === "ArrowUp" ? 1 : -1)
+              ) {
+                e.preventDefault();
+                return;
+              }
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+              if (e.key === "Escape") e.currentTarget.blur();
+            }}
+            placeholder={placeholder}
+            className="relative block w-full resize-none bg-transparent pb-3 text-sm leading-[1.45] text-fg outline-none placeholder:text-faint"
+          />
+        </div>
         {/* A narrow column drops words before anything wraps: Point and the Tab hint keep just their icon and key. */}
         <div className="@container flex items-center justify-between gap-2">
           <div className="flex min-w-0 gap-1.5">

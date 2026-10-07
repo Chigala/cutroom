@@ -221,6 +221,16 @@ export function SettingsDialog() {
                   label="Show its thinking"
                 />
               </Row>
+              <Row
+                title="Instant edits"
+                hint="Quick tweaks like “captions bigger”, “mute the music” or “undo the zooms” happen at once, without waiting for Claude. Anything else still goes to Claude."
+              >
+                <Switch
+                  checked={settings.instantEdits}
+                  onChange={(instantEdits) => void update({ instantEdits })}
+                  label="Instant edits"
+                />
+              </Row>
             </Page>
           )}
 

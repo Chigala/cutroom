@@ -450,3 +450,83 @@ describe("what the picture holds, for the agent", () => {
     });
   });
 });
+
+describe("process_media", () => {
+  it("adds the clip a recipe makes, with its recipe, and reuses it for the same recipe", async () => {
+    const { c, scratch } = ctx(talking());
+    const asked: unknown[] = [];
+    c.host.makeMedia = async (recipe, name, doc) => {
+      asked.push(recipe);
+      const made = doc.sources.find((s) => s.path === "/processed/rev.mp4");
+      if (made) return { ops: [], source: made };
+      const source = {
+        ...doc.sources[0]!,
+        id: "clip_2",
+        label: name,
+        path: "/processed/rev.mp4",
+        recipe,
+        status: "pending" as const,
+      };
+      return { ops: [{ op: "insert", coll: "sources", item: source }], source };
+    };
+    const input = {
+      label: "Backwards",
+      inputs: [{ source: "cam", in: 1, out: 3 }],
+      graph: "[0:v]reverse[v];[0:a]areverse[a]",
+    };
+    const out = await runTool("process_media", input, c);
+    expect(out.isError).toBeFalsy();
+    expect(out.text).toMatch(/Made clip_2 \(video, 8\.00s, with sound\)/);
+    expect(asked[0]).toEqual({
+      inputs: [{ source: "cam", in: 1, out: 3 }],
+      graph: input.graph,
+      kind: "video",
+    });
+    expect(scratch.doc.sources.find((s) => s.id === "clip_2")?.recipe?.graph).toBe(input.graph);
+    expect(scratch.groups.map((g) => g.label)).toEqual(["Backwards"]);
+    expect((await runTool("process_media", input, c)).text).toMatch(/made clip_2 before/);
+    expect(scratch.groups.length).toBe(1);
+  });
+
+  it("measures without changing the project", async () => {
+    const { c, scratch } = ctx(talking());
+    c.host.measureMedia = async () => "[Parsed_metadata_1] lavfi.signalstats.YAVG=112";
+    const out = await runTool(
+      "process_media",
+      {
+        label: "Levels",
+        inputs: [{ source: "cam" }],
+        graph: "[0:v]fps=1,signalstats,metadata=print",
+        measure: true,
+      },
+      c,
+    );
+    expect(out.text).toMatch(/YAVG=112/);
+    expect(scratch.ops).toEqual([]);
+  });
+
+  it("explains a recipe that can't run", async () => {
+    const { c } = ctx(talking());
+    c.host.makeMedia = async () => {
+      throw new Error("the movie filter isn't allowed here");
+    };
+    const missing = await runTool(
+      "process_media",
+      { label: "x", inputs: [{ source: "nope" }], graph: "[0:v]reverse[v]" },
+      c,
+    );
+    expect(missing).toMatchObject({ isError: true, text: "There's no clip nope." });
+    const backwards = await runTool(
+      "process_media",
+      { label: "x", inputs: [{ source: "cam", in: 3, out: 2 }], graph: "[0:v]reverse[v]" },
+      c,
+    );
+    expect(backwards.text).toMatch(/must come after in/);
+    const blocked = await runTool(
+      "process_media",
+      { label: "x", inputs: [{ source: "cam" }], graph: "movie=x[v]" },
+      c,
+    );
+    expect(blocked).toMatchObject({ isError: true, text: "Not made: the movie filter isn't allowed here" });
+  });
+});

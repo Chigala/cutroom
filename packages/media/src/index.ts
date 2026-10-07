@@ -20,6 +20,7 @@ export {
 export * from "./music.ts";
 export * from "./playable.ts";
 export * from "./probe.ts";
+export * from "./process.ts";
 export * from "./profile.ts";
 export * from "./see.ts";
 export { sfxFile } from "./sfx.ts";

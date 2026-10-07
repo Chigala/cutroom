@@ -140,6 +140,9 @@ async function makeProxyOnce(input: string, output: string, o: TranscodeOptions)
  * decodes well. Anything else (HDR, HEVC from phones, 4K, 10-bit) gets a master first.
  */
 export async function renderableAsIs(file: string): Promise<boolean> {
+  // A see-through clip (VP9 with alpha, as cutouts and keyed clips are): Chrome draws it as it is, and
+  // a master would lose the transparency.
+  if (await seeThrough(file)) return true;
   try {
     const { stdout } = await run("ffprobe", [
       "-v",
@@ -161,6 +164,32 @@ export async function renderableAsIs(file: string): Promise<boolean> {
       !hdr &&
       Math.min(Number(v.width), Number(v.height)) <= 1080
     );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a video is see-through: VP8/VP9 marked with alpha (WebM keeps it beside the picture), the kind
+ * the browser draws with its transparency. A preview copy or master (H.264) would lose it.
+ */
+export async function seeThrough(file: string): Promise<boolean> {
+  try {
+    const { stdout } = await run("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=codec_name:stream_tags=alpha_mode",
+      "-of",
+      "json",
+      file,
+    ]);
+    const v = (JSON.parse(stdout) as { streams?: { codec_name?: string; tags?: Record<string, string> }[] })
+      .streams?.[0];
+    const tags = Object.fromEntries(Object.entries(v?.tags ?? {}).map(([k, x]) => [k.toLowerCase(), x]));
+    return (v?.codec_name === "vp9" || v?.codec_name === "vp8") && tags.alpha_mode === "1";
   } catch {
     return false;
   }

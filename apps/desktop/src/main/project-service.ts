@@ -43,8 +43,11 @@ import {
   findSounds,
   grabFrame,
   isMedia,
+  makeProcessed,
   measureJoins,
+  measureProcessed,
   type Probed,
+  type ProcessInput,
   playableCopy,
   probe,
   resolveDerived,
@@ -81,6 +84,7 @@ import {
   nextId,
   type Op,
   OpError,
+  type ProcessRecipe,
   type ProjectDoc,
   packFromProject,
   round,
@@ -1472,6 +1476,18 @@ export class ProjectService {
         const origin = { url: c.page, provider: "klipy", license: "KLIPY", author: "" };
         return fetchedSourceOps(doc, await probe(file), label, origin, c.title);
       },
+      makeMedia: async (recipe, name, doc) => {
+        const file = await makeProcessed({
+          inputs: processInputs(recipe, doc),
+          graph: recipe.graph,
+          kind: recipe.kind,
+          ...(recipe.alpha && { alpha: true }),
+          dir: path.join(store.dir, "media", "processed"),
+        });
+        return processedSourceOps(doc, await probe(file), recipe, name);
+      },
+      measureMedia: (recipe, doc) =>
+        measureProcessed({ inputs: processInputs(recipe, doc), graph: recipe.graph }),
       capturePage: async (url, o, doc) => {
         const got = await capturePage(url, path.join(store.dir, "media", "captures"), o);
         const origin = { url: got.url, provider: "web", license: "", author: new URL(got.url).hostname };
@@ -1786,6 +1802,46 @@ function fetchedSourceOps(
     origin,
   };
   return { ops: [{ op: "insert", coll: "sources", item: source }], id };
+}
+
+/** A recipe's inputs: the project's clips, by id (nothing else can be read). */
+function processInputs(recipe: ProcessRecipe, doc: ProjectDoc): ProcessInput[] {
+  return recipe.inputs.map((i) => {
+    const s = doc.sources.find((x) => x.id === i.source);
+    if (!s?.path || s.kind === "solid") throw new Error(`there's no clip ${i.source} with a file to read`);
+    return { path: s.path, kind: s.kind, in: i.in, out: i.out };
+  });
+}
+
+/**
+ * A clip process_media made, as a source with its recipe: credited like what it was made from (a stock
+ * clip reversed is still that stock clip). The same file again is the clip already there.
+ */
+function processedSourceOps(
+  doc: ProjectDoc,
+  p: Probed,
+  recipe: ProcessRecipe,
+  name: string,
+): { ops: Op[]; source: Source } {
+  const existing = doc.sources.find((s) => s.path === p.path);
+  if (existing) return { ops: [], source: existing };
+  const origin = recipe.inputs
+    .map((i) => doc.sources.find((s) => s.id === i.source)?.origin)
+    .find((o) => o !== undefined);
+  const source: Source = {
+    ...p,
+    id: nextId("clip_", doc.sources),
+    label: name.slice(0, 200),
+    color: SWATCHES[doc.sources.length % SWATCHES.length]!,
+    status: p.kind === "image" ? "ready" : "pending",
+    proxy: false,
+    speech: false,
+    summary: `Made from ${recipe.inputs.map((i) => i.source).join(", ")} with process_media`,
+    tags: ["processed"],
+    ...(origin && { origin }),
+    recipe,
+  };
+  return { ops: [{ op: "insert", coll: "sources", item: source }], source };
 }
 
 function musicOps(doc: ProjectDoc, found: FoundTrack): Op[] {

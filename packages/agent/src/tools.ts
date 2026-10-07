@@ -6,6 +6,8 @@
 import type { ToolCall } from "@vedit/bridge";
 import { runChecks } from "@vedit/checks";
 import type {
+  FontQuery,
+  GoogleFamily,
   JoinReport,
   MemeCandidate,
   MemeKind,
@@ -19,12 +21,14 @@ import {
   type AssetEntry,
   applyOps,
   assetLine,
+  BUNDLED_FONTS,
   bestStretch,
   type ChangeGroup,
   cleanCutOps,
   cutReport,
   DERIVED,
   describeSound,
+  fontFromFile,
   gradeColorOf,
   graphicPreviewDoc,
   type InspirationInfo,
@@ -157,6 +161,12 @@ export interface AgentHost {
     setRole(role: string, id: string | null): Promise<void>;
     /** Copies project clips (a dropped song, sound, meme) into the shared library; their new asset ids. */
     keep(sourceIds: string[], doc: ProjectDoc): Promise<string[]>;
+  };
+  /** Google Fonts: the open families, and fetching some into the project's fonts/ folder. */
+  fonts?: {
+    find(q: FontQuery): Promise<GoogleFamily[]>;
+    /** Fetches a family's weights (and their italics) into fonts/; returns the files written. */
+    add(family: string, weights: readonly number[], italic: boolean): Promise<string[]>;
   };
   kits?: {
     list(): Promise<KitInfo[]>;
@@ -1767,6 +1777,72 @@ measure: true returns what the filters report instead: signalstats with metadata
               `${j.time.toFixed(2)}s into ${j.scene} (level ${fmt(j.loudness, " dB")}, pitch ${fmt(j.melody, " st")}${j.room !== null ? `, room ${fmt(j.room, " dB")}` : ""}, pause ${j.pause}s${j.sentenceEnd ? " after a sentence" : ""}): ${j.problems.join("; ")}`,
           ),
         ].join("\n"),
+      };
+    },
+  }),
+  tool({
+    name: "find_font",
+    description:
+      'Search Google Fonts (about 1,700 open families) when no bundled font or the project\'s own fits the look: by words of the name, kind, and the weights it must come in (a thin condensed sans: sans serif, weights [200 or 300], name "condensed"; or a family you know by name). Then add_font it.',
+    input: z.object({
+      name: z.string().max(60).optional().describe('Words of the family\'s name ("condensed", "playfair")'),
+      category: z.enum(["sans serif", "serif", "display", "handwriting", "monospace"]).optional(),
+      weights: z.array(z.number().int().min(100).max(900).multipleOf(100)).max(9).optional(),
+      italic: z.boolean().optional(),
+    }),
+    async run({ name, category, weights, italic }, ctx) {
+      if (!ctx.host.fonts) return { text: "Google Fonts isn't available here.", isError: true };
+      const found = await ctx.host.fonts.find({
+        ...(name && { name }),
+        ...(category && { category }),
+        ...(weights && { weights }),
+        ...(italic && { italic }),
+      });
+      if (!found.length) return { text: "No families match. Loosen the search (fewer words or weights)." };
+      return {
+        text: found
+          .map(
+            (f) =>
+              `${f.family} (${f.category.toLowerCase()}): ${f.weights.join(", ")}${f.italics.length ? `; italics ${f.italics.join(", ")}` : ""}`,
+          )
+          .join("\n"),
+      };
+    },
+  }),
+  tool({
+    name: "add_font",
+    description:
+      "Fetch a Google Font's weights into the project's fonts/ folder (once; it works offline from then on): usable by family name in captions, titles, graphics and the cover straight away. Ask only for the weights you'll use.",
+    input: z.object({
+      family: z.string().min(2).max(60).describe('As Google names it: "Oswald", "Barlow Condensed"'),
+      weights: z.array(z.number().int().min(100).max(900).multipleOf(100)).min(1).max(9),
+      italic: z.boolean().optional().describe("Their italics too"),
+    }),
+    async run({ family, weights, italic }, ctx) {
+      if (!ctx.host.fonts) return { text: "Google Fonts isn't available here.", isError: true };
+      const doc = ctx.scratch.doc;
+      const has = (w: number) =>
+        doc.fonts.some((f) => f.family.toLowerCase() === family.toLowerCase() && f.weight === w) ||
+        BUNDLED_FONTS.some((b) => b.family.toLowerCase() === family.toLowerCase() && b.weights.includes(w));
+      const wanted = weights.filter((w) => italic || !has(w));
+      if (!wanted.length) return { text: `${family} ${weights.join(", ")} is already here: use it by name.` };
+      let files: string[];
+      try {
+        files = await ctx.host.fonts.add(family, wanted, Boolean(italic));
+      } catch (err) {
+        return { text: (err as Error).message, isError: true };
+      }
+      // The store picks the files up from fonts/ by name; this request's copy knows them now, so they
+      // render in what it looks at before the request ends.
+      const added = files.map((f) => fontFromFile(f)).filter((f) => f !== null);
+      ctx.scratch.doc = {
+        ...doc,
+        fonts: [...doc.fonts.filter((f) => !added.some((a) => a.id === f.id)), ...added],
+      };
+      const name = added[0]?.family ?? family;
+      ctx.step(`Added the font ${name}`);
+      return {
+        text: `Added ${name}: ${added.map((f) => `${f.weight}${f.style === "italic" ? " italic" : ""}`).join(", ")}. Use it as "${name}" with those weights.`,
       };
     },
   }),

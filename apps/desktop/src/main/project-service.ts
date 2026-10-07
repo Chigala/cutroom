@@ -35,6 +35,7 @@ import { AgentRequest, CommitRequestSchema } from "@vedit/bridge";
 import { clearArea } from "@vedit/checks";
 import { type InstantResult, precheck, tryInstant } from "@vedit/instant";
 import {
+  addGoogleFont,
   alignText,
   cutoutsAvailable,
   downloadMeme,
@@ -43,8 +44,11 @@ import {
   ensureWhisper,
   extractSpeechWav,
   type FoundTrack,
+  findFonts,
   findMusic,
   findSounds,
+  googleFamilies,
+  googleFamily,
   grabFrame,
   isMedia,
   makeProcessed,
@@ -1676,6 +1680,20 @@ export class ProjectService {
         cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
       footage: async (doc: ProjectDoc) => makeNeededFootage(store.dir, doc),
+      fonts: {
+        find: async (q) => findFonts(await googleFamilies(), q),
+        add: async (name, weights, italic) => {
+          const all = await googleFamilies();
+          const family = googleFamily(all, name);
+          if (!family) {
+            const near = findFonts(all, { name: name.split(/\s+/)[0] ?? name }, 5).map((f) => f.family);
+            throw new Error(
+              `Google Fonts has no "${name}"${near.length ? `; near it: ${near.join(", ")}` : ""}.`,
+            );
+          }
+          return addGoogleFont(path.join(store.dir, FONTS_DIR), family, weights, italic);
+        },
+      },
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
         const keys = {

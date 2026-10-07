@@ -120,6 +120,8 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   add_stock: "Downloading stock footage",
   capture_page: "Capturing the page",
   find_sound: "Searching the sound library",
+  find_font: "Looking through Google Fonts",
+  add_font: "Adding the font",
   find_meme: "Searching KLIPY for memes",
   add_meme: "Downloading the meme",
   inspect_motion: "Measuring the motion",

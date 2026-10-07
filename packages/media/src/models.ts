@@ -106,6 +106,17 @@ export const MODELS = {
     size: 1_634,
     license: "Apache-2.0",
   },
+  /**
+   * HT-Demucs fine-tuned for vocals (Meta), exported to ONNX with its STFT inside: a clip's voice apart
+   * from the music under it. Half-size weights; 7.8 s of 44.1 kHz stereo in, four stems out (vocals last).
+   */
+  voices: {
+    file: "htdemucs_ft_vocals_fp16weights.onnx",
+    url: "https://huggingface.co/StemSplitio/htdemucs-ft-vocals-onnx/resolve/2ef0d757d3e226d0da85fb8c71514f464fcabdd0/htdemucs_ft_vocals_fp16weights.onnx",
+    sha256: "0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce",
+    size: 165_612_636,
+    license: "MIT",
+  },
   /** U²-Net (small): where the eye goes in a frame. */
   saliency: {
     file: "u2netp.onnx",
@@ -131,10 +142,11 @@ const PURPOSE: Record<ModelName, string> = {
   ocrRec: "Reading words on screen",
   ocrDict: "Reading words on screen",
   saliency: "Where the eye goes",
+  voices: "Taking music out of a clip",
 };
 
 /** Platforms ONNX Runtime ships for (not Intel Macs, which it stopped building for; Macs use Apple's frameworks). */
-const ONNX_PLATFORMS = ["darwin-arm64", "win32-x64", "win32-arm64", "linux-x64", "linux-arm64"];
+export const ONNX_PLATFORMS = ["darwin-arm64", "win32-x64", "win32-arm64", "linux-x64", "linux-arm64"];
 
 /**
  * Whether faces, people, sounds and cutouts come from these models rather than Apple's frameworks:

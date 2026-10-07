@@ -23,6 +23,13 @@ export * from "./probe.ts";
 export * from "./process.ts";
 export * from "./profile.ts";
 export * from "./see.ts";
+export {
+  canSeparate,
+  type SeparateOptions,
+  STEMS_MODEL,
+  separateVoice,
+  type VoiceModel,
+} from "./separate.ts";
 export { sfxFile } from "./sfx.ts";
 export {
   contactSheets,

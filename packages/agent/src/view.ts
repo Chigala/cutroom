@@ -135,6 +135,7 @@ export function projectView(doc: ProjectDoc): string {
     cover: { ...doc.cover, ...(doc.cover.at && { time: at(doc.cover.at) }) },
     checkRules: doc.checkRules,
     musicClips: doc.musicClips.map((m) => ({ ...m, time: at(m.anchor) })),
+    voiceovers: doc.voiceovers.map((v) => ({ ...v, time: at(v.anchor) })),
     comments: doc.comments.map((c) => ({ ...c, time: at(c.anchor) })),
   };
   return JSON.stringify(view);

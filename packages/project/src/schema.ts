@@ -458,6 +458,10 @@ export const Analysis = z.object({
     .default([])
     .describe("Quiet stretches, [start, end] in source time"),
   shots: z.array(Seconds).default([]).describe("Times where the picture changes shot"),
+  speech: z
+    .array(z.tuple([Seconds, Seconds]))
+    .optional()
+    .describe("Where someone talks, [start, end] in source time (heard on device); empty: nobody does"),
   bpm: z.number().optional(),
   beats: z.array(Seconds).optional().describe("Beat times, for music"),
   downbeats: z.array(Seconds).optional(),

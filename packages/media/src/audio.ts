@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { run } from "./exec.ts";
 
@@ -16,6 +16,81 @@ export async function extractSpeechWav(
     ["-y", ...seek, "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", output],
     signal ? { signal } : {},
   );
+}
+
+/**
+ * A speech wav cut down to where someone talks: its stretches end to end, half a second of silence
+ * between them (so a phrase isn't run into the next), for the transcriber to hear only speech. Each
+ * piece says where it came from, to put the words back in the clip's time (fromSpeechCut).
+ */
+export interface SpeechCut {
+  readonly pieces: readonly { readonly from: number; readonly at: number; readonly length: number }[];
+}
+
+const CUT_GAP = 0.5;
+
+export async function cutToSpeech(
+  wav: string,
+  spans: readonly (readonly [number, number])[],
+  output: string,
+): Promise<SpeechCut> {
+  const buf = await readFile(wav);
+  // A 16-bit PCM wav (extractSpeechWav's): its rate and channels from the header, samples after "data".
+  const rate = buf.readUInt32LE(24);
+  const channels = buf.readUInt16LE(22);
+  const data = buf.indexOf("data", 12, "ascii");
+  const start = data < 0 ? 44 : data + 8;
+  const frame = 2 * channels;
+  const total = Math.floor((buf.length - start) / frame);
+  const gap = Math.round(CUT_GAP * rate);
+  const parts: Buffer[] = [];
+  const pieces: { from: number; at: number; length: number }[] = [];
+  let at = 0;
+  for (const [a, b] of spans) {
+    const from = Math.max(0, Math.min(total, Math.round(a * rate)));
+    const to = Math.max(from, Math.min(total, Math.round(b * rate)));
+    if (to <= from) continue;
+    if (pieces.length) {
+      parts.push(Buffer.alloc(gap * frame));
+      at += gap;
+    }
+    parts.push(buf.subarray(start + from * frame, start + to * frame));
+    pieces.push({ from: from / rate, at: at / rate, length: (to - from) / rate });
+    at += to - from;
+  }
+  const body = Buffer.concat(parts);
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0, "ascii");
+  header.writeUInt32LE(36 + body.length, 4);
+  header.write("WAVEfmt ", 8, "ascii");
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * frame, 28);
+  header.writeUInt16LE(frame, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36, "ascii");
+  header.writeUInt32LE(body.length, 40);
+  await mkdir(path.dirname(output), { recursive: true });
+  await writeFile(output, Buffer.concat([header, body]));
+  return { pieces };
+}
+
+/** Words heard in a speech cut, back in the clip's own time (a word in a gap belongs to the piece before). */
+export function fromSpeechCut<W extends { start: number; end: number }>(
+  words: readonly W[],
+  cut: SpeechCut,
+): W[] {
+  return words.flatMap((w) => {
+    const piece = cut.pieces.findLast((p) => p.at <= w.start + 0.01) ?? cut.pieces[0];
+    if (!piece) return [];
+    const shift = piece.from - piece.at;
+    const last = piece.from + piece.length;
+    const start = Math.min(last, Math.max(piece.from, w.start + shift));
+    const end = Math.min(last, Math.max(start, w.end + shift));
+    return [{ ...w, start: Math.round(start * 1000) / 1000, end: Math.round(end * 1000) / 1000 }];
+  });
 }
 
 /** Quiet stretches, as [start, end] pairs in seconds. */

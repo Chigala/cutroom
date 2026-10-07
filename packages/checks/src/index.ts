@@ -17,6 +17,7 @@ import {
   round,
   SAFE_ZONE,
   safeZoneFor,
+  spanOf,
   spokenWords,
   type Timeline,
   timelineOf,
@@ -183,12 +184,12 @@ const rules: Rule[] = [
         }),
       );
       for (const title of doc.titles) {
-        const start = resolveAnchor(tl, title.anchor);
-        if (start === null) continue;
+        const span = spanOf(tl, title);
+        if (!span) continue;
         const box = titleBox(title, doc.meta.format.height);
         for (const f of found)
-          if (start < f.to && start + title.duration > f.from && overlaps(f.box, box))
-            hits.push({ at: Math.max(start, f.from), text: f.text, scene: f.scene, by: "A title" });
+          if (span.start < f.to && span.end > f.from && overlaps(f.box, box))
+            hits.push({ at: Math.max(span.start, f.from), text: f.text, scene: f.scene, by: "A title" });
       }
       if (!hits.length) return pass;
       hits.sort((a, b) => a.at - b.at);

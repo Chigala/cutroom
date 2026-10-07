@@ -8,8 +8,8 @@ import {
   type Collection,
   formatTime,
   type ProjectDoc,
-  resolveAnchor,
   type Singleton,
+  spanOf,
   timelineOf,
 } from "@vedit/project";
 import { type NumberSpan, numbersIn, timesIn } from "./numbers.ts";
@@ -50,18 +50,23 @@ export interface Asked {
   readonly recent: readonly RecentChange[];
 }
 
-type Item = { id: string; anchor?: { scene: string; at: number }; duration?: number };
+type Item = {
+  id: string;
+  anchor?: { scene: string; at: number };
+  duration?: number;
+  whole?: boolean;
+  until?: { scene: string; at: number } | "end";
+};
 
 /** Where an item sits, for its description and for "here". */
-function spanOf(doc: ProjectDoc, coll: Collection, item: Item): { start: number; end: number } | null {
+function itemSpan(doc: ProjectDoc, coll: Collection, item: Item): { start: number; end: number } | null {
   const tl = timelineOf(doc);
   if (coll === "scenes") {
     const p = tl.byId.get(item.id);
     return p ? { start: p.start, end: p.start + p.duration } : null;
   }
   if (!item.anchor) return null;
-  const start = resolveAnchor(tl, item.anchor);
-  return start === null ? null : { start, end: start + (item.duration ?? 0) };
+  return spanOf(tl, { ...item, anchor: item.anchor, duration: item.duration ?? 0 });
 }
 
 const clip = (s: string, n = 70) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -180,7 +185,7 @@ export function ask(
     const list = (doc[coll] as readonly Item[]).slice(0, 240);
     items[coll] = list.map((x) => x.id);
     itemState[coll] = list.map((item, n) => {
-      const span = spanOf(doc, coll, item);
+      const span = itemSpan(doc, coll, item);
       const where = span ? ` at ${formatTime(span.start, true)}–${formatTime(span.end, true)}` : "";
       const flags = marks(coll, item, span, focus);
       // "the shot at 0:09": code finds it (Jev is weak with numbers) and says so on the item.

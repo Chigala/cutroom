@@ -272,10 +272,22 @@ export function scenesNeedingCutout(
     ...doc.effects.filter((e) => split.has(e.kind)),
   ];
   for (const item of items) {
+    // Over the whole video, or to a later moment (overlays that last), or for its duration.
+    if ("whole" in item && item.whole) {
+      behind.push({ start: 0, end: Number.POSITIVE_INFINITY });
+      continue;
+    }
     const at = starts.get(item.anchor.scene);
     if (!at) continue;
     const start = at.start + item.anchor.at;
-    behind.push({ start, end: start + item.duration });
+    const until = "until" in item ? item.until : undefined;
+    const to =
+      until === "end"
+        ? Number.POSITIVE_INFINITY
+        : until
+          ? (starts.get(until.scene)?.start ?? Number.NaN) + until.at
+          : Number.NaN;
+    behind.push({ start, end: to > start ? to : start + item.duration });
   }
   return doc.scenes.filter((s) => {
     if (s.ramp?.length) return false;

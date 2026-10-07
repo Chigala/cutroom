@@ -1,12 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { applyOps, emptyProject, type ProjectDoc, type Source } from "@vedit/project";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({ app: { getPath: () => tmpdir(), isPackaged: false } }));
 
 const { copyProject, footageOps, relinkOps } = await import("./projects.ts");
+
+const dir = mkdtempSync(path.join(tmpdir(), "vedit-copy-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const clip = (id: string, extra: Partial<Source> = {}): Source => ({
   id,
@@ -78,7 +81,7 @@ describe("starting over from the footage", () => {
   });
 
   it("copies a project without its history, old versions or exports", async () => {
-    const from = mkdtempSync(path.join(tmpdir(), "vedit-copy-"));
+    const from = path.join(dir, "A");
     for (const f of [
       "project.json",
       ".history/log.jsonl",
@@ -89,7 +92,7 @@ describe("starting over from the footage", () => {
       mkdirSync(path.dirname(path.join(from, f)), { recursive: true });
       writeFileSync(path.join(from, f), f);
     }
-    const to = `${from} copy`;
+    const to = path.join(dir, "A copy");
     await copyProject(from, to);
     expect(readFileSync(path.join(to, "project.json"), "utf8")).toBe("project.json");
     expect(readFileSync(path.join(to, ".cache/proxy/c.mp4"), "utf8")).toBe(".cache/proxy/c.mp4");

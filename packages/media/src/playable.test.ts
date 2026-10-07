@@ -1,12 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { playableCopy } from "./playable.ts";
 import { probe } from "./probe.ts";
 
 const dir = mkdtempSync(path.join(tmpdir(), "vedit-playable-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const out = path.join(dir, "converted");
 const make = (name: string, input: string[], codec: string[]) => {
   const file = path.join(dir, name);

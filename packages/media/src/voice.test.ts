@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { buildVoiceTrack } from "./voice.ts";
+
+const dir = mkdtempSync(path.join(tmpdir(), "vedit-voice-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const duration = (file: string) =>
   Number(
@@ -20,7 +23,6 @@ const duration = (file: string) =>
 
 describe("buildVoiceTrack", () => {
   it("crossfaded segments overlap by exactly their crossfade, so the track matches the cut", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "vedit-voice-"));
     const tone = path.join(dir, "tone.wav");
     execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=20", "-ac", "2", tone]);
     const out = path.join(dir, "out.wav");

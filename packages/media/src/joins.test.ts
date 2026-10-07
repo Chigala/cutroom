@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { emptyProject, type ProjectDoc } from "@vedit/project";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { measureJoins, roomToneStretch } from "./joins.ts";
 import { addRoomTone } from "./voice.ts";
 
 const dir = mkdtempSync(path.join(tmpdir(), "vedit-joins-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 /** A 16 kHz mono wav from an ffmpeg expression of t. */
 const wav = (name: string, expr: string, seconds: number) => {
   const file = path.join(dir, name);

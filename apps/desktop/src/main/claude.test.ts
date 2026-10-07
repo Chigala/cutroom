@@ -1,7 +1,7 @@
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const settings = { claudePath: "" };
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
@@ -12,10 +12,12 @@ const { claudeStatus, compareVersions, fromAccount } = await import("./claude.ts
 vi.setConfig({ testTimeout: 30_000 });
 // The stand-in below is a shell script, and finding Claude Code reads PATH from a Unix login shell.
 const unix = process.platform !== "win32";
+const root = mkdtempSync(path.join(tmpdir(), "vedit-claude-"));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 /** A stand-in for Claude Code that answers `--version` and `auth status`. */
 function fakeClaude(version: string, auth: object): string {
-  const dir = mkdtempSync(path.join(tmpdir(), "vedit-claude-"));
+  const dir = mkdtempSync(path.join(root, "bin-"));
   const file = path.join(dir, "claude");
   writeFileSync(
     file,

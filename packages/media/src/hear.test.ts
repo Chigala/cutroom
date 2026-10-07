@@ -1,8 +1,11 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { wordStress } from "./hear.ts";
+
+const dir = mkdtempSync(path.join(tmpdir(), "vedit-stress-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 /** A 16 kHz mono WAV of "words": tones, each with its own loudness and pitch, 0.1 s apart. */
 function voice(words: { amp: number; hz: number }[]): {
@@ -35,7 +38,7 @@ function voice(words: { amp: number; hz: number }[]): {
   head.writeUInt16LE(16, 34);
   head.write("data", 36, "ascii");
   head.writeUInt32LE(data.length, 40);
-  const file = path.join(mkdtempSync(path.join(tmpdir(), "vedit-stress-")), "voice.wav");
+  const file = path.join(dir, "voice.wav");
   writeFileSync(file, Buffer.concat([head, data]));
   return { file, times };
 }

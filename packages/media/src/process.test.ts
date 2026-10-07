@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { probe } from "./probe.ts";
 import { checkGraph, filterReport, graphFilters, makeProcessed, measureProcessed } from "./process.ts";
 import { renderableAsIs, seeThrough } from "./transcode.ts";
 
 const dir = mkdtempSync(path.join(tmpdir(), "vedit-process-"));
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const out = path.join(dir, "processed");
 const make = (name: string, args: string[]) => {
   const file = path.join(dir, name);
@@ -224,8 +225,4 @@ describe("measuring", () => {
     expect(report).toMatch(/lines left out/);
     expect(report).not.toMatch(/Input #0/);
   });
-});
-
-it("cleans up", () => {
-  expect(existsSync(out)).toBe(true);
 });

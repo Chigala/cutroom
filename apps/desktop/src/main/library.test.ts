@@ -1,12 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { assetId, keepable, kindFromFolder, nameFromFile, searchAssets } from "@vedit/project";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const data = mkdtempSync(path.join(tmpdir(), "vedit-lib-data-"));
 const libDir = mkdtempSync(path.join(tmpdir(), "vedit-lib-"));
+const src = mkdtempSync(path.join(tmpdir(), "vedit-lib-src-"));
+afterAll(() => {
+  for (const dir of [data, libDir, src]) rmSync(dir, { recursive: true, force: true });
+});
 // The tools the app ships (ffmpeg, the sound classifier), as the app finds them.
 process.env.VEDIT_TOOLS ??= path.resolve(import.meta.dirname, "../../resources/tools/darwin-arm64");
 
@@ -41,7 +45,6 @@ describe("library", () => {
     const lib = new Library(() => {});
     await lib.start();
     // A boom, a minute of music, a see-through sticker.
-    const src = mkdtempSync(path.join(tmpdir(), "vedit-lib-src-"));
     ffmpeg("-f", "lavfi", "-i", "sine=frequency=55:duration=1.2", path.join(src, "big boom.wav"));
     ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=60", path.join(src, "chill bed.mp3"));
     ffmpeg(

@@ -91,6 +91,9 @@ export function createWebHost(): EditorApi {
     kit: "",
     style: "",
     showThinking: true,
+    harness: "claude",
+    codexModel: "",
+    codexPath: "",
     instantEdits: false,
     claudePath: "",
     libraryDir: "",
@@ -223,6 +226,12 @@ export function createWebHost(): EditorApi {
       },
     },
     index: { peaks: async () => null, retry: async () => {}, describe: async () => {} },
+    codex: {
+      status: async () => ({ installed: false, signedIn: null, models: [], error: DESKTOP_ONLY }),
+      login: async () => ({ installed: false, signedIn: null, models: [], error: DESKTOP_ONLY }),
+      cancelLogin: async () => {},
+      logout: async () => ({ installed: false, signedIn: null, models: [] }),
+    },
     agent: {
       async run() {
         const runId = `web-${Date.now()}`;

@@ -27,6 +27,7 @@ import {
 import type { ProjectFolder, RecentProject } from "@vedit/bridge";
 import { clsx } from "clsx";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AGENTS, AgentWorking } from "../../components/AgentLogo.tsx";
 import { Dialog } from "../../components/Dialog.tsx";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
@@ -48,6 +49,7 @@ import {
   sections,
   useProjects,
 } from "../../state/projects.ts";
+import { useSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { RAIL_WIDTH, setRailOpen, setRailWidth, setUi, toggleFolded, useUi } from "../../state/ui.ts";
 
@@ -662,7 +664,8 @@ function ProjectButton({
   onMenu: (x: number, y: number) => void;
 }) {
   const working = useWorking((s) => s.dirs.includes(project.dir));
-  const meta = working ? "Claude is editing" : current ? "Open" : ago(project.openedAt);
+  const agent = useSettings((s) => s.settings?.harness ?? "claude");
+  const meta = working ? `${AGENTS[agent].name} is editing` : current ? "Open" : ago(project.openedAt);
   return (
     <div className="group/project relative">
       <button
@@ -712,7 +715,11 @@ function ProjectButton({
               <span className="truncate">{project.name}</span>
               {project.pinned && <PushPinIcon size={11} weight="fill" className="shrink-0 text-faint" />}
             </span>
-            <span className={clsx("truncate text-[11px]", working ? "shimmer" : "text-faint")}>{meta}</span>
+            {working ? (
+              <AgentWorking id={agent} />
+            ) : (
+              <span className="truncate text-[11px] text-faint">{meta}</span>
+            )}
           </span>
         )}
       </button>

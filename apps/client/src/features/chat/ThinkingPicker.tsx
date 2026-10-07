@@ -1,27 +1,32 @@
 /**
- * In the composer, beside Send: how hard Claude thinks (the effort slider, as in Claude's apps) and which
- * model. The same settings as Settings → Claude.
+ * In the composer, beside Send: how hard the agent thinks (the effort slider, as in Claude's apps) and
+ * which model: Claude's, or Codex's for the ChatGPT plan, whichever agent edits. The same settings as
+ * Settings → Agent.
  */
 
 import { CaretDownIcon, CheckIcon, LightbulbIcon } from "@phosphor-icons/react";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
+import { AGENTS, AgentLogo } from "../../components/AgentLogo.tsx";
+import { claudeModels, newestEach, useClaude } from "../../state/claude.ts";
+import { checkCodex, useCodex } from "../../state/codex.ts";
 import { loadSettings, saveSettings, useSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { EffortSlider, effortLabel } from "./EffortSlider.tsx";
 
-export const MODELS = [
-  { value: "claude-opus-5-5", label: "Opus 5.5", hint: "Best edits" },
-  { value: "claude-sonnet-5-5", label: "Sonnet 5.5", hint: "Faster" },
-] as const;
-
 export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
   const settings = useSettings((s) => s.settings);
+  const codex = useCodex((s) => s.status);
+  const claude = useClaude((s) => s.status);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     void loadSettings();
   }, []);
+  const onCodex = settings?.harness === "codex";
+  useEffect(() => {
+    if (onCodex) void checkCodex();
+  }, [onCodex]);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
@@ -37,7 +42,28 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
   }, [open]);
   if (!settings) return null;
   const effort = effortLabel(settings.effort);
-  const model = MODELS.find((m) => m.value === settings.model);
+  // The models of the agent that edits, as its account offers them: Claude's (the newest of each kind,
+  // and the one chosen), or Codex's ("" is Codex's default for the plan).
+  const fallback = codex?.models.find((m) => m.isDefault);
+  const hint = (description?: string) => description?.split(/[.!]/)[0] ?? "";
+  const offered = claudeModels(claude);
+  const chosen = offered.find((m) => m.id === settings.model);
+  const models: readonly { value: string; label: string; hint: string }[] = onCodex
+    ? [
+        {
+          value: "",
+          label: fallback ? `${fallback.name} (default)` : "Codex's default",
+          hint: "For your ChatGPT plan",
+        },
+        ...(codex?.models ?? [])
+          .filter((m) => m.id !== fallback?.id)
+          .map((m) => ({ value: m.id, label: m.name, hint: hint(m.description) })),
+      ]
+    : [...newestEach(offered), ...(chosen && !newestEach(offered).includes(chosen) ? [chosen] : [])].map(
+        (m) => ({ value: m.id, label: m.name, hint: hint(m.description) }),
+      );
+  const current = onCodex ? settings.codexModel : settings.model;
+  const model = models.find((m) => m.value === current);
   const save = (patch: Parameters<typeof saveSettings>[0]) =>
     void saveSettings(patch).catch((err: Error) => toast(`Couldn't change it: ${err.message}`, "warn"));
 
@@ -48,7 +74,7 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        title={`${model?.label ?? settings.model}, effort: ${effort}`}
+        title={`${model?.label ?? current}, effort: ${effort}`}
         onClick={() => setOpen(!open)}
         className={clsx(
           "inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 text-xs whitespace-nowrap disabled:opacity-40",
@@ -69,15 +95,18 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
           </div>
           <div className="border-t border-line" />
           <div className="p-1.5">
-            <MenuLabel>Model</MenuLabel>
-            {MODELS.map((m) => (
+            <div className="flex items-center gap-1.5 px-2.5 pt-1.5 pb-1 text-[12px] text-faint">
+              <AgentLogo id={settings.harness} size={12} />
+              {AGENTS[settings.harness].name} model
+            </div>
+            {models.map((m) => (
               <MenuItem
                 key={m.value}
                 label={m.label}
                 hint={m.hint}
-                on={settings.model === m.value}
+                on={current === m.value}
                 onPick={() => {
-                  save({ model: m.value });
+                  save(onCodex ? { codexModel: m.value } : { model: m.value });
                   setOpen(false);
                 }}
               />
@@ -87,10 +116,6 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
       )}
     </div>
   );
-}
-
-function MenuLabel({ children }: { children: string }) {
-  return <div className="px-2.5 pt-1.5 pb-1 text-[12px] text-faint">{children}</div>;
 }
 
 function MenuItem({

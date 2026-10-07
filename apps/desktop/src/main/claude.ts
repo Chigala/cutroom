@@ -64,7 +64,7 @@ function bundled(): string | null {
   }
 }
 
-const executable = (file: string) => {
+export const executable = (file: string) => {
   try {
     accessSync(file, constants.X_OK);
     return true;
@@ -80,7 +80,7 @@ const executable = (file: string) => {
  * and the app has to look in the same place.
  */
 let shellPath: Promise<string> | null = null;
-function userPath(): Promise<string> {
+export function userPath(): Promise<string> {
   shellPath ??= new Promise((resolve) => {
     if (process.platform === "win32") return resolve(process.env.PATH ?? "");
     const shellBin = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
@@ -346,13 +346,16 @@ function keySource(source: string): string {
  */
 async function account(file: string): Promise<AccountStatus> {
   const a = await probeClaude();
-  return a ? fromAccount(a) : signIn(file);
+  return a ? { ...fromAccount(a), ...(a.models.length && { models: a.models }) } : signIn(file);
 }
 
-type AccountStatus = Pick<ClaudeStatus, "signedIn" | "method" | "email" | "org" | "apiKey" | "limits">;
+type AccountStatus = Pick<
+  ClaudeStatus,
+  "signedIn" | "method" | "email" | "org" | "apiKey" | "limits" | "models"
+>;
 
 /** What Claude Code's account means for the agent: a plan (ready), an API key (not, for Cutroom), or none. */
-export function fromAccount(a: ClaudeAccount): AccountStatus {
+export function fromAccount(a: Omit<ClaudeAccount, "models">): AccountStatus {
   const provider =
     a.apiProvider && a.apiProvider !== "firstParty" ? (PROVIDERS[a.apiProvider] ?? a.apiProvider) : null;
   const who = { ...(a.email && { email: a.email }), ...(a.organization && { org: a.organization }) };

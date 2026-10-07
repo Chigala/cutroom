@@ -3,7 +3,16 @@
  * the project folder, and the last few exchanges go to the agent with each request so follow-ups like
  * "shorter" or "bring the zooms back" make sense.
  */
-import type { AgentContext, AgentEvent, AgentUsage, Backend, ChatRecord, WorkEntry } from "@vedit/bridge";
+import {
+  type AgentContext,
+  type AgentEvent,
+  type AgentUsage,
+  type Backend,
+  type ChatRecord,
+  HARNESS_IDS,
+  type HarnessId,
+  type WorkEntry,
+} from "@vedit/bridge";
 import { activeInspiration, type Commit, inspirationMeta } from "@vedit/project";
 import { create } from "zustand";
 import { host } from "../lib/host.ts";
@@ -79,8 +88,11 @@ interface ChatState {
   backend: Backend | null;
   /** Settings' autoFirstCut, mirrored for the switch on import cards. */
   autoFirstCut: boolean;
-  /** Claude's latest figures: the last request's context, and the plan's limits (kept between launches). */
-  usage: Usage;
+  /**
+   * Each agent's latest figures: the last request's context, and its plan's limits (kept between
+   * launches). Apart, since Claude's plan and ChatGPT's have their own limits.
+   */
+  usage: Partial<Record<HarnessId, Usage>>;
 }
 
 export interface Usage {
@@ -89,39 +101,53 @@ export interface Usage {
 }
 
 const USAGE_KEY = "cutroom.usage";
-function savedUsage(): Usage {
+function savedUsage(): Partial<Record<HarnessId, Usage>> {
   try {
-    const u = JSON.parse(localStorage.getItem(USAGE_KEY) ?? "{}") as Usage;
+    const saved = JSON.parse(localStorage.getItem(USAGE_KEY) ?? "{}") as Record<string, Usage>;
+    // Saved before there was more than one agent: Claude's.
+    const byAgent = "context" in saved || "limits" in saved ? { claude: saved as Usage } : saved;
     // Windows that have reset since are stale: drop them.
     const fresh = (w?: { resetsAt?: number }) => w && (!w.resetsAt || w.resetsAt > Date.now());
-    const { fiveHour, weekly, plan } = u.limits ?? {};
-    return {
-      ...(u.context && { context: u.context }),
-      limits: {
-        ...(fresh(fiveHour) && { fiveHour }),
-        ...(fresh(weekly) && { weekly }),
-        ...(plan && { plan }),
-      },
-    };
+    const out: Partial<Record<HarnessId, Usage>> = {};
+    for (const id of HARNESS_IDS) {
+      const u = byAgent[id];
+      if (!u) continue;
+      const { fiveHour, weekly, plan } = u.limits ?? {};
+      out[id] = {
+        ...(u.context && { context: u.context }),
+        limits: {
+          ...(fresh(fiveHour) && { fiveHour }),
+          ...(fresh(weekly) && { weekly }),
+          ...(plan && { plan }),
+        },
+      };
+    }
+    return out;
   } catch {
     return {};
   }
 }
 
-/** The plan's limits, from a check of Claude Code (no request needed). */
-export function notePlanLimits(limits: NonNullable<AgentUsage["limits"]>): void {
-  noteUsage({ limits });
+/** An agent's plan limits, from a check of it (no request needed). */
+export function notePlanLimits(harness: HarnessId, limits: NonNullable<AgentUsage["limits"]>): void {
+  noteUsage(harness, { limits });
 }
 
-/** New figures from Claude, merged over the last ones. */
-function noteUsage(e: AgentUsage): void {
-  set((s) => ({
-    usage: {
-      ...s.usage,
-      ...(e.context && { context: e.context }),
-      ...(e.limits && { limits: { ...s.usage.limits, ...e.limits } }),
-    },
-  }));
+/** New figures from an agent, merged over its last ones. */
+function noteUsage(harness: HarnessId, e: AgentUsage): void {
+  set((s) => {
+    const was = s.usage[harness] ?? {};
+    return {
+      usage: {
+        ...s.usage,
+        [harness]: {
+          ...was,
+          ...(e.context && { context: e.context }),
+          ...(e.limits && { limits: { ...was.limits, ...e.limits } }),
+        },
+      },
+    };
+  });
   try {
     localStorage.setItem(USAGE_KEY, JSON.stringify(useChat.getState().usage));
   } catch {}
@@ -591,7 +617,7 @@ export function connectChat(): () => void {
     const dir = runDirs.get(e.runId) ?? current();
     const here = dir === current();
     if (e.type === "start") set({ backend: e.backend });
-    if (e.type === "usage") noteUsage(e);
+    if (e.type === "usage") noteUsage(e.harness, e);
     // The live draft (on screen only): each change as the agent makes it; gone when the work lands, held
     // when it stopped partway with something to keep.
     if (here) {

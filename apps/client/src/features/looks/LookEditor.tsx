@@ -14,6 +14,7 @@ import { Button } from "../../components/ui.tsx";
 import { captionWindow, lookName, lookPreviewDoc } from "../../lib/caption-preview.ts";
 import { send } from "../../state/chat.ts";
 import { edit, useDoc, useProject } from "../../state/project.ts";
+import { agentName } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 import { AskClaude, CodeArea, PreviewPlayer } from "../code/parts.tsx";
@@ -268,7 +269,7 @@ function Preview({
 function AskAboutLook({ id, dirty }: { id: string; dirty: boolean }) {
   const go = (prompt: string) => {
     void send(prompt, {}, "thorough");
-    toast("Claude is on it. Follow along in the chat.");
+    toast(`${agentName()} is on it. Follow along in the chat.`);
     return true;
   };
   return (

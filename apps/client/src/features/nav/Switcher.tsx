@@ -11,11 +11,13 @@ import {
 } from "@phosphor-icons/react";
 import { clsx } from "clsx";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AgentWorking } from "../../components/AgentLogo.tsx";
 import { host } from "../../lib/host.ts";
 import { mod } from "../../lib/keys.ts";
 import { useWorking } from "../../state/chat.ts";
 import { useProject } from "../../state/project.ts";
 import { ago, matching, openProject, refreshProjects, useProjects } from "../../state/projects.ts";
+import { useSettings } from "../../state/settings.ts";
 import { setUi } from "../../state/ui.ts";
 import { Keys, ProjectThumb } from "./ProjectRail.tsx";
 
@@ -23,7 +25,7 @@ interface Row {
   key: string;
   icon: ReactNode;
   label: string;
-  meta: string;
+  meta: ReactNode;
   metaClass?: string;
   keys?: string;
   run: () => void;
@@ -33,6 +35,7 @@ export function Switcher() {
   const recent = useProjects((s) => s.recent);
   const dir = useProject((s) => s.dir);
   const working = useWorking((s) => s.dirs);
+  const agent = useSettings((s) => s.settings?.harness ?? "claude");
   const [query, setQuery] = useState("");
   const [at, setAt] = useState(0);
   const ref = useRef<HTMLDialogElement>(null);
@@ -59,8 +62,13 @@ export function Switcher() {
         key: r.dir,
         icon: <ProjectThumb dir={r.dir} name={r.name} size={34} />,
         label: r.name,
-        meta: working.includes(r.dir) ? "Claude is editing" : r.dir === dir ? "Open" : ago(r.openedAt),
-        ...(working.includes(r.dir) && { metaClass: "shimmer" }),
+        meta: working.includes(r.dir) ? (
+          <AgentWorking id={agent} />
+        ) : r.dir === dir ? (
+          "Open"
+        ) : (
+          ago(r.openedAt)
+        ),
         run: () => (r.dir === dir ? close() : go(() => host.project.open(r.dir))),
       }),
     );

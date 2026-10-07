@@ -24,8 +24,11 @@ import type { AgentStatus, KeyCheck, KeyProvider, Settings } from "@vedit/bridge
 import { clsx } from "clsx";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
+import { AgentChoice } from "../../components/AgentChoice.tsx";
+import { CodexLogo } from "../../components/AgentLogo.tsx";
 import { host } from "../../lib/host.ts";
 import { checkClaude, followClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
+import { checkCodex, signInCodex, useCodex } from "../../state/codex.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { saveSettings, useSettings } from "../../state/settings.ts";
 import { SignInHelp } from "../settings/ClaudeSetup.tsx";
@@ -87,7 +90,7 @@ export function Onboarding() {
         >
           {step === "welcome" && <Welcome />}
           {step === "privacy" && <Privacy />}
-          {step === "claude" && <ClaudeStep />}
+          {step === "claude" && <AgentStep settings={settings} />}
           {step === "style" && <StyleStep settings={settings} />}
           {step === "captions" && <Captions settings={settings} keys={keys} />}
           {step === "extras" && <Extras keys={keys} />}
@@ -228,7 +231,26 @@ function Privacy() {
   );
 }
 
-function ClaudeStep() {
+/** The editor's brain: Claude or Codex, then installing and signing in to the one chosen. */
+function AgentStep({ settings }: { settings: Settings }) {
+  const harness = settings.harness;
+  return (
+    <>
+      <Copy eyebrow="The editor's brain" title="Choose who edits with you.">
+        <Lead>
+          The agent watches your footage through the transcript and frames, makes the cuts and the creative
+          calls, and checks its own work. It runs on your own plan: Claude, or ChatGPT's Codex. You can switch
+          any time in Settings.
+        </Lead>
+        <AgentChoice size="lg" value={harness} onChange={(h) => void saveSettings({ harness: h })} />
+        {harness === "codex" ? <CodexBox /> : <ClaudeBox />}
+      </Copy>
+      {harness === "codex" ? <CodexStage /> : <ClaudeStage />}
+    </>
+  );
+}
+
+function ClaudeBox() {
   useClaudeWatch();
   const status = useClaude((s) => s.status);
   const task = useClaude((s) => s.task);
@@ -238,78 +260,142 @@ function ClaudeStep() {
   const act = (fn: () => Promise<void>) => () => void fn().catch(() => {});
   return (
     <>
-      <Copy eyebrow="The editor's brain" title="Cutroom edits with Claude.">
-        <Lead>
-          Claude watches your footage through the transcript and frames, makes the cuts and the creative
-          calls, and checks its own work. It runs on your own Claude plan, through Claude Code.
-        </Lead>
-        <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-line bg-panel p-4">
-          <StatusRow done={installed === true} label="Claude Code installed" />
-          <StatusRow
-            done={signedIn}
-            label={
-              signedIn && status?.email
-                ? `Signed in as ${status.email}${status.method ? ` · ${status.method}` : ""}`
-                : status?.apiKey
-                  ? "Signed in with your Claude plan (it's set to use an API key now)"
-                  : "Signed in"
-            }
-          />
-          {busy && (
-            <span className="flex items-center gap-2 text-[13px] text-fg-2">
-              <CircleNotchIcon size={14} className="animate-spin text-muted" />
-              {task?.message ?? "Working on it…"}
-            </span>
-          )}
-          {busy && task?.kind === "login" && <SignInHelp />}
-          {task?.command && (
-            <code className="select-all rounded-lg bg-sunken px-3 py-2 font-mono text-xs text-fg">
-              {task.command}
-            </code>
-          )}
-          {!busy && installed === false && (
-            <Pill onClick={act(host.claude.install)}>Install Claude Code</Pill>
-          )}
-          {!busy && installed && !signedIn && (
-            <Pill onClick={act(host.claude.login)}>
-              {status?.apiKey ? "Sign in with your Claude plan" : "Sign in"}
-            </Pill>
-          )}
-          {!busy && status?.apiKey && (
-            <span className="text-xs leading-relaxed text-muted">
-              Claude Code would bill an API key (from {status.apiKey}) instead of your plan. Signing in with
-              your Claude plan fixes it.
-            </span>
-          )}
-          {task?.state === "failed" && !busy && (
-            <span className="text-xs text-bad">Didn't finish{task.message ? `: ${task.message}` : "."}</span>
-          )}
-        </div>
-        <span className="text-xs leading-relaxed text-faint">
-          Signing in opens a terminal with Claude Code's own sign-in, and finishes in your browser. Cutroom
-          never sees your password or tokens. You'll need a paid Claude plan (Pro or Max).
-        </span>
-      </Copy>
-      <Stage>
-        <div className="flex w-[78%] flex-col overflow-hidden rounded-2xl border border-line-strong bg-sunken shadow-2xl">
-          <div className="flex items-center gap-1.5 border-b border-line px-4 py-3">
-            <span className="size-2.5 rounded-full bg-line-strong" />
-            <span className="size-2.5 rounded-full bg-line-strong" />
-            <span className="size-2.5 rounded-full bg-line-strong" />
-            <TerminalWindowIcon size={13} className="ml-2 text-faint" />
-          </div>
-          <div className="flex flex-col gap-2 p-5 font-mono text-[12px] leading-relaxed">
-            <span className="text-fg-2">
-              <span className="text-faint">$</span> claude auth login
-            </span>
-            <span className="text-muted">Opening your browser to sign in…</span>
-            <span className={clsx("transition-colors", signedIn ? "text-ok" : "text-faint")}>
-              {signedIn ? "✓ Signed in. You can close this window." : "Waiting for you to sign in…"}
-            </span>
-          </div>
-        </div>
-      </Stage>
+      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-panel p-4">
+        <StatusRow done={installed === true} label="Claude Code installed" />
+        <StatusRow
+          done={signedIn}
+          label={
+            signedIn && status?.email
+              ? `Signed in as ${status.email}${status.method ? ` · ${status.method}` : ""}`
+              : status?.apiKey
+                ? "Signed in with your Claude plan (it's set to use an API key now)"
+                : "Signed in"
+          }
+        />
+        {busy && (
+          <span className="flex items-center gap-2 text-[13px] text-fg-2">
+            <CircleNotchIcon size={14} className="animate-spin text-muted" />
+            {task?.message ?? "Working on it…"}
+          </span>
+        )}
+        {busy && task?.kind === "login" && <SignInHelp />}
+        {task?.command && (
+          <code className="select-all rounded-lg bg-sunken px-3 py-2 font-mono text-xs text-fg">
+            {task.command}
+          </code>
+        )}
+        {!busy && installed === false && <Pill onClick={act(host.claude.install)}>Install Claude Code</Pill>}
+        {!busy && installed && !signedIn && (
+          <Pill onClick={act(host.claude.login)}>
+            {status?.apiKey ? "Sign in with your Claude plan" : "Sign in"}
+          </Pill>
+        )}
+        {!busy && status?.apiKey && (
+          <span className="text-xs leading-relaxed text-muted">
+            Claude Code would bill an API key (from {status.apiKey}) instead of your plan. Signing in with
+            your Claude plan fixes it.
+          </span>
+        )}
+        {task?.state === "failed" && !busy && (
+          <span className="text-xs text-bad">Didn't finish{task.message ? `: ${task.message}` : "."}</span>
+        )}
+      </div>
+      <span className="text-xs leading-relaxed text-faint">
+        Signing in opens a terminal with Claude Code's own sign-in, and finishes in your browser. Cutroom
+        never sees your password or tokens. You'll need a paid Claude plan (Pro or Max).
+      </span>
     </>
+  );
+}
+
+function ClaudeStage() {
+  const signedIn = useClaude((s) => s.status?.signedIn === true);
+  return (
+    <Stage>
+      <div className="flex w-[78%] flex-col overflow-hidden rounded-2xl border border-line-strong bg-sunken shadow-2xl">
+        <div className="flex items-center gap-1.5 border-b border-line px-4 py-3">
+          <span className="size-2.5 rounded-full bg-line-strong" />
+          <span className="size-2.5 rounded-full bg-line-strong" />
+          <span className="size-2.5 rounded-full bg-line-strong" />
+          <TerminalWindowIcon size={13} className="ml-2 text-faint" />
+        </div>
+        <div className="flex flex-col gap-2 p-5 font-mono text-[12px] leading-relaxed">
+          <span className="text-fg-2">
+            <span className="text-faint">$</span> claude auth login
+          </span>
+          <span className="text-muted">Opening your browser to sign in…</span>
+          <span className={clsx("transition-colors", signedIn ? "text-ok" : "text-faint")}>
+            {signedIn ? "✓ Signed in. You can close this window." : "Waiting for you to sign in…"}
+          </span>
+        </div>
+      </div>
+    </Stage>
+  );
+}
+
+function CodexBox() {
+  const { status, signingIn } = useCodex();
+  useEffect(() => {
+    void checkCodex();
+  }, []);
+  const installed = status?.installed ?? null;
+  const signedIn = status?.signedIn === true;
+  return (
+    <>
+      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-panel p-4">
+        <StatusRow done={installed === true} label="Codex installed (the Codex app or its CLI)" />
+        <StatusRow
+          done={signedIn}
+          label={
+            signedIn && status?.email
+              ? `Signed in as ${status.email}${status.plan ? ` · ChatGPT ${status.plan}` : ""}`
+              : "Signed in with ChatGPT"
+          }
+        />
+        {signingIn && (
+          <span className="flex items-center gap-2 text-[13px] text-fg-2">
+            <CircleNotchIcon size={14} className="animate-spin text-muted" />
+            Finish signing in in your browser…
+          </span>
+        )}
+        {!signingIn && installed === false && (
+          <Pill onClick={() => window.open("https://chatgpt.com/codex", "_blank")}>Get Codex</Pill>
+        )}
+        {!signingIn && installed === false && (
+          <button
+            type="button"
+            onClick={() => void checkCodex(true)}
+            className="self-start text-[12px] text-muted underline-offset-2 hover:text-fg hover:underline"
+          >
+            I've installed it: check again
+          </button>
+        )}
+        {!signingIn && installed && !signedIn && (
+          <Pill onClick={() => void signInCodex()}>Sign in with ChatGPT</Pill>
+        )}
+      </div>
+      <span className="text-xs leading-relaxed text-faint">
+        Signing in opens ChatGPT's own sign-in in your browser. Cutroom keeps its own Codex sign-in, apart
+        from the Codex app's, and never sees your password. You'll need a ChatGPT plan with Codex.
+      </span>
+    </>
+  );
+}
+
+function CodexStage() {
+  const signedIn = useCodex((s) => s.status?.signedIn === true);
+  return (
+    <Stage>
+      <div className="flex w-[70%] flex-col items-center gap-4 rounded-2xl border border-line-strong bg-sunken px-8 py-10 shadow-2xl">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-raised text-fg">
+          <CodexLogo size={30} />
+        </span>
+        <span className="text-[15px] font-medium text-fg">Sign in with ChatGPT</span>
+        <span className={clsx("text-[13px] transition-colors", signedIn ? "text-ok" : "text-faint")}>
+          {signedIn ? "✓ Signed in. Codex is ready to edit." : "Waiting for you to sign in…"}
+        </span>
+      </div>
+    </Stage>
   );
 }
 

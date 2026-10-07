@@ -212,38 +212,62 @@ export function makeMaster(input: string, output: string, o: TranscodeOptions): 
   );
 }
 
-/** A JPEG of one frame, for the agent to look at and for posters. */
+/** How far before a time past the end grabFrame looks for the last frame (s). */
+const LAST_FRAME_WINDOW = 2;
+
+/**
+ * A JPEG of one frame, for the agent to look at and for posters. A time past the last frame (a clip's
+ * listed length often runs a little past its picture, or its sound runs on) gives the last frame.
+ */
 export async function grabFrame(
   input: string,
   time: number,
   width = 512,
   signal?: AbortSignal,
 ): Promise<Buffer> {
-  const { stdoutBuffer } = await run(
-    "ffmpeg",
-    [
-      "-v",
-      "error",
-      "-ss",
-      String(Math.max(0, time)),
-      "-i",
-      input,
-      "-frames:v",
-      "1",
-      "-vf",
-      `scale=${width}:-2`,
-      "-q:v",
-      "4",
-      "-f",
-      "image2pipe",
-      "-c:v",
-      "mjpeg",
-      "-",
-    ],
-    { binary: true, ...(signal && { signal }) },
-  );
-  if (!stdoutBuffer.length) throw new Error(`no frame at ${time.toFixed(2)}s`);
-  return stdoutBuffer;
+  const at = Math.max(0, time);
+  const grab = async (seek: string[], filter: string) =>
+    (
+      await run(
+        "ffmpeg",
+        [
+          "-v",
+          "error",
+          ...seek,
+          "-i",
+          input,
+          "-frames:v",
+          "1",
+          "-vf",
+          filter,
+          "-q:v",
+          "4",
+          "-f",
+          "image2pipe",
+          "-c:v",
+          "mjpeg",
+          "-",
+        ],
+        { binary: true, ...(signal && { signal }) },
+      )
+    ).stdoutBuffer;
+  let failure: unknown = null;
+  const frame = await grab(["-ss", String(at)], `scale=${width}:-2`).catch((err: unknown) => {
+    failure = err;
+    return null;
+  });
+  if (frame?.length) return frame;
+  if (signal?.aborted) throw failure ?? new Error("aborted");
+  // Nothing there: the last frame of the couple of seconds before it (scaled down, then read backwards).
+  if (at > 0) {
+    const from = Math.max(0, at - LAST_FRAME_WINDOW);
+    const last = await grab(
+      ["-ss", String(from), "-t", String(at - from)],
+      `scale=${width}:-2,reverse`,
+    ).catch(() => null);
+    if (last?.length) return last;
+  }
+  throw failure ?? new Error(`no frame at ${time.toFixed(2)}s`);
 }
 
 /** Times (seconds) where the picture cuts to a different shot. Run on the proxy: 10x faster, same answer. */

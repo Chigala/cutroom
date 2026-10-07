@@ -76,8 +76,9 @@ export async function contactSheets(
     const files: string[] = new Array(times.length);
     let next = 0;
     let done = 0;
+    let failed = false;
     const worker = async () => {
-      while (next < times.length) {
+      while (next < times.length && !failed) {
         const i = next++;
         const file = path.join(dir, `${String(i).padStart(6, "0")}.jpg`);
         await writeFile(file, await grabFrame(video, times[i]!, width, o.signal));
@@ -85,7 +86,18 @@ export async function contactSheets(
         o.onProgress?.((++done / times.length) * 0.9);
       }
     };
-    await Promise.all(Array.from({ length: o.concurrency ?? 6 }, worker));
+    // One frame failing stops the rest, and they all finish before the folder is removed (one still
+    // writing into it would fail the removal, and that error would hide this one).
+    const ended = await Promise.allSettled(
+      Array.from({ length: o.concurrency ?? 6 }, () =>
+        worker().catch((err: unknown) => {
+          failed = true;
+          throw err;
+        }),
+      ),
+    );
+    const failure = ended.find((e): e is PromiseRejectedResult => e.status === "rejected");
+    if (failure) throw failure.reason;
     const sheets: Buffer[] = [];
     for (let s = 0; s * per < segments.length; s++) {
       const chunk = files.slice(s * per * 3, (s + 1) * per * 3);

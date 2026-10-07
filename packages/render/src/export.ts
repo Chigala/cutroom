@@ -30,11 +30,13 @@ import {
   derivedPaths,
   makeCutout,
   makeMaster,
+  makeStems,
   masterVoice,
   muxFinal,
   overlayVoices,
   renderableAsIs,
   resolveDerived,
+  STEMS_MODEL,
   sfxFile,
   type VoiceOverlay,
   type VoiceSegment,
@@ -58,6 +60,7 @@ import {
   shapeOf,
   shapeSize,
   sourceTime,
+  splitsSound,
   timelineOf,
   voicePlan,
 } from "@vedit/project";
@@ -185,6 +188,39 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
   }
   const base = todo.length ? 0.25 : 0;
 
+  // Clips a shot takes its own music out of (ownMusic): split into the voice, which the dialogue uses,
+  // and the music, which plays with the picture at the shot's share. Made now if they aren't yet. One
+  // that can't be split keeps its sound as recorded rather than fail the export.
+  const voiceOf = new Map<string, string>();
+  for (const id of new Set(tl.scenes.filter((p) => splitsSound(p.scene)).map((p) => p.scene.source))) {
+    check();
+    const src = sources.get(id);
+    if (!src?.path || !src.hasAudio) continue;
+    try {
+      const parts = await makeStems(projectDir, src, {
+        current: doc.analyses.find((a) => a.id === id)?.stems === STEMS_MODEL,
+        ...(signal && { signal }),
+        onProgress: (f) => report("voice", `Taking the music out of ${src.label}`, base * (1 - f) + 0.25 * f),
+      });
+      voiceOf.set(id, parts.voice);
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      console.warn(`[export] ${id} keeps its music:`, (err as Error).message);
+    }
+  }
+  // The picture's sound plays the music parts made (and only those).
+  const sounding: ProjectDoc = {
+    ...doc,
+    analyses: [
+      ...doc.analyses.map(({ stems: _, ...a }) => (voiceOf.has(a.id) ? { ...a, stems: STEMS_MODEL } : a)),
+      ...[...voiceOf.keys()]
+        .filter((id) => !doc.analyses.some((a) => a.id === id))
+        .map((id) => ({ id, silences: [], shots: [], stems: STEMS_MODEL })),
+    ],
+  };
+  /** A clip's sound for the dialogue: its voice alone when its music comes out. */
+  const voiceFile = (s: Source, file: string) => voiceOf.get(s.id) ?? file;
+
   // 2. Dialogue, frame-accurate to the picture: the same rounding the composition uses.
   check();
   report("voice", "Cleaning up the voice", base);
@@ -210,7 +246,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
     // A ramped shot's own sound is dropped (the music carries a velocity edit).
     if (src?.kind === "video" && src.hasAudio && p.scene.volume > 0 && !p.scene.ramp?.length)
       return {
-        file: masterOf(src),
+        file: voiceFile(src, masterOf(src)),
         start,
         duration,
         volume: p.scene.volume,
@@ -219,7 +255,15 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
         ...eqOf(src.id),
       };
     if (src?.kind === "audio" && src.path)
-      return { file: src.path, start, duration, volume: p.scene.volume, speed, crossfade, ...eqOf(src.id) };
+      return {
+        file: voiceFile(src, src.path),
+        start,
+        duration,
+        volume: p.scene.volume,
+        speed,
+        crossfade,
+        ...eqOf(src.id),
+      };
     return { silence: duration, crossfade };
   });
   // Voiceovers, laid over the dialogue at their moments (it steps back under them), EQ'd like it.
@@ -290,7 +334,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
       stereo: m.stereo,
       ...(!isClean &&
         main?.path &&
-        mainSilences && { fallback: { file: main.path, silences: mainSilences } }),
+        mainSilences && { fallback: { file: voiceFile(main, main.path), silences: mainSilences } }),
       ...(signal && { signal }),
     }).catch((err: unknown) => {
       if (signal?.aborted) throw err;
@@ -387,10 +431,10 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
       const tag = shape ? ` (${shape})` : "";
       const shaped: ProjectDoc = shape
         ? {
-            ...doc,
+            ...sounding,
             meta: { ...doc.meta, format: { ...doc.meta.format, ...shapeSize(doc.meta.format, shape) } },
           }
-        : doc;
+        : sounding;
       const picture = path.join(work, `picture.${ext}`);
       report("picture", `Rendering${tag}`, at);
       const cancel = makeCancelSignal();

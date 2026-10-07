@@ -21,7 +21,6 @@ import {
   assetLine,
   bestStretch,
   type ChangeGroup,
-  COLLECTIONS,
   cleanCutOps,
   cutReport,
   DERIVED,
@@ -36,11 +35,11 @@ import {
   inspirationOps,
   type KitInfo,
   lookDefaults,
+  looseOpSchemaFor,
   type MotionTrack,
   measureReference,
   type Op,
   OpError,
-  opSchemaFor,
   ProcessRecipe,
   type ProjectDoc,
   packFromProject,
@@ -51,6 +50,7 @@ import {
   replaceTimelineOps,
   replaceWordsOps,
   SHAPES,
+  SINGLETONS,
   type Source,
   STARTER_INSPIRATIONS,
   sceneAt,
@@ -68,6 +68,7 @@ import {
   validateStyle,
 } from "@vedit/project";
 import { z } from "zod";
+import { compactFields, EDITABLE, fieldsOf, unknownFields } from "./fields.ts";
 import { toolActivity } from "./types.ts";
 import { checkStep, checksView, projectView, searchFootage, shotsView, transcriptView } from "./view.ts";
 
@@ -267,10 +268,22 @@ export interface AgentTool<S extends z.ZodObject = z.ZodObject> {
 const tool = <S extends z.ZodObject>(t: AgentTool<S>) => t as unknown as AgentTool;
 
 /**
- * The ops apply_ops takes: everything but what indexing writes and the inspirations (the inspiration
- * tool manages those), so the model sees only shapes it may use.
+ * The ops apply_ops takes, on everything but what indexing writes and the inspirations (the inspiration
+ * tool manages those). Items go as plain objects; their fields are listed once in the description, and
+ * checked when applied.
  */
-const AGENT_OPS = opSchemaFor(COLLECTIONS.filter((c) => !DERIVED.includes(c) && c !== "inspirations"));
+const AGENT_OPS = looseOpSchemaFor(EDITABLE);
+
+/** Fields an op names that its collection or setting doesn't have, one line each (none: empty). */
+function unknownIn(ops: readonly Op[]): string[] {
+  return ops.flatMap((o, i) => {
+    const name = "coll" in o ? o.coll : o.key;
+    const value = o.op === "insert" ? o.item : o.op === "set" ? o.value : "patch" in o ? o.patch : undefined;
+    return unknownFields(name, value).map(
+      (u) => `ops[${i}] (${o.op} ${name}): no field "${u.path}"; it takes ${u.known.join(", ")}`,
+    );
+  });
+}
 
 const STYLE_COLLECTION = { effect: "effectKinds", transition: "transitionKinds", grade: "grades" } as const;
 const STYLE_DIR = { effect: "effects", transition: "transitions", grade: "grades" } as const;
@@ -405,7 +418,13 @@ function commit(ctx: ToolContext, label: string, ops: readonly Op[], undoable = 
     if (undoable)
       ctx.scratch.undoable = [...(ctx.scratch.undoable ?? []), { label, inverse: applied.inverse }];
   } catch (err) {
-    if (err instanceof OpError) return { text: `Not applied: ${err.message}`, isError: true };
+    if (err instanceof OpError) {
+      const at = ops.indexOf(err.op);
+      return {
+        text: `Not applied: ${at >= 0 && ops.length > 1 ? `ops[${at}] ` : ""}${err.message}`,
+        isError: true,
+      };
+    }
     throw err;
   }
   const start = ctx.scratch.ops.length;
@@ -666,14 +685,26 @@ export const TOOLS: readonly AgentTool[] = [
   }),
   tool({
     name: "apply_ops",
-    description:
-      "Apply a group of edits to the project (scenes, zooms, titles, captions, sfx, music, look, captionStyle, comments). All ops apply or none do. Returns the updated project, or an error to fix and retry. Each call is one change the user can undo on its own.",
+    description: `Apply a group of edits to the project. All ops apply or none do. Returns the updated project, or an error to fix and retry. Each call is one change the user can undo on its own.
+Ops:
+{op: "insert", coll, item, index?}: add an item (index: its position; appends when omitted)
+{op: "update", coll, id, patch}: change an item's fields (only those that change; null removes an optional one)
+{op: "remove", coll, id} / {op: "move", coll, id, index}
+{op: "set", key, value} / {op: "merge", key, patch}: replace a setting, or change some of its fields
+Fields (? optional; a bare name is a string; the fields tool has what each does and its default):
+${compactFields()}`,
     input: z.object({ label: Label, ops: z.array(AGENT_OPS).min(1).max(400) }),
     async run({ label, ops }, ctx) {
       const derived = ops.find((o) => "coll" in o && DERIVED.includes(o.coll));
       if (derived)
         return {
           text: "Transcripts and analysis are written by indexing; use edit_words for captions.",
+          isError: true,
+        };
+      const unknown = unknownIn(ops);
+      if (unknown.length)
+        return {
+          text: `Not applied: ${unknown.slice(0, 8).join("\n")}${unknown.length > 8 ? `\n(and ${unknown.length - 8} more)` : ""}`,
           isError: true,
         };
       const stuck = overRevised(ctx, ops);
@@ -684,7 +715,10 @@ export const TOOLS: readonly AgentTool[] = [
           isError: true,
         };
       const result = commit(ctx, label, ops);
-      if (result.isError) return result;
+      if (result.isError)
+        return /invalid \w+/.test(result.text)
+          ? { ...result, text: `${result.text}\nThe fields tool has what each field takes.` }
+          : result;
       const last = countRevisions(ctx, ops);
       return {
         ...(last.length > 0 && { stuck: true }),
@@ -694,6 +728,20 @@ export const TOOLS: readonly AgentTool[] = [
             ? `\n\nThat's the third change to ${last.map(itemName).join(", ")} after looking at it. Check it once more; if it still isn't right, ${STOP_AND_ASK}`
             : ""),
       };
+    },
+  }),
+  tool({
+    name: "fields",
+    description:
+      "What each field of a collection or setting does, its range and its default (apply_ops lists them by name). Look one up before using fields you haven't, or when an edit is refused.",
+    input: z.object({
+      names: z
+        .array(z.enum([...EDITABLE, ...SINGLETONS] as [string, ...string[]]))
+        .min(1)
+        .max(8),
+    }),
+    async run({ names }) {
+      return { text: names.map((n) => fieldsOf(n)).join("\n\n") };
     },
   }),
   tool({

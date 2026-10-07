@@ -103,6 +103,7 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   transcribe_again: "Listening to the words again",
   clean_cuts: "Cleaning the cuts",
   apply_ops: "Making changes",
+  fields: "Checking the fields",
   read_graphic: "Reading a graphic",
   write_graphic: "Designing a graphic",
   read_caption_look: "Reading the caption look",

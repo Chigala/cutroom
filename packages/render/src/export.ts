@@ -32,9 +32,11 @@ import {
   makeMaster,
   masterVoice,
   muxFinal,
+  overlayVoices,
   renderableAsIs,
   resolveDerived,
   sfxFile,
+  type VoiceOverlay,
   type VoiceSegment,
   voiceMatchEq,
   voiceProfile,
@@ -43,6 +45,7 @@ import {
   audioPlan,
   CACHE_DIR,
   cutoutCovering,
+  DUCK_RAMP,
   EXPORTS_DIR,
   FONTS_DIR,
   keepTag,
@@ -56,6 +59,7 @@ import {
   shapeSize,
   sourceTime,
   timelineOf,
+  voicePlan,
 } from "@vedit/project";
 import {
   chromiumOptions,
@@ -218,7 +222,32 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
       return { file: src.path, start, duration, volume: p.scene.volume, speed, crossfade, ...eqOf(src.id) };
     return { silence: duration, crossfade };
   });
-  const hasVoice = segments.some((s) => "file" in s);
+  // Voiceovers, laid over the dialogue at their moments (it steps back under them), EQ'd like it.
+  const overlays: VoiceOverlay[] = voicePlan(doc, tl).flatMap((v) => {
+    const src = sources.get(v.item.source);
+    if (
+      !src?.path ||
+      (src.kind === "video" && !src.hasAudio) ||
+      (src.kind !== "video" && src.kind !== "audio")
+    )
+      return [];
+    const at = frame(v.start);
+    // Shorter than a frame once rounded to the picture: nothing to hear.
+    if (frame(v.end) - at <= 0) return [];
+    return [
+      {
+        // The sound alone, straight from the file (a master would re-encode the picture for nothing).
+        file: src.path,
+        start: v.item.offset,
+        duration: frame(v.end) - at,
+        at,
+        volume: v.item.volume,
+        duck: v.item.duck,
+        ...eqOf(src.id),
+      },
+    ];
+  });
+  const hasVoice = segments.some((s) => "file" in s) || overlays.length > 0;
   const rawVoice = path.join(work, "voice.raw.wav");
   const voice = path.join(work, "voice.wav");
   // The voice is made while the picture renders (they share nothing until the mix): its clean-up and
@@ -227,7 +256,12 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
     if (!hasVoice) return;
     // The project's mix: voice processing, loudness and stereo (audio/mix.json).
     const m = doc.mix;
-    await buildVoiceTrack(segments, rawVoice, signal, { stereo: m.stereo });
+    if (overlays.length) {
+      const dialogue = path.join(work, "voice.dialogue.wav");
+      await buildVoiceTrack(segments, dialogue, signal, { stereo: m.stereo });
+      await overlayVoices(dialogue, overlays, rawVoice, signal, { stereo: m.stereo, ramp: DUCK_RAMP });
+      await rm(dialogue, { force: true });
+    } else await buildVoiceTrack(segments, rawVoice, signal, { stereo: m.stereo });
     // Neural clean-up of room echo and noise (mix.voiceClean). Never fatal: without it, the voice
     // goes on as recorded and the spectral denoiser does what it can.
     const cleaned = path.join(work, "voice.clean.wav");
@@ -471,6 +505,7 @@ export async function exportVideo(o: ExportOptions): Promise<string> {
     ...doc.scenes.map((s) => s.source),
     ...doc.sfx.flatMap((s) => (s.source ? [s.source] : [])),
     ...doc.musicClips.map((m) => m.source),
+    ...doc.voiceovers.map((v) => v.source),
     ...doc.visuals.flatMap((v) => (v.content.kind !== "graphic" ? [v.content.source] : [])),
   ]);
   const credits = [

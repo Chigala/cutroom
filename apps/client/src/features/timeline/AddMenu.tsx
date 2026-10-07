@@ -102,6 +102,7 @@ export function AddMenu() {
       scenes: "sc",
       musicClips: "mc",
       musicCues: "cue",
+      voiceovers: "vo",
     }[coll];
     const id = nextId(prefix, doc[coll] as readonly { id: string }[]);
     const op = { op: "insert", coll, item: make(id, anchor, tl.duration - t) } as Op;

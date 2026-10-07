@@ -216,6 +216,91 @@ export async function buildVoiceTrack(
   }
 }
 
+/** A recording laid over the dialogue track at a moment (a voiceover). */
+export interface VoiceOverlay {
+  readonly file: string;
+  /** Seconds into the recording. */
+  readonly start: number;
+  /** Seconds heard. */
+  readonly duration: number;
+  /** Output seconds it starts at. */
+  readonly at: number;
+  readonly volume: number;
+  /** How loud the dialogue under it stays (0..1). */
+  readonly duck: number;
+  /** ffmpeg filters for this recording alone: the EQ that matches it to broadcast balance. */
+  readonly eq?: string;
+}
+
+/**
+ * Lays voiceovers over a built dialogue track: each recording at its moment, the dialogue under it
+ * stepping back to its duck, `ramp` seconds before and after (duckAt in @vedit/project: the preview's
+ * curve, so both sound the same). The result is as long as the track.
+ */
+export async function overlayVoices(
+  track: string,
+  overlays: readonly VoiceOverlay[],
+  output: string,
+  signal?: AbortSignal,
+  { stereo = false, ramp = 0.25 }: { stereo?: boolean; ramp?: number } = {},
+): Promise<void> {
+  const layout = stereo ? "aformat=channel_layouts=stereo" : "pan=mono|c0=0.5*c0+0.5*c1";
+  const inputs = overlays.map((o) => {
+    const from = Math.max(0, o.start - PREROLL);
+    return ["-ss", from.toFixed(4), "-t", (o.start - from + o.duration + 0.5).toFixed(4), "-i", o.file];
+  });
+  // The dialogue's gain over time: the lowest any voiceover asks for, eased in and out around each.
+  const f = (n: number) => n.toFixed(4);
+  const gains = overlays.map(
+    (o) =>
+      // Commas inside an expression are escaped: the graph would read them as the next filter.
+      `1-${f(1 - o.duck)}*clip(min((t-${f(o.at - ramp)})/${f(ramp)}\\,(${f(o.at + o.duration + ramp)}-t)/${f(ramp)})\\,0\\,1)`,
+  );
+  const gain = gains.reduce((a, b) => `min(${a}\\,${b})`);
+  const fade = 0.02;
+  const parts = [
+    `[0:a:0]aresample=48000,${layout},volume=eval=frame:volume=${gain}[base]`,
+    ...overlays.map(
+      (o, n) =>
+        `[${n + 1}:a:0]atrim=start=${f(o.start - Math.max(0, o.start - PREROLL))}:duration=${f(o.duration)},asetpts=PTS-STARTPTS,` +
+        `aresample=48000,${layout},${o.eq ? `${o.eq},` : ""}volume=${o.volume.toFixed(3)},` +
+        `afade=t=in:d=${fade},afade=t=out:st=${f(Math.max(0, o.duration - fade))}:d=${fade},` +
+        // Padded with silence, so every input lasts as long as the track: amix then scales them all by
+        // the same 1/n throughout (no option needed: older ffmpeg has no normalize), undone after.
+        `adelay=${Math.round(o.at * 1000)}:all=1,apad[v${n}]`,
+    ),
+    `[base]${overlays.map((_, n) => `[v${n}]`).join("")}amix=inputs=${overlays.length + 1}:duration=first:dropout_transition=0,volume=${overlays.length + 1}[out]`,
+  ];
+  const script = `${output}.filter`;
+  await writeFile(script, parts.join(";\n"));
+  const fromFile = (await ffmpegMajor()) >= 7 ? "-/filter_complex" : "-filter_complex_script";
+  try {
+    await run(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        track,
+        ...inputs.flat(),
+        fromFile,
+        script,
+        "-map",
+        "[out]",
+        "-c:a",
+        "pcm_s16le",
+        "-ar",
+        "48000",
+        "-ac",
+        "1",
+        output,
+      ],
+      signal ? { signal } : {},
+    );
+  } finally {
+    await rm(script, { force: true });
+  }
+}
+
 /** Measures, then applies one fixed gain (two-pass loudnorm), so pauses never get pumped up. */
 export async function masterVoice(
   input: string,

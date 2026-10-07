@@ -1056,6 +1056,23 @@ export const MusicClip = z.object({
 export type MusicClip = z.infer<typeof MusicClip>;
 
 /**
+ * audio/voiceovers.json: a recording laid over the cut, heard as the voice: commentary over a vlog, a
+ * walkthrough over a screen. Its words are captioned; the shots' own sound (and their captions) step back
+ * under it, and the music ducks as it does under any speech. A faceless video narrated end to end is
+ * cut from the recording itself (its scenes), not this.
+ */
+export const Voiceover = z.object({
+  id: Id,
+  anchor: Anchor,
+  duration: z.number().min(0.1).max(3600),
+  source: Id.meta({ ref: "sources" }),
+  offset: Seconds.default(0).describe("Start in the recording"),
+  volume: z.number().min(0).max(2).default(1),
+  duck: Unit.default(0.2).describe("The shots' own sound under it"),
+});
+export type Voiceover = z.infer<typeof Voiceover>;
+
+/**
  * audio/music-cues.json: the music's volume over a stretch of the cut ("no music while Wiseman walks
  * out", "lift it into the launch"), pinned to a shot so it moves with the edit.
  */
@@ -1467,6 +1484,7 @@ export const CollectionSchemas = {
   sfx: Sfx,
   musicCues: MusicCue,
   musicClips: MusicClip,
+  voiceovers: Voiceover,
   comments: Comment,
 } as const;
 

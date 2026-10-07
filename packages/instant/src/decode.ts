@@ -52,6 +52,7 @@ const NOUNS: Record<string, [string, string]> = {
   sfx: ["Sound effect", "sound effects"],
   visuals: ["Overlay", "overlays"],
   musicClips: ["Music clip", "music clips"],
+  voiceovers: ["Voiceover", "voiceovers"],
   effects: ["Effect", "effects"],
 };
 

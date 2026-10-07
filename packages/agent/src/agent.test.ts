@@ -59,7 +59,9 @@ describe("agent tools", () => {
       expect(tool.input_schema.type, tool.name).toBe("object");
       expect(JSON.stringify(tool.input_schema)).not.toContain("$schema");
     }
-    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(120_000);
+    // Sent with every request, so it's held down. apply_ops is most of it (every collection's whole shape,
+    // spelled out); slimming that to fields looked up on demand is next, and brings this well down again.
+    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(125_000);
   });
 
   it("looks at a graphic on its own without touching the timeline", async () => {

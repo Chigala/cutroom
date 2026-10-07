@@ -7,15 +7,20 @@ import {
   CheckRules,
   castCorrected,
   castCorrection,
+  clearArea,
   DANGLING_WORDS,
+  entrySound,
   formatTime,
   frameWindow,
   type Op,
   type ProjectDoc,
   resolveAnchor,
   round,
+  SAFE_ZONE,
   type Scene,
+  safeZoneFor,
   sourceTime,
+  spanOf,
   spokenWords,
   type Timeline,
   timelineOf,
@@ -44,24 +49,8 @@ interface Rule {
 
 const pass = { status: "pass" } as const;
 
-/** Where each platform's app UI leaves the picture clear (fractions of the frame). */
-const SAFE_ZONES: Record<CheckRules["platform"], { top: number; bottom: number; right: number }> = {
-  // Phone UI covers roughly the bottom 17% (caption bar, buttons) and the right 18% (like, share).
-  tiktok: { top: 0.08, bottom: 0.78, right: 0.82 },
-  reels: { top: 0.1, bottom: 0.8, right: 0.85 },
-  shorts: { top: 0.08, bottom: 0.8, right: 0.85 },
-  youtube: { top: 0, bottom: 1, right: 1 },
-  none: { top: 0, bottom: 1, right: 1 },
-};
-
-export const safeZoneFor = (platform: CheckRules["platform"]) => SAFE_ZONES[platform];
-
-/** The project's clear area: its own (checks.json safeZone), or its platform's. */
-export const clearArea = (rules: Pick<CheckRules, "platform" | "safeZone">) =>
-  rules.safeZone ?? SAFE_ZONES[rules.platform];
-
-/** The TikTok safe zone, the default. */
-export const SAFE_ZONE = SAFE_ZONES.tiktok;
+// The platforms' clear areas live with the project (overlays are drawn inside them too).
+export { clearArea, SAFE_ZONE, safeZoneFor };
 
 /** The rules of the project being checked (checks.json); set by runChecks. */
 let R: CheckRules = CheckRules.parse({});
@@ -202,12 +191,12 @@ const rules: Rule[] = [
         }),
       );
       for (const title of doc.titles) {
-        const start = resolveAnchor(tl, title.anchor);
-        if (start === null) continue;
+        const span = spanOf(tl, title);
+        if (!span) continue;
         const box = titleBox(title, doc.meta.format.height);
         for (const f of found)
-          if (start < f.to && start + title.duration > f.from && overlaps(f.box, box))
-            hits.push({ at: Math.max(start, f.from), text: f.text, scene: f.scene, by: "A title" });
+          if (span.start < f.to && span.end > f.from && overlaps(f.box, box))
+            hits.push({ at: Math.max(span.start, f.from), text: f.text, scene: f.scene, by: "A title" });
       }
       if (!hits.length) return pass;
       hits.sort((a, b) => a.at - b.at);
@@ -329,7 +318,7 @@ const rules: Rule[] = [
     id: "sound-clutter",
     title: "Sound effects breathe",
     run(doc, tl) {
-      // Every hit: placed sound effects, and the entry sound of each graphic or cutaway.
+      // Every hit: placed sound effects, and the entry sound a graphic or cutaway names.
       interface Hit {
         readonly t: number;
         readonly name: string;
@@ -352,13 +341,12 @@ const rules: Rule[] = [
       if (doc.mix.entrySounds)
         for (const v of doc.visuals) {
           if (v.sfx === "none") continue;
-          const t = resolveAnchor(tl, v.anchor);
-          const name =
-            v.sfx ?? (v.content.kind === "cutaway" ? "swipe" : v.layout === "overlay" ? "pop" : "whoosh");
-          if (t !== null) hits.push({ t, name, kind: "entry", id: v.id, volume: v.sfxVolume ?? 0.7 });
+          const t = spanOf(tl, v)?.start ?? null;
+          const name = entrySound(v);
+          if (t !== null && name) hits.push({ t, name, kind: "entry", id: v.id, volume: v.sfxVolume ?? 0.7 });
         }
       if (hits.length < 2) return pass;
-      // Keep the strongest hits (placed ones over automatic entry sounds, louder first), each at least
+      // Keep the strongest hits (placed ones over entry sounds, louder first), each at least
       // sfxGap from the others, and no sound more than sfxRepeat times.
       const ranked = [...hits].sort(
         (a, b) => Number(a.kind === "entry") - Number(b.kind === "entry") || b.volume - a.volume || a.t - b.t,

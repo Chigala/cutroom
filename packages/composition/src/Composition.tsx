@@ -7,13 +7,14 @@
  *   camera   the shots, with drift, jump-cut zoom, punch-ins, shake/whip/mono, sliding down for splits
  *   visuals  graphics (HTML files) and cutaways, as overlay / full / split
  *   titles, captions, flash
- *   sound    music (ducked under speech, faded at the ends), sound effects, visual entry sounds
+ *   sound    music (ducked under speech, faded at the ends), sound effects, the entry sounds visuals name
  *
  * Everything derived is memoized on the doc's collections. Docs share structure across edits, so moving
  * a caption doesn't recompute scene layout and vice versa.
  */
 import { Audio, Video } from "@remotion/media";
 import {
+  type Anchored,
   type AudioSpan,
   audioPlan,
   beatLength,
@@ -23,11 +24,13 @@ import {
   type CaptionStyle,
   cameraPathCovering,
   captionPages,
+  clearRect,
   cutoutCovering,
   cutoutKey,
   cutoutRange,
   duckAt,
   type Effect,
+  entrySound,
   fitsInside,
   flowHash,
   flowKey,
@@ -39,6 +42,7 @@ import {
   type Keyframe,
   keepTag,
   type Look,
+  lasting,
   type MotionTrack,
   type MusicClip,
   type MusicCue,
@@ -47,12 +51,12 @@ import {
   type ProjectDoc,
   poseAt,
   poseTransform,
+  type Rect,
   rampHash,
   rampKey,
   rampMap,
   type Scene,
   type Sfx,
-  type SfxName,
   type Source,
   STARTER_CAPTION_LOOKS,
   STARTER_GRADES,
@@ -151,12 +155,6 @@ const ramp = (frame: number, from: number, frames: number, easing = EASE_OUT) =>
 
 /** Drift: a slow push-in across each shot, so the frame is never locked off. */
 const DRIFT = 0.035;
-
-/** Default entry sound for a visual when it doesn't name one. */
-const ENTRY_SFX = (v: Visual): SfxName | null =>
-  v.sfx === null || v.sfx === "none"
-    ? null
-    : (v.sfx ?? (v.content.kind === "cutaway" ? "swipe" : v.layout === "overlay" ? "pop" : "whoosh"));
 
 export const VideoComposition = ({
   doc,
@@ -278,6 +276,11 @@ export const VideoComposition = ({
   );
   const tolerance = beatSecs ? Math.floor(Math.min(0.12, beatSecs / 3) * fps) : 0;
   const onBeat = <T,>(items: Timed<T>[]) => lockToBeats(items, beatFrames, tolerance);
+  // Overlays that last (a watermark, a chapter label) frame the video: their ends stay where they are.
+  const momentsOnBeat = <T extends Pick<Anchored, "whole" | "until">>(items: Timed<T>[]) =>
+    [...onBeat(items.filter((t) => !lasting(t.item))), ...items.filter((t) => lasting(t.item))].sort(
+      (a, b) => a.from - b.from,
+    );
   const tempoVars = useMemo((): Record<string, string> => {
     if (!beatSecs) return {};
     return { "--beat": `${beatSecs.toFixed(4)}s`, "--bar": `${(beatSecs * 4).toFixed(4)}s` };
@@ -290,12 +293,12 @@ export const VideoComposition = ({
   const captions = useMemo(() => placeAll(tl, doc.captions, fps), [tl, doc.captions, fps]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: onBeat derives from beatFrames and tolerance
   const titles = useMemo(
-    () => onBeat(placeAll(tl, doc.titles, fps)),
+    () => momentsOnBeat(placeAll(tl, doc.titles, fps)),
     [tl, doc.titles, fps, beatFrames, tolerance],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: onBeat derives from beatFrames and tolerance
   const visuals = useMemo(
-    () => onBeat(placeAll(tl, doc.visuals, fps)),
+    () => momentsOnBeat(placeAll(tl, doc.visuals, fps)),
     [tl, doc.visuals, fps, beatFrames, tolerance],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: onBeat derives from beatFrames and tolerance
@@ -358,7 +361,11 @@ export const VideoComposition = ({
   );
   // Times when something occupies the upper frame: captions then stay low rather than move above the face.
   const busy = useMemo(
-    () => [...titles, ...visuals.filter((v) => v.item.layout === "overlay")] as readonly FrameSpan[],
+    // Overlays that last (a corner logo) don't count: they'd move the captions in every shot.
+    () =>
+      [...titles, ...visuals.filter((v) => v.item.layout === "overlay")].filter(
+        (x) => !lasting(x.item),
+      ) as readonly FrameSpan[],
     [titles, visuals],
   );
   // On-screen text that may repeat what is being said: captions step aside for it.
@@ -401,6 +408,8 @@ export const VideoComposition = ({
   // The caption look's CSS; a missing look falls back to the built-in outline.
   const lookCss = (doc.captionLooks.find((l) => l.id === doc.captionStyle.look) ?? FALLBACK_LOOK)?.css ?? "";
 
+  // Overlays marked clear lay out in the platform's clear area (portrait frames: off the app's buttons).
+  const clearBox = useMemo(() => clearRect(doc.checkRules, width, height), [doc.checkRules, width, height]);
   // Drawn behind the subject only once the shot's cutout exists; until then, in front as usual.
   const behind = (item: { behindSubject?: boolean | undefined }) =>
     cutouts.size > 0 && item.behindSubject === true;
@@ -412,38 +421,47 @@ export const VideoComposition = ({
       premountFor={fps}
       name={v.item.id}
     >
-      <Keyframed keyframes={v.item.keyframes}>
-        <VisualView
-          visual={v.item}
-          exitSeconds={exitOf(v, tl, fps)}
-          graphic={v.item.content.kind === "graphic" ? graphics.get(v.item.content.graphic) : undefined}
-          sources={sources}
-          mediaBase={mediaBase}
-          quality={quality}
-          gradeCss={gradeCss}
-          follow={
-            v.item.follow
-              ? (local: number) => followVars(v.item.follow!, tracks, mapCtx, v.from + local)
-              : undefined
-          }
-          vars={{
-            // The tempo, so a graphic's own animation can run on the beat (it starts on one).
-            ...tempoVars,
-            // Over the speaker, graphics get the face's place when they start, so they can keep off it.
-            ...(v.item.layout === "overlay" && faces.size
-              ? frameVars(faceBand(faceAt(tl, faces, v.from / fps), zooms, v.from, fps, width / height))
-              : {}),
-          }}
-          {...theme}
-        />
-      </Keyframed>
+      {/* A cutaway or a panel fills its place; an overlay pinned to a person follows them. */}
+      <InArea rect={v.item.clear && v.item.layout === "overlay" && !v.item.follow ? clearBox : null}>
+        <Keyframed keyframes={v.item.keyframes}>
+          <VisualView
+            visual={v.item}
+            exitSeconds={exitOf(v, tl, fps)}
+            graphic={v.item.content.kind === "graphic" ? graphics.get(v.item.content.graphic) : undefined}
+            sources={sources}
+            mediaBase={mediaBase}
+            quality={quality}
+            gradeCss={gradeCss}
+            follow={
+              v.item.follow
+                ? (local: number) => followVars(v.item.follow!, tracks, mapCtx, v.from + local)
+                : undefined
+            }
+            vars={{
+              // The tempo, so a graphic's own animation can run on the beat (it starts on one).
+              ...tempoVars,
+              // Over the speaker, graphics get the face's place when they start, so they can keep off it.
+              ...(v.item.layout === "overlay" && faces.size
+                ? frameVars(faceBand(faceAt(tl, faces, v.from / fps), zooms, v.from, fps, width / height))
+                : {}),
+            }}
+            {...theme}
+          />
+        </Keyframed>
+      </InArea>
     </Sequence>
   );
+  // Which visuals this render draws: cutaways and full or split visuals are the picture (footage),
+  // overlays go over it (overlays).
+  const inLayers = (v: (typeof visuals)[number]) =>
+    v.item.content.kind === "cutaway" || v.item.layout !== "overlay" ? footage : overlays;
   const titleNode = (t: (typeof titles)[number]) => (
     <Sequence key={t.item.id} from={t.from} durationInFrames={t.durationInFrames} layout="none">
-      <Keyframed keyframes={t.item.keyframes}>
-        <TitleView title={t.item} animate={t.from > 0} font={theme.font} />
-      </Keyframed>
+      <InArea rect={t.item.clear ? clearBox : null}>
+        <Keyframed keyframes={t.item.keyframes}>
+          <TitleView title={t.item} animate={t.from > 0} font={theme.font} />
+        </Keyframed>
+      </InArea>
     </Sequence>
   );
 
@@ -536,13 +554,11 @@ export const VideoComposition = ({
                 />
               )}
               {layered(visuals)
-                .filter((v) => !behind(v.item))
+                .filter((v) => !behind(v.item) && !v.item.onTop)
                 // Cutaways, and graphics that fill the frame or a panel of it, are the picture; overlays are drawn over it.
-                .filter((v) =>
-                  v.item.content.kind === "cutaway" || v.item.layout !== "overlay" ? footage : overlays,
-                )
+                .filter(inLayers)
                 .map(visualNode)}
-              {overlays && titles.filter((t) => !behind(t.item)).map(titleNode)}
+              {overlays && titles.filter((t) => !behind(t.item) && !t.item.onTop).map(titleNode)}
               {/* Captions page on cue by design: left out of measuring motion. */}
               {layers === "all" && (
                 <Captions
@@ -571,6 +587,12 @@ export const VideoComposition = ({
                   accent={theme.accent}
                 />
               )}
+              {/* Over everything: overlays marked onTop (a watermark, a logo), captions and effects included. */}
+              {layered(visuals)
+                .filter((v) => !behind(v.item) && v.item.onTop)
+                .filter(inLayers)
+                .map(visualNode)}
+              {overlays && titles.filter((t) => !behind(t.item) && t.item.onTop).map(titleNode)}
               {doc.exportSettings.creditsInVideo && doc.music.source && doc.music.credit ? (
                 <Sequence from={Math.max(0, tlFrames - Math.round(fps * 3))} layout="none">
                   <MusicCredit text={doc.music.credit} font={theme.font} />
@@ -636,7 +658,7 @@ export const VideoComposition = ({
                 </Sequence>
               ))}
               {(audio ? visuals : []).map((v) => {
-                const name = doc.mix.entrySounds ? ENTRY_SFX(v.item) : null;
+                const name = doc.mix.entrySounds ? entrySound(v.item) : null;
                 return name ? (
                   <Sequence
                     key={`${v.item.id}-sfx`}
@@ -694,6 +716,38 @@ function Sound(p: SoundProps) {
 
 /** The layer a sound's sequence draws: nothing, and nothing that takes a click. */
 const SILENT_LAYER: CSSProperties = { pointerEvents: "none" };
+
+/**
+ * The box an overlay lays itself out in: the whole frame, or (an overlay marked clear) the platform's
+ * clear area, off the app's buttons. Titles and media boxes measure from it; a graphic's stage fills it.
+ */
+const AreaContext = createContext<Rect | null>(null);
+
+/** The size an overlay lays itself out in. */
+function useArea(): { width: number; height: number } {
+  const area = useContext(AreaContext);
+  const { width, height } = useVideoConfig();
+  return area ? { width: area.width, height: area.height } : { width, height };
+}
+
+/** An overlay inside `rect` (the clear area) when it has one, the whole frame otherwise. */
+function InArea({ rect, children }: { rect: Rect | null; children: ReactNode }) {
+  if (!rect) return <>{children}</>;
+  return (
+    <AbsoluteFill
+      style={{
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        right: "auto",
+        bottom: "auto",
+      }}
+    >
+      <AreaContext.Provider value={rect}>{children}</AreaContext.Provider>
+    </AbsoluteFill>
+  );
+}
 
 /** How footage fills a frame of another shape (look.fit). */
 const FitContext = createContext<{ fit: Look["fit"]; backdrop: Look["fitBackdrop"] }>({
@@ -2184,7 +2238,8 @@ function MediaBox({
   enterSeconds: number;
 }) {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames, width, height } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
+  const { width, height } = useArea();
   if (!source) return <Placeholder color="#3A1F1F" />;
   const aspect = source.width && source.height ? source.width / source.height : 1;
   const w = content.box.width * width;
@@ -2250,7 +2305,8 @@ function MediaBox({
  */
 function TitleView({ title, animate, font }: { title: Title; animate: boolean; font: string }) {
   const frame = useCurrentFrame();
-  const { fps, width, durationInFrames } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
+  const { width } = useArea();
   const mode = title.animateIn ?? "rise";
   const run = animate || title.animateIn !== undefined;
   const t = run ? spring({ frame, fps, config: { damping: 20, stiffness: 200 } }) : 1;

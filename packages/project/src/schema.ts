@@ -712,6 +712,33 @@ export const Inspiration = z.object({
 export type Inspiration = z.infer<typeof Inspiration>;
 
 /** overlays/titles.json */
+/**
+ * How long an overlay stays, and where it sits: for a moment (its duration), across a stretch of the edit
+ * (until a later moment), or over the whole video (a watermark, a logo, a frame). Both ends are pinned to
+ * shots, so trims and reorders keep it right.
+ */
+const Lasting = {
+  whole: z
+    .boolean()
+    .optional()
+    .meta({ default: false })
+    .describe(
+      "On for the whole video, whatever the edit (a watermark, a logo, a frame); anchor and duration ignored",
+    ),
+  until: z
+    .union([Anchor, z.literal("end")])
+    .optional()
+    .describe('Lasts until this moment instead of duration (a chapter label): an anchor, or "end"'),
+  onTop: z.boolean().optional().meta({ default: false }).describe("Drawn over the captions too"),
+  clear: z
+    .boolean()
+    .optional()
+    .meta({ default: false })
+    .describe(
+      "Laid out in the platform's clear area (checkRules), off the app's buttons, in a portrait frame",
+    ),
+};
+
 export const Title = z.object({
   id: Id,
   role: z.enum(["hook", "title", "label"]).describe("hook = the opening line that stops the scroll"),
@@ -731,6 +758,7 @@ export const Title = z.object({
       "Keyframed motion on top of its own animation: position, scale, rotation and opacity over time",
     ),
   duration: z.number().positive().max(60),
+  ...Lasting,
   text: z.string().max(300),
   position: Point.default({ x: 0.08, y: 0.12 }),
   size: z.number().min(16).max(200).default(84),
@@ -824,7 +852,12 @@ export const Mix = z.object({
     .default(1)
     .describe("Overall level of all music, on top of each track's volume"),
   sfxLevel: z.number().min(0).max(3).default(1).describe("Overall level of all sound effects"),
-  entrySounds: z.boolean().default(true).describe("Visuals make their default entry sound"),
+  entrySounds: z
+    .boolean()
+    .default(true)
+    .describe(
+      "Visuals play the entry sound they name (sfx); false silences them all. None has one unless it names one",
+    ),
   jlFade: Seconds.max(2).default(0.2).describe("Crossfade at a J- or L-cut"),
   roomTone: z
     .number()
@@ -1380,6 +1413,7 @@ export const Visual = z.object({
       "Keyframed motion on top of its own animation: position, scale, rotation and opacity over time",
     ),
   duration: z.number().min(0.5).max(15),
+  ...Lasting,
   layout: z
     .enum(["overlay", "full", "split"])
     .default("overlay")
@@ -1436,7 +1470,7 @@ export const Visual = z.object({
     .enum(VISUAL_SFX)
     .nullable()
     .optional()
-    .describe('Entry sound. Omit for the default for this layout, "none" for silence'),
+    .describe("A sound as it comes on, only where it earns one (a reveal, a key number). Unset: silent"),
 });
 export type Visual = z.infer<typeof Visual>;
 

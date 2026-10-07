@@ -19,7 +19,7 @@ import path from "node:path";
 import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/renderer";
 import type { CompositionProps } from "@vedit/composition";
 import { findBinary, trackRange } from "@vedit/media";
-import { musicBeats, type ProjectDoc, resolveAnchor, timelineOf } from "@vedit/project";
+import { musicBeats, type ProjectDoc, resolveAnchor, spanOf, timelineOf } from "@vedit/project";
 import { chromiumOptions, fallBackToSoftware, isGlUnavailable, remotionBinaries } from "./binaries.ts";
 import { type ExportOptions, serveUrl } from "./export.ts";
 import { startMediaServer } from "./server.ts";
@@ -219,15 +219,16 @@ export async function senseMotion(o: SenseOptions): Promise<MotionReport> {
   ]);
   const nearCut = (f: number) => [-1, 0, 1].some((d) => cuts.has(f + d));
 
-  // What's on screen at a frame: visual (graphic) and title ids.
-  const placed = [...doc.visuals.filter((v) => v.content.kind === "graphic"), ...doc.titles].flatMap(
-    (item) => {
-      const s = resolveAnchor(tl, item.anchor);
+  // What's on screen at a frame: visual (graphic) and title ids. Not the ones on for the whole video
+  // (a watermark): they'd be named in every issue without having caused any.
+  const placed = [...doc.visuals.filter((v) => v.content.kind === "graphic"), ...doc.titles]
+    .filter((item) => !item.whole)
+    .flatMap((item) => {
+      const s = spanOf(tl, item);
       return s === null
         ? []
-        : [{ id: item.id, from: Math.round(s * fps), to: Math.round((s + item.duration) * fps) }];
-    },
-  );
+        : [{ id: item.id, from: Math.round(s.start * fps), to: Math.round(s.end * fps) }];
+    });
   const itemsAt = (a: number, b = a) =>
     placed.filter((p) => p.from <= b + 1 && p.to >= a - 1).map((p) => p.id);
 

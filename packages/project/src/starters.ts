@@ -14,7 +14,7 @@ import { STARTER_GRAPHICS } from "./starter-graphics.ts";
 import { REPLACED_GRADES, STARTER_EFFECTS, STARTER_GRADES, STARTER_TRANSITIONS } from "./styles.ts";
 
 /** The current set of built-ins. Bump it when adding one, and list it in ADDED. */
-export const STARTER_VERSION = 4;
+export const STARTER_VERSION = 5;
 
 /** Built-ins added after the first set, by the version that brought them. */
 const ADDED: Readonly<Record<string, number>> = {
@@ -25,6 +25,7 @@ const ADDED: Readonly<Record<string, number>> = {
   "effectKinds/pop-out": 2,
   "graphics/trend": 3,
   "graphics/celebrate": 3,
+  "graphics/watermark": 5,
 };
 
 const SETS = [

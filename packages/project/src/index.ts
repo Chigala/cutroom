@@ -14,6 +14,7 @@ export * from "./ops.ts";
 export * from "./picture.ts";
 export * from "./reference.ts";
 export * from "./reframe.ts";
+export * from "./safe-zone.ts";
 export * from "./schema.ts";
 export * from "./sound.ts";
 export * from "./speech.ts";

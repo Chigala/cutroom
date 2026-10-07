@@ -7,7 +7,7 @@
 import { nextId } from "./history.ts";
 import { rampSpeed, sourceOffset } from "./motion.ts";
 import type { Op } from "./ops.ts";
-import type { Collection, ProjectDoc, Scene, TimedWord, WordEdit } from "./schema.ts";
+import type { Anchor, Collection, ProjectDoc, Scene, TimedWord, WordEdit } from "./schema.ts";
 import { audioPlan, round, sceneAt, sourceTime, type Timeline, timelineOf } from "./time.ts";
 import { UNHEARD, voicePlan } from "./voiceover.ts";
 
@@ -503,15 +503,9 @@ export function moveEdgesWithWords(
     "voiceovers",
   ] as const;
   for (const coll of colls)
-    for (const item of doc[coll] as readonly { id: string; anchor: { scene: string; at: number } }[]) {
-      const d = shift.get(item.anchor.scene);
-      if (!d) continue;
-      ops.push({
-        op: "update",
-        coll,
-        id: item.id,
-        patch: { anchor: { scene: item.anchor.scene, at: round(Math.max(0, item.anchor.at + d)) } },
-      } as Op);
+    for (const item of doc[coll] as readonly Pinned[]) {
+      const patch = shifted(item, shift);
+      if (patch) ops.push({ op: "update", coll, id: item.id, patch } as Op);
     }
   return ops;
 }
@@ -760,15 +754,9 @@ export function cleanCutOps(
     "voiceovers",
   ] as const;
   for (const coll of colls)
-    for (const item of doc[coll] as readonly { id: string; anchor: { scene: string; at: number } }[]) {
-      const d = shift.get(item.anchor.scene);
-      if (!d) continue;
-      ops.push({
-        op: "update",
-        coll,
-        id: item.id,
-        patch: { anchor: { scene: item.anchor.scene, at: round(Math.max(0, item.anchor.at + d)) } },
-      } as Op);
+    for (const item of doc[coll] as readonly Pinned[]) {
+      const patch = shifted(item, shift);
+      if (patch) ops.push({ op: "update", coll, id: item.id, patch } as Op);
     }
   return { ops, moved, blended };
 }
@@ -961,6 +949,29 @@ const ANCHORED: readonly Collection[] = [
   "comments",
 ];
 
+/** Something pinned to a shot: by its anchor, and (an overlay that lasts a stretch) its end. */
+type Pinned = { id: string; anchor: Anchor; until?: Anchor | "end" | undefined };
+
+/** The patch that keeps an item's moments where they were on shots whose footage shifted, or null. */
+function shifted(item: Pinned, shift: ReadonlyMap<string, number>): Record<string, unknown> | null {
+  const move = (a: Anchor) => {
+    const d = shift.get(a.scene);
+    return d ? { scene: a.scene, at: round(Math.max(0, a.at + d)) } : null;
+  };
+  const anchor = move(item.anchor);
+  const until = item.until && item.until !== "end" ? move(item.until) : null;
+  return anchor || until ? { ...(anchor && { anchor }), ...(until && { until }) } : null;
+}
+
+/** Overlays whose stretch ends in a shot (their until), wherever they start. */
+function endingIn(doc: ProjectDoc, sceneId: string) {
+  return (["titles", "visuals"] as const).flatMap((coll) =>
+    (doc[coll] as readonly Pinned[])
+      .filter((item) => item.until && item.until !== "end" && item.until.scene === sceneId)
+      .map((item) => ({ coll, item, until: item.until as Anchor })),
+  );
+}
+
 function anchoredIn(doc: ProjectDoc, sceneId: string) {
   return ANCHORED.flatMap((coll) =>
     (doc[coll] as readonly { id: string; anchor: { scene: string; at: number } }[])
@@ -997,6 +1008,15 @@ export function splitSceneOps(doc: ProjectDoc, sceneId: string, offset: number):
         id: item.id,
         patch: { anchor: { scene: id, at: round(item.anchor.at - offset) } },
       });
+  // A stretch that ends after the split ends in the second half.
+  for (const { coll, item, until } of endingIn(doc, sceneId))
+    if (until.at >= offset)
+      ops.push({
+        op: "update",
+        coll,
+        id: item.id,
+        patch: { until: { scene: id, at: round(until.at - offset) } },
+      });
   return ops;
 }
 
@@ -1021,6 +1041,14 @@ export function trimSceneOps(doc: ProjectDoc, sceneId: string, nextIn: number, n
         coll,
         id: item.id,
         patch: { anchor: { scene: sceneId, at: round(Math.max(0, item.anchor.at - shift)) } },
+      });
+  if (shift !== 0)
+    for (const { coll, item, until } of endingIn(doc, sceneId))
+      ops.push({
+        op: "update",
+        coll,
+        id: item.id,
+        patch: { until: { scene: sceneId, at: round(Math.max(0, until.at - shift)) } },
       });
   return ops;
 }

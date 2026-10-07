@@ -44,6 +44,44 @@ const STARS = "Wrap words in *stars* to color them with the accent.";
 
 const STARTERS: Graphic[] = [
   graphic(
+    "watermark",
+    {
+      name: "Watermark",
+      description:
+        "A handle or brand name in a corner, quiet and steady: place it for the whole video (whole: true), over the captions (onTop) and off the app's buttons (clear)",
+      duration: 5,
+      params: {
+        text: { type: "text", label: "Text", default: "@yourhandle", description: "The handle or name" },
+        corner: {
+          type: "choice",
+          label: "Corner",
+          options: ["bottom-right", "bottom-left", "top-right", "top-left"],
+          default: "bottom-right",
+        },
+        size: {
+          type: "number",
+          label: "Size",
+          default: 3.4,
+          description: "Text height, as a share (%) of the frame's short side",
+        },
+        opacity: { type: "number", label: "Opacity", default: 0.7, description: "0 to 1" },
+      },
+    },
+    `
+      .mark { position: absolute; margin: 4cqmin; font-size: calc(var(--size) * 1cqmin); font-weight: 700;
+              letter-spacing: -.01em; white-space: nowrap; opacity: var(--opacity);
+              text-shadow: 0 .2cqmin 1.4cqmin rgba(0,0,0,.6); animation: fade .6s var(--ease) both; }
+      .bottom-right { right: 0; bottom: 0; }
+      .bottom-left { left: 0; bottom: 0; }
+      .top-right { right: 0; top: 0; }
+      .top-left { left: 0; top: 0; }
+    `,
+    `
+<div class="stage">
+  <div class="mark {{corner}}" style="--size: {{size}}; --opacity: {{opacity}}">{{text}}</div>
+</div>`,
+  ),
+  graphic(
     "callout",
     {
       name: "Callout",

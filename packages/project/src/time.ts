@@ -1,5 +1,5 @@
 import { sceneLength, sourceOffset } from "./motion.ts";
-import type { Anchor, ProjectDoc, Scene } from "./schema.ts";
+import type { Anchor, ProjectDoc, Scene, SfxName, Visual } from "./schema.ts";
 
 export interface PlacedScene {
   readonly scene: Scene;
@@ -133,11 +133,32 @@ export interface Span {
   readonly end: number;
 }
 
-/** Absolute span of anything anchored with a duration. */
-export function spanOf(timeline: Timeline, item: { anchor: Anchor; duration: number }): Span | null {
-  const start = resolveAnchor(timeline, item.anchor);
-  return start === null ? null : { start, end: Math.min(start + item.duration, timeline.duration) };
+/** Something anchored with a duration, that may instead last a stretch or the whole video (an overlay). */
+export interface Anchored {
+  readonly anchor: Anchor;
+  readonly duration: number;
+  readonly whole?: boolean | undefined;
+  readonly until?: Anchor | "end" | undefined;
 }
+
+/**
+ * Absolute span of anything anchored: from its anchor for its duration, or to its `until` moment, or the
+ * whole video. A stretch whose end has gone (its shot removed) or now comes first (a reorder) falls back
+ * to its duration.
+ */
+export function spanOf(timeline: Timeline, item: Anchored): Span | null {
+  if (item.whole) return timeline.duration > 0 ? { start: 0, end: timeline.duration } : null;
+  const start = resolveAnchor(timeline, item.anchor);
+  if (start === null) return null;
+  const until =
+    item.until === "end" ? timeline.duration : item.until ? resolveAnchor(timeline, item.until) : null;
+  const end = until !== null && until > start ? until : start + item.duration;
+  return { start, end: Math.min(end, timeline.duration) };
+}
+
+/** Whether an overlay lasts beyond a moment (a stretch or the whole video): it frames the video, it isn't an event in it. */
+export const lasting = (item: Pick<Anchored, "whole" | "until">): boolean =>
+  !!item.whole || item.until !== undefined;
 
 export const round = (n: number, places = 3): number => {
   const f = 10 ** places;
@@ -154,3 +175,11 @@ export function formatTime(seconds: number, tenths = false): string {
 
 /** Waveform resolution the indexer writes (one byte per 20 ms). Shared so drawing and measuring agree. */
 export const PEAKS_PER_SECOND = 50;
+
+/**
+ * The sound a visual makes as it comes on: only the one it names. None by default: automatic pops and
+ * whooshes on every graphic wear thin fast, so a sound is something asked for, on the moments that earn it.
+ */
+export function entrySound(v: Pick<Visual, "sfx">): SfxName | null {
+  return v.sfx && v.sfx !== "none" ? v.sfx : null;
+}

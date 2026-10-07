@@ -827,6 +827,8 @@ const AnchoredTrack = memo(function AnchoredTrack({
     id: string;
     anchor: Anchor;
     duration?: number;
+    whole?: boolean;
+    until?: Anchor | "end";
   } & Record<string, unknown>)[];
   const touched = useProject((s) => s.agentTouched);
   const selected = useUi((s) => (s.selection?.coll === coll ? s.selection.id : null));
@@ -838,7 +840,7 @@ const AnchoredTrack = memo(function AnchoredTrack({
   return (
     <>
       {items.map((item) => {
-        const span = spanOf(tl, { anchor: item.anchor, duration: item.duration ?? 0.6 });
+        const span = spanOf(tl, { ...item, duration: item.duration ?? 0.6 });
         if (!span) return null;
         const label = blockLabel(coll, item, graphics);
         return (
@@ -849,6 +851,7 @@ const AnchoredTrack = memo(function AnchoredTrack({
             tl={tl}
             pps={pps}
             start={span.start}
+            fixed={!!item.whole}
             width={Math.max(coll === "sfx" || coll === "effects" ? 34 : 18, (span.end - span.start) * pps)}
             className={clsx(
               STYLE[coll],
@@ -867,13 +870,17 @@ const AnchoredTrack = memo(function AnchoredTrack({
   );
 });
 
-/** Drag a block to move it in time. It re-anchors to whatever shot it lands on. */
+/**
+ * Drag a block to move it in time. It re-anchors to whatever shot it lands on. A fixed one (on for the
+ * whole video) only selects.
+ */
 function Draggable({
   id,
   coll,
   tl,
   pps,
   start,
+  fixed = false,
   width,
   className,
   children,
@@ -883,6 +890,7 @@ function Draggable({
   tl: TL;
   pps: number;
   start: number;
+  fixed?: boolean;
   width: number;
   className: string;
   children: ReactNode;
@@ -896,6 +904,7 @@ function Draggable({
     el.setPointerCapture(e.pointerId);
     let dx = 0;
     const move = (ev: PointerEvent) => {
+      if (fixed) return;
       dx = ev.clientX - x0;
       el.style.transform = `translateX(${dx}px)`;
     };

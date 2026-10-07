@@ -789,7 +789,8 @@ export class ProjectService {
     }
     return Promise.all(
       list.map(async (f) => {
-        const onDisk = await videosIn(f.dir);
+        // Newest made first, and kept there: opening one doesn't move it.
+        const onDisk = (await videosIn(f.dir)).sort((a, b) => b.createdAt - a.createdAt);
         const videos: RecentProject[] = onDisk.map((v) => {
           const seen = recent.find((r) => samePath(r.dir, v.dir));
           return {
@@ -803,7 +804,7 @@ export class ProjectService {
           dir: f.dir,
           name: await projectName(f.dir),
           ...(f.pinned && { pinned: true }),
-          videos: videos.sort((a, b) => b.openedAt - a.openedAt),
+          videos,
         };
       }),
     );

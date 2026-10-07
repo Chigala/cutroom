@@ -57,6 +57,11 @@ describe("smooth slow motion", () => {
     expect(needsFlow({ speed: 0.5 }, video, 30)).toBe(true);
     expect(needsFlow({ speed: 0.5 }, { kind: "video", fps: 60 }, 30)).toBe(false);
     expect(needsFlow({ speed: 1 }, video, 30)).toBe(false);
+    // Lower frame-rate footage at its own speed plays as filmed: not slow motion.
+    expect(needsFlow({ speed: 1 }, { kind: "video", fps: 23.98 }, 30)).toBe(false);
+    expect(needsFlow({ speed: 1 }, { kind: "video", fps: 25 }, 30)).toBe(false);
+    // Slowed, it is.
+    expect(needsFlow({ speed: 0.8 }, { kind: "video", fps: 25 }, 30)).toBe(true);
     expect(
       needsFlow(
         {

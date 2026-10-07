@@ -39,7 +39,7 @@ export interface ProjectFolder {
   readonly dir: string;
   readonly name: string;
   readonly pinned?: boolean;
-  /** Its videos, most recently opened first. */
+  /** Its videos, newest made first (opening one doesn't move it). */
   readonly videos: readonly RecentProject[];
 }
 

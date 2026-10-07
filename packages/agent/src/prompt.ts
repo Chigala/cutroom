@@ -172,6 +172,7 @@ The cover decides whether anyone taps. When you finish an edit (or when asked), 
 
 ## Hearing the sound
 The editor hears every clip for you at import, on the Mac: the sounds in it (laughter, applause, cheering, a crowd, a gasp, whispering, music...), a track's instruments, and how hard every word is said (word↑ in transcripts). Edit with your ears, not just the words:
+- It hears where anyone talks, too, and only that is transcribed. A clip with talks "nobody" (scenery, b-roll, a walkthrough, music) has no transcript: cut it for its picture and sound, never caption it. talksAt lists where someone talks in a clip that's mostly not talking (a vlog's pieces to camera between scenery); the rest of it is picture. If words were missed, transcribe_again that stretch.
 - Before a first cut, listen to the speech clips as well as the music. The words said hardest are where the speaker leans in: the emphasis words for captions, the moment for a punch-in, often the line to cut to. A run of them is the passion the hook should come from.
 - Laughter, applause, a cheer or a gasp is a reaction: keep it, let it land before the next cut (never cut into a laugh), cut to the person reacting, and don't bury it under music or a sound effect. A whispered stretch is intimate: drop the music right down there.
 - Music should fit what's said, not only the tempo: soft piano and strings for a personal, reflective story; synth and drums for hype; check a track's instruments with listen before you commit to it.

@@ -720,7 +720,7 @@ function ProjectButton({
         <NameField
           name={project.name}
           onDone={onRenamed}
-          className={clsx("absolute top-1.5 right-2", indent ? "left-[66px]" : "left-[48px]")}
+          className={clsx("absolute top-1.5 right-2", indent ? "left-[59px]" : "left-[41px]")}
         />
       )}
       {open && (
@@ -748,7 +748,7 @@ export function ProjectThumb({
   dir,
   name,
   ring = false,
-  size = 42,
+  size = 32,
   className,
 }: {
   dir: string;

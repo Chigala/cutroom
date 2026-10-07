@@ -655,6 +655,8 @@ export const TOOLS: readonly AgentTool[] = [
           text: `Heard no words in ${src.id} between ${lo.toFixed(1)}s and ${hi.toFixed(1)}s. If you know what's said there, give it as text.`,
         };
       const { ops, first, replaced } = replaceWordsOps(doc, src.id, lo, hi, words);
+      // Words in a clip indexing heard nobody talk in: it has speech after all.
+      if (!src.speech) ops.push({ op: "update", coll: "sources", id: src.id, patch: { speech: true } });
       const result = commit(ctx, label, ops);
       if (result.isError) return result;
       return {

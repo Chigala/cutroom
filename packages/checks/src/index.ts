@@ -14,6 +14,8 @@ import {
   type ProjectDoc,
   resolveAnchor,
   round,
+  type Scene,
+  sourceTime,
   spokenWords,
   type Timeline,
   timelineOf,
@@ -106,7 +108,9 @@ const rules: Rule[] = [
       const titles = doc.titles.filter(
         (t) => t.position.y < clearArea(R).top || t.position.y > clearArea(R).bottom,
       );
-      if (y > clearArea(R).bottom)
+      // Only captions that show: spoken ones (captions on and words in the cut) or written ones.
+      const captioned = (doc.captionStyle.speech && spokenWords(doc).length > 0) || doc.captions.length > 0;
+      if (captioned && y > clearArea(R).bottom)
         return {
           status: "warn",
           detail: "Captions sit under the platform's buttons and caption bar.",
@@ -135,11 +139,11 @@ const rules: Rule[] = [
     run(doc, tl) {
       const beats = musicBeats(doc);
       if (!beats.length) return pass;
-      const speech = speechSources(doc);
-      // Talking-head cuts follow the words, not the music: only check cuts between non-speech shots.
+      const speech = speechIn(doc);
+      // Talking cuts follow the words, not the music: only check cuts between shots nobody talks in.
       const off = tl.scenes.slice(1).filter((s, i) => {
         const prev = tl.scenes[i]!;
-        if (speech.has(s.scene.source) || speech.has(prev.scene.source)) return false;
+        if (speech.shot(s.scene) || speech.shot(prev.scene)) return false;
         return nearest(beats, s.start).distance > R.beatTolerance;
       });
       if (off.length <= Math.floor(tl.scenes.length / 5)) return pass;
@@ -154,8 +158,10 @@ const rules: Rule[] = [
   {
     id: "ducking",
     title: "Music ducks under speech",
-    run(doc) {
-      if (!doc.music.source || !speechSources(doc).size || doc.music.duckUnderSpeech) return pass;
+    run(doc, tl) {
+      const speech = speechIn(doc);
+      if (!doc.music.source || doc.music.duckUnderSpeech || !tl.scenes.some((p) => speech.shot(p.scene)))
+        return pass;
       return {
         status: "warn",
         detail: "Music plays at full volume over speech.",
@@ -239,7 +245,10 @@ const rules: Rule[] = [
     title: "Shots start and end on a clear face",
     run(doc, tl) {
       const weak: { scene: string; at: number; where: "starts" | "ends" }[] = [];
+      const speech = speechIn(doc);
       for (const p of tl.scenes) {
+        // The subject's face: a passer-by in the scenery needn't look at the camera.
+        if (!speech.subject(p.scene)) continue;
         const quality = (doc.analyses.find((a) => a.id === p.scene.source)?.quality ?? []).filter(
           (q) => q.face !== undefined,
         );
@@ -287,14 +296,27 @@ const rules: Rule[] = [
     run(doc, tl) {
       const words = spokenWords(doc);
       if (words.length < 5) return pass;
+      const speech = speechIn(doc);
+      // A gap in a shot is dead air unless it's scenery: a vlog's walk between two pieces to camera.
+      const scenery = (scene: string, from: number, to: number) => {
+        const p = tl.byId.get(scene);
+        return !!p && speech.scenery(p.scene.source, sourceTime(p, from), sourceTime(p, to));
+      };
       const gaps: string[] = [];
       for (let i = 1; i < words.length; i++) {
         const a = words[i - 1]!;
         const b = words[i]!;
-        if (a.scene === b.scene && b.start - a.end > R.deadAir) gaps.push(formatTime(a.end));
+        if (a.scene === b.scene && b.start - a.end > R.deadAir && !scenery(a.scene, a.end, b.start))
+          gaps.push(formatTime(a.end));
       }
       const head = words[0]!.start;
-      if (head > R.deadAir + 0.3 && speechSources(doc).has(tl.scenes[0]?.scene.source ?? ""))
+      const first = tl.scenes[0];
+      if (
+        first &&
+        head > R.deadAir + 0.3 &&
+        speech.shot(first.scene) &&
+        !scenery(first.scene.id, 0, Math.min(head, first.duration))
+      )
         gaps.unshift("the start");
       if (!gaps.length) return pass;
       return {
@@ -374,10 +396,12 @@ const rules: Rule[] = [
       // Only where the clip fills the frame by its height, so the face sits where it was shot.
       const W = doc.meta.format.width;
       const H = doc.meta.format.height;
+      // The subject's face: a passer-by in the scenery is part of the view, not a speaker.
+      const speech = speechIn(doc);
       const low = tl.scenes.filter((p) => {
         const src = doc.sources.find((s) => s.id === p.scene.source);
         const face = doc.analyses.find((a) => a.id === p.scene.source)?.face;
-        if (!src?.width || !src.height || !face || p.scene.framing) return false;
+        if (!src?.width || !src.height || !face || p.scene.framing || !speech.subject(p.scene)) return false;
         return H / src.height >= W / src.width - 1e-6 && face.y > R.faceHeight + 0.08;
       });
       if (!low.length) return pass;
@@ -479,8 +503,8 @@ const rules: Rule[] = [
     title: "Shot lengths",
     run(doc, tl) {
       // Someone talking can hold a shot as long as the sentence needs.
-      const speech = speechSources(doc);
-      const long = tl.scenes.filter((s) => s.duration > R.maxShot + 1e-6 && !speech.has(s.scene.source));
+      const speech = speechIn(doc);
+      const long = tl.scenes.filter((s) => s.duration > R.maxShot + 1e-6 && !speech.shot(s.scene));
       const short = tl.scenes.filter((s) => s.duration < R.minShot - 1e-6);
       if (!long.length && !short.length) return pass;
       const parts = [
@@ -512,13 +536,11 @@ const rules: Rule[] = [
     title: "No similar shots back to back",
     run(doc, tl) {
       // Jump cuts inside one talking take are the style, not a mistake.
-      const speech = speechSources(doc);
+      const speech = speechIn(doc);
       const repeats = tl.scenes.slice(1).filter((s, i) => {
         const prev = tl.scenes[i]!.scene;
         return (
-          prev.source === s.scene.source &&
-          !speech.has(s.scene.source) &&
-          Math.abs(prev.out - s.scene.in) < 0.5
+          prev.source === s.scene.source && !speech.shot(s.scene) && Math.abs(prev.out - s.scene.in) < 0.5
         );
       });
       if (!repeats.length) return pass;
@@ -551,7 +573,7 @@ const rules: Rule[] = [
       if (!gaps.length) return pass;
       return {
         status: "warn",
-        detail: `Nothing changes on screen for over 8s at ${gaps.slice(0, 3).join(", ")}${gaps.length > 3 ? ` and ${gaps.length - 3} more` : ""}.`,
+        detail: `Nothing changes on screen for over ${R.pace}s at ${gaps.slice(0, 3).join(", ")}${gaps.length > 3 ? ` and ${gaps.length - 3} more` : ""}.`,
       };
     },
   },
@@ -629,6 +651,49 @@ export function musicBeats(doc: ProjectDoc): number[] {
 
 const speechSources = (doc: ProjectDoc) => new Set(doc.sources.filter((s) => s.speech).map((s) => s.id));
 
+/** How much of [from, to] the spans cover, in seconds. */
+const covered = (spans: readonly (readonly [number, number])[], from: number, to: number) =>
+  spans.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, to) - Math.max(a, from)), 0);
+
+/**
+ * Where people talk, shot by shot: a shot talks when its stretch of footage overlaps where its clip has
+ * speech (heard on device), so the scenery between a vlog's pieces to camera is judged as picture, not
+ * as a talking head. Clips heard before speech was mapped go by their flag, as before.
+ */
+export function speechIn(doc: ProjectDoc) {
+  const flagged = speechSources(doc);
+  const spans = new Map(doc.analyses.flatMap((a) => (a.speech ? [[a.id, a.speech] as const] : [])));
+  const silences = new Map(doc.analyses.map((a) => [a.id, a.silences] as const));
+  /** Someone talks in [from, to] of the clip's own time, for a meaningful part of it. */
+  const talks = (source: string, from: number, to: number) => {
+    const heard = spans.get(source);
+    if (!heard) return flagged.has(source);
+    return covered(heard, from, to) >= Math.min(0.5, (to - from) / 2);
+  };
+  const faces = new Map(doc.analyses.map((a) => [a.id, a.face] as const));
+  const shot = (scene: Scene) => talks(scene.source, scene.in, scene.out);
+  return {
+    talks,
+    shot,
+    /**
+     * A shot whose face is its subject: someone talks, or the face is big in the frame (a reaction, a
+     * portrait). A passer-by in the scenery isn't. Clips heard before speech was mapped: every shot, as
+     * before.
+     */
+    subject: (scene: Scene) =>
+      !spans.has(scene.source) || shot(scene) || (faces.get(scene.source)?.size ?? 0) >= 0.15,
+    /**
+     * A stretch with sound and (mostly) nobody talking: scenery, music, a street, not a pause in speech.
+     * Only longer than any pause a speaker takes, and only where the clip's speech was mapped.
+     */
+    scenery: (source: string, from: number, to: number) =>
+      to - from > 3 &&
+      spans.has(source) &&
+      covered(spans.get(source) ?? [], from, to) < (to - from) * 0.3 &&
+      covered(silences.get(source) ?? [], from, to) < (to - from) / 2,
+  };
+}
+
 function nearest(sorted: readonly number[], t: number): { time: number; distance: number } {
   let lo = 0;
   let hi = sorted.length - 1;
@@ -644,11 +709,11 @@ function nearest(sorted: readonly number[], t: number): { time: number; distance
 
 /** Re-times non-speech shots so each cut lands on the nearest beat, never past the end of its clip. */
 function snapToBeat(doc: ProjectDoc, tl: Timeline, beats: readonly number[]): Op[] {
-  const speech = speechSources(doc);
+  const speech = speechIn(doc);
   const ops: Op[] = [];
   let t = 0;
   for (const s of tl.scenes) {
-    if (speech.has(s.scene.source)) {
+    if (speech.shot(s.scene)) {
       t += s.duration;
       continue;
     }

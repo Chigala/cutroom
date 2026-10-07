@@ -1,5 +1,5 @@
 import { sceneLength, sourceOffset } from "./motion.ts";
-import type { Anchor, ProjectDoc, Scene } from "./schema.ts";
+import type { Anchor, ProjectDoc, Scene, SfxName, Visual } from "./schema.ts";
 
 export interface PlacedScene {
   readonly scene: Scene;
@@ -175,3 +175,11 @@ export function formatTime(seconds: number, tenths = false): string {
 
 /** Waveform resolution the indexer writes (one byte per 20 ms). Shared so drawing and measuring agree. */
 export const PEAKS_PER_SECOND = 50;
+
+/**
+ * The sound a visual makes as it comes on: only the one it names. None by default: automatic pops and
+ * whooshes on every graphic wear thin fast, so a sound is something asked for, on the moments that earn it.
+ */
+export function entrySound(v: Pick<Visual, "sfx">): SfxName | null {
+  return v.sfx && v.sfx !== "none" ? v.sfx : null;
+}

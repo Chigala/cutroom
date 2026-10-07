@@ -7,7 +7,7 @@
  *   camera   the shots, with drift, jump-cut zoom, punch-ins, shake/whip/mono, sliding down for splits
  *   visuals  graphics (HTML files) and cutaways, as overlay / full / split
  *   titles, captions, flash
- *   sound    music (ducked under speech, faded at the ends), sound effects, visual entry sounds
+ *   sound    music (ducked under speech, faded at the ends), sound effects, the entry sounds visuals name
  *
  * Everything derived is memoized on the doc's collections. Docs share structure across edits, so moving
  * a caption doesn't recompute scene layout and vice versa.
@@ -29,6 +29,7 @@ import {
   cutoutKey,
   cutoutRange,
   type Effect,
+  entrySound,
   fitsInside,
   flowHash,
   flowKey,
@@ -55,7 +56,6 @@ import {
   rampMap,
   type Scene,
   type Sfx,
-  type SfxName,
   type Source,
   STARTER_CAPTION_LOOKS,
   STARTER_GRADES,
@@ -153,12 +153,6 @@ const ramp = (frame: number, from: number, frames: number, easing = EASE_OUT) =>
 
 /** Drift: a slow push-in across each shot, so the frame is never locked off. */
 const DRIFT = 0.035;
-
-/** Default entry sound for a visual when it doesn't name one. */
-const ENTRY_SFX = (v: Visual): SfxName | null =>
-  v.sfx === null || v.sfx === "none"
-    ? null
-    : (v.sfx ?? (v.content.kind === "cutaway" ? "swipe" : v.layout === "overlay" ? "pop" : "whoosh"));
 
 export const VideoComposition = ({
   doc,
@@ -633,7 +627,7 @@ export const VideoComposition = ({
                 </Sequence>
               ))}
               {(audio ? visuals : []).map((v) => {
-                const name = doc.mix.entrySounds ? ENTRY_SFX(v.item) : null;
+                const name = doc.mix.entrySounds ? entrySound(v.item) : null;
                 return name ? (
                   <Sequence
                     key={`${v.item.id}-sfx`}

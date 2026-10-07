@@ -848,7 +848,12 @@ export const Mix = z.object({
     .default(1)
     .describe("Overall level of all music, on top of each track's volume"),
   sfxLevel: z.number().min(0).max(3).default(1).describe("Overall level of all sound effects"),
-  entrySounds: z.boolean().default(true).describe("Visuals make their default entry sound"),
+  entrySounds: z
+    .boolean()
+    .default(true)
+    .describe(
+      "Visuals play the entry sound they name (sfx); false silences them all. None has one unless it names one",
+    ),
   jlFade: Seconds.max(2).default(0.2).describe("Crossfade at a J- or L-cut"),
   roomTone: z
     .number()
@@ -1444,7 +1449,7 @@ export const Visual = z.object({
     .enum(VISUAL_SFX)
     .nullable()
     .optional()
-    .describe('Entry sound. Omit for the default for this layout, "none" for silence'),
+    .describe("A sound as it comes on, only where it earns one (a reveal, a key number). Unset: silent"),
 });
 export type Visual = z.infer<typeof Visual>;
 

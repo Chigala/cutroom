@@ -3,6 +3,7 @@ import {
   applyOps,
   clearRect,
   emptyProject,
+  entrySound,
   lasting,
   type ProjectDoc,
   scenesNeedingCutout,
@@ -106,6 +107,15 @@ describe("a stretch's end", () => {
     // A second off the front of d: the moment it ended on is now 0.5s in.
     const trimmed = applyOps(doc, trimSceneOps(doc, "d", 10, 11)).doc;
     expect(trimmed.titles[0]!.until).toEqual({ scene: "d", at: 0.5 });
+  });
+});
+
+describe("entry sounds", () => {
+  it("are only the ones a visual names", () => {
+    expect(entrySound({})).toBeNull();
+    expect(entrySound({ sfx: "pop" })).toBe("pop");
+    expect(entrySound({ sfx: "none" })).toBeNull();
+    expect(entrySound({ sfx: null })).toBeNull();
   });
 });
 

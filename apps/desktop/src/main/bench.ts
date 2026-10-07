@@ -86,7 +86,8 @@ export async function runBench(service: ProjectService, file: string): Promise<s
           if (e.runId !== runId) return;
           if (e.type === "step") steps++;
           if (e.type === "tool" && e.status !== "running") {
-            const t = (tools[e.name] ??= { calls: 0, errors: 0 });
+            tools[e.name] ??= { calls: 0, errors: 0 };
+            const t = tools[e.name]!;
             t.calls++;
             if (e.status === "error") t.errors++;
           }

@@ -7,6 +7,7 @@ import {
   CheckRules,
   castCorrected,
   castCorrection,
+  clearArea,
   DANGLING_WORDS,
   formatTime,
   frameWindow,
@@ -14,6 +15,8 @@ import {
   type ProjectDoc,
   resolveAnchor,
   round,
+  SAFE_ZONE,
+  safeZoneFor,
   spokenWords,
   type Timeline,
   timelineOf,
@@ -42,24 +45,8 @@ interface Rule {
 
 const pass = { status: "pass" } as const;
 
-/** Where each platform's app UI leaves the picture clear (fractions of the frame). */
-const SAFE_ZONES: Record<CheckRules["platform"], { top: number; bottom: number; right: number }> = {
-  // Phone UI covers roughly the bottom 17% (caption bar, buttons) and the right 18% (like, share).
-  tiktok: { top: 0.08, bottom: 0.78, right: 0.82 },
-  reels: { top: 0.1, bottom: 0.8, right: 0.85 },
-  shorts: { top: 0.08, bottom: 0.8, right: 0.85 },
-  youtube: { top: 0, bottom: 1, right: 1 },
-  none: { top: 0, bottom: 1, right: 1 },
-};
-
-export const safeZoneFor = (platform: CheckRules["platform"]) => SAFE_ZONES[platform];
-
-/** The project's clear area: its own (checks.json safeZone), or its platform's. */
-export const clearArea = (rules: Pick<CheckRules, "platform" | "safeZone">) =>
-  rules.safeZone ?? SAFE_ZONES[rules.platform];
-
-/** The TikTok safe zone, the default. */
-export const SAFE_ZONE = SAFE_ZONES.tiktok;
+// The platforms' clear areas live with the project (overlays are drawn inside them too).
+export { clearArea, SAFE_ZONE, safeZoneFor };
 
 /** The rules of the project being checked (checks.json); set by runChecks. */
 let R: CheckRules = CheckRules.parse({});

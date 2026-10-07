@@ -918,14 +918,31 @@ export function replaceTimelineOps(doc: ProjectDoc, ranges: readonly CutRange[])
   for (const coll of anchored)
     for (const item of doc[coll]) if (coll !== "comments") ops.push({ op: "remove", coll, id: item.id });
   for (const s of doc.scenes) ops.push({ op: "remove", coll: "scenes", id: s.id });
+  // The music taken out of a clip's sound is about the clip, not a shot: the new shots keep it (when
+  // the old ones agreed on it).
+  const ownMusic = new Map<string, number | undefined>();
+  for (const s of doc.scenes)
+    ownMusic.set(
+      s.source,
+      ownMusic.has(s.source) && ownMusic.get(s.source) !== s.ownMusic ? undefined : s.ownMusic,
+    );
   const taken: { id: string }[] = [];
   for (const r of ranges) {
     const id = nextId("sc", taken);
     taken.push({ id });
+    const kept = ownMusic.get(r.source);
     ops.push({
       op: "insert",
       coll: "scenes",
-      item: { id, source: r.source, in: r.in, out: r.out, note: r.note, volume: 1 },
+      item: {
+        id,
+        source: r.source,
+        in: r.in,
+        out: r.out,
+        note: r.note,
+        volume: 1,
+        ...(kept !== undefined && { ownMusic: kept }),
+      },
     });
   }
   // Comments survive a recut: pin them to the first shot, they still make sense as notes.

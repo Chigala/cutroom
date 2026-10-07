@@ -185,6 +185,15 @@ export const Scene = z
     out: Seconds.describe("End inside the source; out - in is the scene length"),
     note: z.string().max(300).default("").describe("One sentence on what happens, shown on the story card"),
     volume: z.number().min(0).max(2).default(1).describe("Level of the clip's own sound"),
+    ownMusic: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .meta({ default: 1 })
+      .describe(
+        "The music in the clip's own sound (a downloaded or reposted video): 0 takes it out and keeps the voice, 1 when unset leaves it as recorded. Split into voice and music once per clip, on this computer",
+      ),
     speed: z
       .number()
       .min(0.25)
@@ -541,6 +550,10 @@ export const Analysis = z.object({
     .array(z.string())
     .optional()
     .describe("Slowed shots made with in-between frames (smooth slow motion), by their hash"),
+  stems: z
+    .string()
+    .optional()
+    .describe("The model the clip's sound was split into voice and music with (for ownMusic)"),
   sounds: z
     .array(
       z.object({

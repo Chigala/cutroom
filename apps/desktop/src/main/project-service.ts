@@ -142,6 +142,7 @@ import {
   thumbFile,
 } from "./projects.ts";
 import { getSettings, paths, setSettings, whisperSetup } from "./settings.ts";
+import { makeNeededStems } from "./stems.ts";
 
 const SWATCHES = ["#355761", "#2B4F63", "#5A4A36", "#45603F", "#3A3552", "#2F5A6B", "#5E4632", "#4C5A3A"];
 
@@ -1798,9 +1799,34 @@ export class ProjectService {
           console.error("[footage] failed:", err);
           this.emit("error", { message: `Couldn't steady or smooth a shot: ${(err as Error).message}` });
         }
+        if (this.store !== store) return;
+        const separating = new Set<string>();
+        try {
+          const ops = await makeNeededStems(store.dir, store.doc, {
+            onProgress: (source, fraction) => {
+              separating.add(source);
+              this.emit("index", { source, stage: "analyze", fraction, label: "Taking out the music" });
+            },
+          });
+          this.stemsError = "";
+          if (ops.length && this.store === store)
+            store.commitAndBroadcast({ author: "index", message: "Took the music out of a clip", ops });
+        } catch (err) {
+          const message = `Couldn't take the music out of a clip: ${(err as Error).message}`;
+          console.error("[stems] failed:", err);
+          // Said once: the next edit would try again, and fail the same way.
+          if (message !== this.stemsError) this.emit("error", { message });
+          this.stemsError = message;
+        } finally {
+          for (const id of separating)
+            this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
+        }
       });
     }, 800);
   }
+
+  /** The last failure taking music out of a clip, so it isn't repeated after every edit. */
+  private stemsError = "";
 
   async runAgent(raw: unknown): Promise<{ runId: string }> {
     const req = AgentRequest.parse(raw);

@@ -196,7 +196,11 @@ export function ensureModel(name: ModelName, onProgress?: (fraction: number) => 
 let runtime: Promise<typeof Ort> | null = null;
 /** ONNX Runtime, loaded the first time a model runs (it's a native library, kept out of startup). */
 export function onnx(): Promise<typeof Ort> {
-  runtime ??= import("onnxruntime-node") as Promise<typeof Ort>;
+  runtime ??= (import("onnxruntime-node") as Promise<typeof Ort>).catch((err: unknown) => {
+    // Not kept: once it's there (installed, or the app's copy unpacked), the next ask finds it.
+    runtime = null;
+    throw err;
+  });
   return runtime;
 }
 
@@ -216,11 +220,14 @@ export function session(
       // The sound model's weights live in a second file beside it.
       if (name === "sounds") await ensureModel("soundsData");
       const file = await ensureModel(name);
+      // No memory arena: inside Electron, the arena's large aligned blocks trap the app's allocator (the
+      // voice model crashed the app), and without it a model takes a quarter of the memory.
+      const lean = { enableCpuMemArena: false, enableMemPattern: false };
       if (process.platform === "win32")
         try {
-          return await ort.InferenceSession.create(file, { executionProviders: ["dml", "cpu"] });
+          return await ort.InferenceSession.create(file, { executionProviders: ["dml", "cpu"], ...lean });
         } catch {}
-      return ort.InferenceSession.create(file, { executionProviders: ["cpu"] });
+      return ort.InferenceSession.create(file, { executionProviders: ["cpu"], ...lean });
     })().catch((err: unknown) => {
       sessions.delete(name);
       throw err;

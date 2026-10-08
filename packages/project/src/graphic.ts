@@ -20,7 +20,7 @@
  * Elements with data-count="1234" count up to that number.
  *
  * Scripted graphics: a graphic may also contain <script>, and ask for libraries in its header
- * ("libs": any of gsap, three, lottie, d3, chart, rough; see GRAPHIC_LIBS). It then runs in a sandboxed
+ * ("libs": any of gsap, three, lottie, d3, chart, rough, matter; see GRAPHIC_LIBS). It then runs in a sandboxed
  * page with no network, where
  * time, Math.random, Date.now and requestAnimationFrame follow the video clock, so the same moment always
  * draws the same pixels:
@@ -69,6 +69,8 @@ export const GRAPHIC_LIBS: Readonly<Record<string, string>> = {
   chart: "Chart",
   /** Rough.js: hand-drawn, sketchy shapes (its randomness follows the video clock). */
   rough: "rough",
+  /** Matter.js: rigid bodies that fall, stack, bounce and collide; graphic.physics steps it from the time. */
+  matter: "Matter",
 };
 
 /** Whether a graphic runs code (and so renders in the sandboxed runtime rather than inline). */

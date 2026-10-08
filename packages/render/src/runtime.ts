@@ -51,6 +51,7 @@ const LIB_FILES: Record<string, () => string> = {
   "lib/chart.umd.min.js": () => path.join(packageDir("chart.js"), "dist/chart.umd.min.js"),
   "lib/rough.js": () => path.join(packageDir("roughjs"), "bundled/rough.js"),
   "lib/lottie.min.js": () => path.join(packageDir("lottie-web"), "build/player/lottie.min.js"),
+  "lib/matter.min.js": () => path.join(packageDir("matter-js"), "build/matter.min.js"),
   "lib/three.module.js": () => path.join(packageDir("three"), "build/three.module.js"),
   "lib/three.core.js": () => path.join(packageDir("three"), "build/three.core.js"),
 };
@@ -111,6 +112,7 @@ const SCRIPT = `(() => {
     timeline(tl) { tl.pause(); timelines.push(tl); return tl; },
     lottie(anim) { lotties.push(anim); return anim; },
     particles(opts) { return particles(opts || {}); },
+    physics(opts) { return physics(opts); },
   };
 
   const script = (src) => new Promise((ok, fail) => {
@@ -121,7 +123,7 @@ const SCRIPT = `(() => {
     document.head.append(s);
   });
   const GSAP_PLUGINS = ${JSON.stringify(GSAP_PLUGINS)};
-  const SCRIPTS = { lottie: "lib/lottie.min.js", d3: "lib/d3.min.js", chart: "lib/chart.umd.min.js", rough: "lib/rough.js" };
+  const SCRIPTS = { lottie: "lib/lottie.min.js", d3: "lib/d3.min.js", chart: "lib/chart.umd.min.js", rough: "lib/rough.js", matter: "lib/matter.min.js" };
   async function load(lib) {
     if (lib === "three") {
       await new Promise((ok, fail) => {
@@ -264,6 +266,53 @@ const SCRIPT = `(() => {
       ctx.globalCompositeOperation = "source-over";
     });
     return { canvas };
+  }
+
+  // Physics (Matter.js) as a function of time: setup builds the world, which is stepped at a fixed rate
+  // from 0 up to t. Frames asked in order keep stepping the same world; an earlier one (a seek back, or
+  // an export worker starting midway) builds it again from the start, so any frame draws the same on its
+  // own. Matter's own randomness and ids, and Math.random in setup and in every step, are reset with it.
+  function physics(opts) {
+    const o = typeof opts === "function" ? { setup: opts } : opts || {};
+    if (typeof o.setup !== "function") throw new Error("graphic.physics needs a setup(Matter, engine, f) function");
+    const rate = o.rate || 120;
+    let world = null;
+    let steps = 0;
+    const withRandom = (s, fn) => {
+      const saved = Math.random;
+      Math.random = seeded(s);
+      try { return fn(); } finally { Math.random = saved; }
+    };
+    const build = (f) => {
+      const M = window.Matter;
+      if (!M) throw new Error('graphic.physics needs "matter" in libs');
+      M.Common._seed = 0;
+      M.Common._nextId = 0;
+      const engine = M.Engine.create(o.engine || {});
+      const made = withRandom(seed ^ 0x51ed270b, () => o.setup(M, engine, f));
+      world = { engine, made: made === undefined ? engine : made };
+      steps = 0;
+    };
+    const at = (t, f) => {
+      const target = Math.max(0, Math.floor(t * rate + 1e-6));
+      if (!world || target < steps) build(f);
+      const M = window.Matter;
+      while (steps < target) {
+        withRandom((seed ^ Math.imul(steps + 1, 0x9e3779b1)) | 0, () => M.Engine.update(world.engine, 1000 / rate));
+        steps++;
+      }
+      // Bodies made with plugin: { el } carry their element: centred on the body, turned with it.
+      for (const b of M.Composite.allBodies(world.engine.world)) {
+        const el = b.plugin && b.plugin.el;
+        if (el) el.style.transform = "translate(" + b.position.x + "px," + b.position.y + "px) translate(-50%,-50%) rotate(" + b.angle + "rad)";
+      }
+      return world.made;
+    };
+    window.graphic.onFrame((t, f) => {
+      const made = at(t, f);
+      if (o.draw) return o.draw(made, t, f);
+    });
+    return { at };
   }
 
   async function init(m) {

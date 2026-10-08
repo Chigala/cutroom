@@ -1,11 +1,12 @@
 // Dev loop: Vite dev server for the UI (instant HMR), watch builds for main and preload, and an Electron
 // process that restarts whenever either of those rebuilds. UI edits never restart Electron.
 import { spawn } from "node:child_process";
-import { statSync } from "node:fs";
+import { statSync, watch } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import electronPath from "electron";
 import { createServer } from "vite";
-import { buildMain, buildPreload, clientDir, desktopDir } from "./bundle.mjs";
+import { clientDir, desktopDir } from "./bundle.mjs";
 
 const server = await createServer({
   configFile: path.join(clientDir, "vite.config.ts"),
@@ -64,19 +65,41 @@ function restart() {
   }, 80);
 }
 
-const ready = new Set();
-for (const [name, bundle] of [
-  ["main", buildMain],
-  ["preload", buildPreload],
-]) {
-  const watcher = await bundle({ mode: "development", watch: true });
-  watcher.on("event", (e) => {
-    if (e.code === "ERROR") console.error(`${name}: ${e.error.message}`);
-    if (e.code !== "END") return;
-    ready.add(name);
-    if (ready.size === 2) restart();
-  });
+// The watch builds, from the build settings as they are now. They're read again whenever bundle.mjs
+// changes (a package left out of the bundle, say): a dev session started before that change would
+// otherwise keep building with the old list, bundling what should load from node_modules.
+const settings = path.join(desktopDir, "scripts", "bundle.mjs");
+let watchers = [];
+async function watchBuilds() {
+  const { buildMain, buildPreload } = await import(`${pathToFileURL(settings).href}?v=${Date.now()}`);
+  await Promise.all(watchers.map((w) => w.close()));
+  watchers = [];
+  const ready = new Set();
+  for (const [name, bundle] of [
+    ["main", buildMain],
+    ["preload", buildPreload],
+  ]) {
+    const watcher = await bundle({ mode: "development", watch: true });
+    watcher.on("event", (e) => {
+      if (e.code === "ERROR") console.error(`${name}: ${e.error.message}`);
+      if (e.code !== "END") return;
+      ready.add(name);
+      if (ready.size === 2) restart();
+    });
+    watchers.push(watcher);
+  }
 }
+await watchBuilds();
+// The folder, not the file: editors and git replace a file rather than write into it.
+let changed = null;
+watch(path.dirname(settings), (_, file) => {
+  if (file !== path.basename(settings)) return;
+  clearTimeout(changed);
+  changed = setTimeout(() => {
+    console.log("build settings changed: rebuilding with them");
+    void watchBuilds().catch((err) => console.error(`build settings: ${err.message}`));
+  }, 200);
+});
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {

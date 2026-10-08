@@ -200,6 +200,14 @@ export const flowKey = (source: string, hash: string) => `${source}~flow~${hash}
 export const blurPlateKey = (source: string, from: number, to: number, amount: number, keep = "") =>
   `${source}~bgblur~${from.toFixed(2)}~${to.toFixed(2)}~${amount}${keep ? `~${keep}` : ""}`;
 
+/** A clip's sound split in two (scene.ownMusic): its voice, or the music under it. */
+export type StemPart = "voice" | "music";
+export const stemKey = (source: string, part: StemPart) => `${source}~stem~${part}`;
+
+/** Whether a shot plays its clip as split parts: some of its own music taken out. */
+export const splitsSound = (scene: { readonly ownMusic?: number | undefined }) =>
+  scene.ownMusic !== undefined && scene.ownMusic < 1;
+
 /** A still for a cover, from one moment of a clip: the frame, the person cut out, or the background blurred. */
 export type CoverPart = "frame" | "cut" | `blur${number}`;
 export const coverKey = (source: string, t: number, part: CoverPart) =>
@@ -213,6 +221,7 @@ export function parseDerivedKey(
   | { kind: "bgblur"; source: string; from: number; to: number; amount: number; keep: string }
   | { kind: "ramp"; source: string; hash: string }
   | { kind: "flow"; source: string; hash: string }
+  | { kind: "stem"; source: string; part: StemPart }
   | null {
   const v = /^(.+)~cover~(\d+(?:\.\d+)?)~(frame|cut|blur)(\d+)?$/.exec(key);
   if (v)
@@ -239,6 +248,8 @@ export function parseDerivedKey(
   if (r) return { kind: "ramp", source: r[1]!, hash: r[2]! };
   const f = /^(.+)~flow~([0-9a-z]+)$/.exec(key);
   if (f) return { kind: "flow", source: f[1]!, hash: f[2]! };
+  const st = /^(.+)~stem~(voice|music)$/.exec(key);
+  if (st) return { kind: "stem", source: st[1]!, part: st[2] as StemPart };
   return null;
 }
 

@@ -4,8 +4,10 @@
  * separately undoable change. Inputs are zod schemas, validated before anything runs.
  */
 import type { ToolCall } from "@vedit/bridge";
-import { runChecks } from "@vedit/checks";
+import { beatCutOps, runChecks } from "@vedit/checks";
 import type {
+  FontQuery,
+  GoogleFamily,
   JoinReport,
   MemeCandidate,
   MemeKind,
@@ -19,13 +21,15 @@ import {
   type AssetEntry,
   applyOps,
   assetLine,
+  BUNDLED_FONTS,
+  beatLength,
   bestStretch,
   type ChangeGroup,
-  COLLECTIONS,
   cleanCutOps,
   cutReport,
   DERIVED,
   describeSound,
+  fontFromFile,
   gradeColorOf,
   graphicPreviewDoc,
   type InspirationInfo,
@@ -36,11 +40,12 @@ import {
   inspirationOps,
   type KitInfo,
   lookDefaults,
+  looseOpSchemaFor,
   type MotionTrack,
   measureReference,
+  musicBeats,
   type Op,
   OpError,
-  opSchemaFor,
   ProcessRecipe,
   type ProjectDoc,
   packFromProject,
@@ -51,6 +56,7 @@ import {
   replaceTimelineOps,
   replaceWordsOps,
   SHAPES,
+  SINGLETONS,
   type Source,
   STARTER_INSPIRATIONS,
   sceneAt,
@@ -68,6 +74,8 @@ import {
   validateStyle,
 } from "@vedit/project";
 import { z } from "zod";
+import { compactFields, EDITABLE, fieldsOf, unknownFields } from "./fields.ts";
+import { runScript } from "./script.ts";
 import { toolActivity } from "./types.ts";
 import { checkStep, checksView, projectView, searchFootage, shotsView, transcriptView } from "./view.ts";
 
@@ -157,6 +165,12 @@ export interface AgentHost {
     /** Copies project clips (a dropped song, sound, meme) into the shared library; their new asset ids. */
     keep(sourceIds: string[], doc: ProjectDoc): Promise<string[]>;
   };
+  /** Google Fonts: the open families, and fetching some into the project's fonts/ folder. */
+  fonts?: {
+    find(q: FontQuery): Promise<GoogleFamily[]>;
+    /** Fetches a family's weights (and their italics) into fonts/; returns the files written. */
+    add(family: string, weights: readonly number[], italic: boolean): Promise<string[]>;
+  };
   kits?: {
     list(): Promise<KitInfo[]>;
     /** Saves `doc`'s taste as a kit (over `id` when given). */
@@ -234,6 +248,26 @@ export interface ToolContext {
   running?(busy: boolean): void;
   /** A tool call started or ended, for the chat's record of the work. */
   tool?(call: ToolCall): void;
+  /** Indexing reaches the scratch copy as it lands (runAgent), so a clip being indexed is worth waiting for. */
+  readonly followsIndexing?: boolean;
+}
+
+/** How long a tool waits for a clip that's still being indexed (an attachment, usually under a minute). */
+const INDEX_WAIT = 90_000;
+
+/**
+ * The clip once indexing is done with it: at once when it is, or after waiting for it (up to
+ * INDEX_WAIT) when this request's copy follows indexing. Null when there's no such clip.
+ */
+async function indexedClip(ctx: ToolContext, id: string | undefined): Promise<Source | null> {
+  const clip = () => ctx.scratch.doc.sources.find((s) => s.id === id) ?? null;
+  const busy = () => clip()?.status === "pending" || clip()?.status === "indexing";
+  if (busy() && ctx.followsIndexing) {
+    ctx.activity?.(`Waiting for ${id} to finish indexing…`);
+    const until = Date.now() + INDEX_WAIT;
+    while (busy() && Date.now() < until) await new Promise((r) => setTimeout(r, 500));
+  }
+  return clip();
 }
 
 let calls = 0;
@@ -267,10 +301,22 @@ export interface AgentTool<S extends z.ZodObject = z.ZodObject> {
 const tool = <S extends z.ZodObject>(t: AgentTool<S>) => t as unknown as AgentTool;
 
 /**
- * The ops apply_ops takes: everything but what indexing writes and the inspirations (the inspiration
- * tool manages those), so the model sees only shapes it may use.
+ * The ops apply_ops takes, on everything but what indexing writes and the inspirations (the inspiration
+ * tool manages those). Items go as plain objects; their fields are listed once in the description, and
+ * checked when applied.
  */
-const AGENT_OPS = opSchemaFor(COLLECTIONS.filter((c) => !DERIVED.includes(c) && c !== "inspirations"));
+const AGENT_OPS = looseOpSchemaFor(EDITABLE);
+
+/** Fields an op names that its collection or setting doesn't have, one line each (none: empty). */
+function unknownIn(ops: readonly Op[]): string[] {
+  return ops.flatMap((o, i) => {
+    const name = "coll" in o ? o.coll : o.key;
+    const value = o.op === "insert" ? o.item : o.op === "set" ? o.value : "patch" in o ? o.patch : undefined;
+    return unknownFields(name, value).map(
+      (u) => `ops[${i}] (${o.op} ${name}): no field "${u.path}"; it takes ${u.known.join(", ")}`,
+    );
+  });
+}
 
 const STYLE_COLLECTION = { effect: "effectKinds", transition: "transitionKinds", grade: "grades" } as const;
 const STYLE_DIR = { effect: "effects", transition: "transitions", grade: "grades" } as const;
@@ -405,7 +451,13 @@ function commit(ctx: ToolContext, label: string, ops: readonly Op[], undoable = 
     if (undoable)
       ctx.scratch.undoable = [...(ctx.scratch.undoable ?? []), { label, inverse: applied.inverse }];
   } catch (err) {
-    if (err instanceof OpError) return { text: `Not applied: ${err.message}`, isError: true };
+    if (err instanceof OpError) {
+      const at = ops.indexOf(err.op);
+      return {
+        text: `Not applied: ${at >= 0 && ops.length > 1 ? `ops[${at}] ` : ""}${err.message}`,
+        isError: true,
+      };
+    }
     throw err;
   }
   const start = ctx.scratch.ops.length;
@@ -458,6 +510,24 @@ async function fitMusic(
 }
 
 /**
+ * At the end of a request that changed the cut or the music (music.lockCuts): every cut after a shot
+ * nobody talks in moves onto the nearest beat, as one change the user can undo. A request that left them
+ * alone leaves them alone, so cuts the user placed by hand stay where they are.
+ */
+export function snapCutsToBeat(ctx: ToolContext): void {
+  const doc = ctx.scratch.doc;
+  if (!doc.music.lockCuts) return;
+  const touched = ctx.scratch.ops.some(
+    (o) => ("coll" in o && o.coll === "scenes") || ("key" in o && o.key === "music"),
+  );
+  if (!touched) return;
+  const ops = beatCutOps(doc);
+  if (!ops.length) return;
+  const result = commit(ctx, "Cuts on the beat", ops);
+  if (!result.isError) ctx.step(`Moved ${ops.length} cut${ops.length === 1 ? "" : "s"} onto the beat`);
+}
+
+/**
  * At the end of a request: music fitted (fit_music) for a length the cut no longer has is fitted again,
  * so the agent never has to remember to.
  */
@@ -467,6 +537,43 @@ export async function refitMusic(ctx: ToolContext): Promise<void> {
   if (Math.abs(timelineOf(ctx.scratch.doc).duration - m.fitted) <= 1) return;
   const fit = await fitMusic(ctx, "auto").catch(() => null);
   if (fit && "ops" in fit) commit(ctx, "Fitted the music to the final length", fit.ops);
+}
+
+/** apply_ops's checks and commit, shared with run_script: the ops as one change the user can undo. */
+function applyAgentOps(ctx: ToolContext, label: string, ops: Op[]): ToolResult {
+  const derived = ops.find((o) => "coll" in o && DERIVED.includes(o.coll));
+  if (derived)
+    return {
+      text: "Transcripts and analysis are written by indexing; use edit_words for captions.",
+      isError: true,
+    };
+  const unknown = unknownIn(ops);
+  if (unknown.length)
+    return {
+      text: `Not applied: ${unknown.slice(0, 8).join("\n")}${unknown.length > 8 ? `\n(and ${unknown.length - 8} more)` : ""}`,
+      isError: true,
+    };
+  const stuck = overRevised(ctx, ops);
+  if (stuck.length)
+    return {
+      stuck: true,
+      text: `Not applied: you've changed ${stuck.map(itemName).join(", ")} ${MAX_REVISIONS} times after looking at it this request, and it still isn't right. Stop changing it (undo can still take back your changes): ${STOP_AND_ASK}`,
+      isError: true,
+    };
+  const result = commit(ctx, label, ops);
+  if (result.isError)
+    return /invalid \w+/.test(result.text)
+      ? { ...result, text: `${result.text}\nThe fields tool has what each field takes.` }
+      : result;
+  const last = countRevisions(ctx, ops);
+  return {
+    ...(last.length > 0 && { stuck: true }),
+    text:
+      `Applied. Project now:\n${projectView(ctx.scratch.doc)}` +
+      (last.length
+        ? `\n\nThat's the third change to ${last.map(itemName).join(", ")} after looking at it. Check it once more; if it still isn't right, ${STOP_AND_ASK}`
+        : ""),
+  };
 }
 
 const Label = z
@@ -666,34 +773,93 @@ export const TOOLS: readonly AgentTool[] = [
   }),
   tool({
     name: "apply_ops",
-    description:
-      "Apply a group of edits to the project (scenes, zooms, titles, captions, sfx, music, look, captionStyle, comments). All ops apply or none do. Returns the updated project, or an error to fix and retry. Each call is one change the user can undo on its own.",
+    description: `Apply a group of edits to the project. All ops apply or none do. Returns the updated project, or an error to fix and retry. Each call is one change the user can undo on its own.
+Ops:
+{op: "insert", coll, item, index?}: add an item (index: its position; appends when omitted)
+{op: "update", coll, id, patch}: change an item's fields (only those that change; null removes an optional one)
+{op: "remove", coll, id} / {op: "move", coll, id, index}
+{op: "set", key, value} / {op: "merge", key, patch}: replace a setting, or change some of its fields
+Fields (? optional; a bare name is a string; the fields tool has what each does and its default):
+${compactFields()}`,
     input: z.object({ label: Label, ops: z.array(AGENT_OPS).min(1).max(400) }),
     async run({ label, ops }, ctx) {
-      const derived = ops.find((o) => "coll" in o && DERIVED.includes(o.coll));
-      if (derived)
+      return applyAgentOps(ctx, label, ops);
+    },
+  }),
+  tool({
+    name: "run_script",
+    description: `Work something out over the project with JavaScript, instead of doing the arithmetic yourself: shot lengths that land cuts on the beat, spacing visuals evenly, finding every place a word is said, the same change to many items. The code is a function body: return the answer (any JSON), and console.log what helps. Return { ops: [...] } with a label to apply them as one change, exactly as apply_ops would (same ops, same checks, undoable).
+It sees, read-only:
+- project: the project (scenes, visuals, titles, zooms, sfx, music, sources... everything but transcripts and analysis)
+- timeline: { duration, scenes: [{ id, source, in, out, speed, start, duration, index }] } (start and duration in output seconds)
+- beats: the music's beats in output seconds ([] without music); bpm (null without one)
+- transcript(clipId): its words [{ text, start, end, ... }] in the clip's own time; analysis(clipId): { beats, bpm, shots, silences, speech, face, ... }; shotLog(clipId): { segments, loud }
+A sandbox: plain JavaScript, no files, network, timers or modules, stopped after 5 seconds or 64 MB. It reads; only returned ops change the project.`,
+    input: z.object({
+      code: z.string().min(1).max(20_000).describe("A function body that returns the answer"),
+      label: Label.optional().describe("Needed when it returns ops: the change's label"),
+    }),
+    async run({ code, label }, ctx) {
+      const doc = ctx.scratch.doc;
+      const tl = timelineOf(doc);
+      const project = Object.fromEntries(Object.entries(doc).filter(([k]) => !DERIVED.includes(k as never)));
+      const run = await runScript(
+        code,
+        {
+          project,
+          timeline: {
+            duration: tl.duration,
+            scenes: tl.scenes.map(({ scene, start, duration, index }) => ({
+              id: scene.id,
+              source: scene.source,
+              in: scene.in,
+              out: scene.out,
+              speed: scene.speed ?? 1,
+              start,
+              duration,
+              index,
+            })),
+          },
+          beats: musicBeats(doc, tl.duration),
+          bpm: beatLength(doc) ? 60 / beatLength(doc)! : null,
+        },
+        {
+          transcript: (id) => doc.transcripts.find((t) => t.id === id)?.words ?? null,
+          analysis: (id) => doc.analyses.find((a) => a.id === id) ?? null,
+          shotLog: (id) => doc.shotLogs.find((l) => l.id === id) ?? null,
+        },
+      );
+      const log = run.logs.length ? `\nLogged:\n${clip(run.logs.join("\n"))}` : "";
+      if (run.error) return { text: `The script failed: ${run.error}${log}`, isError: true };
+      const value: unknown = run.json === undefined ? undefined : JSON.parse(run.json);
+      const ops =
+        value && typeof value === "object" && "ops" in value ? (value as { ops: unknown }).ops : undefined;
+      if (ops === undefined)
+        return { text: `${run.json === undefined ? "It returned nothing." : clip(run.json, 20_000)}${log}` };
+      const parsed = z.array(AGENT_OPS).min(1).max(400).safeParse(ops);
+      if (!parsed.success)
         return {
-          text: "Transcripts and analysis are written by indexing; use edit_words for captions.",
+          text: `Not applied: the ops it returned aren't valid: ${z.prettifyError(parsed.error).slice(0, 1500)}${log}`,
           isError: true,
         };
-      const stuck = overRevised(ctx, ops);
-      if (stuck.length)
-        return {
-          stuck: true,
-          text: `Not applied: you've changed ${stuck.map(itemName).join(", ")} ${MAX_REVISIONS} times after looking at it this request, and it still isn't right. Stop changing it (undo can still take back your changes): ${STOP_AND_ASK}`,
-          isError: true,
-        };
-      const result = commit(ctx, label, ops);
-      if (result.isError) return result;
-      const last = countRevisions(ctx, ops);
-      return {
-        ...(last.length > 0 && { stuck: true }),
-        text:
-          `Applied. Project now:\n${projectView(ctx.scratch.doc)}` +
-          (last.length
-            ? `\n\nThat's the third change to ${last.map(itemName).join(", ")} after looking at it. Check it once more; if it still isn't right, ${STOP_AND_ASK}`
-            : ""),
-      };
+      if (!label)
+        return { text: `Not applied: give a label to apply the ops it returns.${log}`, isError: true };
+      const applied = applyAgentOps(ctx, label, parsed.data as Op[]);
+      return { ...applied, text: `${applied.text}${log}` };
+    },
+  }),
+  tool({
+    name: "fields",
+    description:
+      "What each field of a collection or setting does, its range and its default (apply_ops lists them by name). Look one up before using fields you haven't, or when an edit is refused.",
+    input: z.object({
+      names: z
+        .array(z.enum([...EDITABLE, ...SINGLETONS] as [string, ...string[]]))
+        .min(1)
+        .max(8),
+    }),
+    async run({ names }) {
+      return { text: names.map((n) => fieldsOf(n)).join("\n\n") };
     },
   }),
   tool({
@@ -714,7 +880,7 @@ export const TOOLS: readonly AgentTool[] = [
   tool({
     name: "write_graphic",
     description:
-      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (canvas; "libs" in the header for GSAP and its plugins, D3 or Chart.js charts, Rough.js sketches, three.js or Lottie; graphic.particles for confetti, sparks, snow, embers, bokeh); no network. See the system prompt for the format. Then check it with look {graphic, params, times}: 5-6 times across it (just in, entrance, middle, just before the exit), which shows it alone over a shot without touching the timeline. Once placed, look at output times to check it in context.',
+      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (canvas; "libs" in the header for GSAP and its plugins, D3 or Chart.js charts, Rough.js sketches, three.js, Matter.js physics (graphic.physics) or Lottie; graphic.particles for confetti, sparks, snow, embers, bokeh); no network. See the system prompt for the format. Then check it with look {graphic, params, times}: 5-6 times across it (just in, entrance, middle, just before the exit), which shows it alone over a shot without touching the timeline. Once placed, look at output times to check it in context.',
     input: z.object({
       label: Label,
       id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, "lower-case letters, digits and dashes"),
@@ -867,11 +1033,14 @@ export const TOOLS: readonly AgentTool[] = [
           inspirationOps(doc, pack, { keepLook: keep }),
         );
       if (action === "measure") {
-        const clip = doc.sources.find((s) => s.id === source);
+        const clip = await indexedClip(ctx, source);
         if (!clip) return { text: `No clip "${source ?? ""}".`, isError: true };
         if (clip.status === "pending" || clip.status === "indexing")
-          return { text: `${clip.id} is still being indexed; measure it once it's ready.`, isError: true };
-        const report = measureReference(doc, clip.id);
+          return {
+            text: `${clip.id} is still being indexed. Carry on with the rest of the request and measure it last.`,
+            isError: true,
+          };
+        const report = measureReference(ctx.scratch.doc, clip.id);
         return report
           ? { text: referenceText(report) }
           : { text: `${clip.id} isn't a video.`, isError: true };
@@ -1177,9 +1346,10 @@ export const TOOLS: readonly AgentTool[] = [
       const b = sc ? sc.out : to;
       if (!src || a === undefined || b === undefined || b <= a)
         return { text: "Give a scene, or a source with from < to.", isError: true };
+      await indexedClip(ctx, src);
       const prefix = `t${Math.round(a * 10)}_`;
       const tracks = await ctx.host.track(src, a, b, prefix);
-      const analysis = doc.analyses.find((x) => x.id === src);
+      const analysis = ctx.scratch.doc.analyses.find((x) => x.id === src);
       if (!analysis) return { text: `${src} has no analysis yet (still indexing?).`, isError: true };
       // New tracks replace any earlier ones over the same stretch.
       const kept = (analysis.tracks ?? []).filter((t) => t.end < a || t.start > b);
@@ -1695,6 +1865,72 @@ measure: true returns what the filters report instead: signalstats with metadata
               `${j.time.toFixed(2)}s into ${j.scene} (level ${fmt(j.loudness, " dB")}, pitch ${fmt(j.melody, " st")}${j.room !== null ? `, room ${fmt(j.room, " dB")}` : ""}, pause ${j.pause}s${j.sentenceEnd ? " after a sentence" : ""}): ${j.problems.join("; ")}`,
           ),
         ].join("\n"),
+      };
+    },
+  }),
+  tool({
+    name: "find_font",
+    description:
+      'Search Google Fonts (about 1,700 open families) when no bundled font or the project\'s own fits the look: by words of the name, kind, and the weights it must come in (a thin condensed sans: sans serif, weights [200 or 300], name "condensed"; or a family you know by name). Then add_font it.',
+    input: z.object({
+      name: z.string().max(60).optional().describe('Words of the family\'s name ("condensed", "playfair")'),
+      category: z.enum(["sans serif", "serif", "display", "handwriting", "monospace"]).optional(),
+      weights: z.array(z.number().int().min(100).max(900).multipleOf(100)).max(9).optional(),
+      italic: z.boolean().optional(),
+    }),
+    async run({ name, category, weights, italic }, ctx) {
+      if (!ctx.host.fonts) return { text: "Google Fonts isn't available here.", isError: true };
+      const found = await ctx.host.fonts.find({
+        ...(name && { name }),
+        ...(category && { category }),
+        ...(weights && { weights }),
+        ...(italic && { italic }),
+      });
+      if (!found.length) return { text: "No families match. Loosen the search (fewer words or weights)." };
+      return {
+        text: found
+          .map(
+            (f) =>
+              `${f.family} (${f.category.toLowerCase()}): ${f.weights.join(", ")}${f.italics.length ? `; italics ${f.italics.join(", ")}` : ""}`,
+          )
+          .join("\n"),
+      };
+    },
+  }),
+  tool({
+    name: "add_font",
+    description:
+      "Fetch a Google Font's weights into the project's fonts/ folder (once; it works offline from then on): usable by family name in captions, titles, graphics and the cover straight away. Ask only for the weights you'll use.",
+    input: z.object({
+      family: z.string().min(2).max(60).describe('As Google names it: "Oswald", "Barlow Condensed"'),
+      weights: z.array(z.number().int().min(100).max(900).multipleOf(100)).min(1).max(9),
+      italic: z.boolean().optional().describe("Their italics too"),
+    }),
+    async run({ family, weights, italic }, ctx) {
+      if (!ctx.host.fonts) return { text: "Google Fonts isn't available here.", isError: true };
+      const doc = ctx.scratch.doc;
+      const has = (w: number) =>
+        doc.fonts.some((f) => f.family.toLowerCase() === family.toLowerCase() && f.weight === w) ||
+        BUNDLED_FONTS.some((b) => b.family.toLowerCase() === family.toLowerCase() && b.weights.includes(w));
+      const wanted = weights.filter((w) => italic || !has(w));
+      if (!wanted.length) return { text: `${family} ${weights.join(", ")} is already here: use it by name.` };
+      let files: string[];
+      try {
+        files = await ctx.host.fonts.add(family, wanted, Boolean(italic));
+      } catch (err) {
+        return { text: (err as Error).message, isError: true };
+      }
+      // The store picks the files up from fonts/ by name; this request's copy knows them now, so they
+      // render in what it looks at before the request ends.
+      const added = files.map((f) => fontFromFile(f)).filter((f) => f !== null);
+      ctx.scratch.doc = {
+        ...doc,
+        fonts: [...doc.fonts.filter((f) => !added.some((a) => a.id === f.id)), ...added],
+      };
+      const name = added[0]?.family ?? family;
+      ctx.step(`Added the font ${name}`);
+      return {
+        text: `Added ${name}: ${added.map((f) => `${f.weight}${f.style === "italic" ? " italic" : ""}`).join(", ")}. Use it as "${name}" with those weights.`,
       };
     },
   }),

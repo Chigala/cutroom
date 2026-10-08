@@ -16,10 +16,12 @@ import {
   rampHash,
   rampMap,
   type Source,
+  type StemPart,
 } from "@vedit/project";
 import { findBinary, run } from "./exec.ts";
 import { LiftUnavailable, liftMattes } from "./lift.ts";
 import { useOpenModels } from "./models.ts";
+import { separateVoice } from "./separate.ts";
 import { renderableAsIs } from "./transcode.ts";
 import { addForeground, keepOnlyPeople, matteFrames } from "./vision.ts";
 
@@ -593,6 +595,9 @@ export const derivedPaths = (projectDir: string) => ({
     ),
   ramp: (source: string, hash: string) => path.join(projectDir, CACHE_DIR, "ramp", `${source}_${hash}.mp4`),
   flow: (source: string, hash: string) => path.join(projectDir, CACHE_DIR, "flow", `${source}_${hash}.mp4`),
+  /** A clip's sound split in two: its voice, and the music under it. */
+  stem: (source: string, part: StemPart) =>
+    path.join(projectDir, CACHE_DIR, "stems", `${source}.${part}.wav`),
   /** A cover's stills from one moment of a clip: its frame, the person cut out, the background blurred. */
   cover: (source: string, t: number, part: string) =>
     path.join(projectDir, CACHE_DIR, "cover", `${source}_${t.toFixed(2)}_${part}.png`),
@@ -626,6 +631,34 @@ export function once(file: string, make: () => Promise<string>): Promise<string>
     making.set(file, hit);
   }
   return hit;
+}
+
+/**
+ * A clip's sound split into its voice and the music under it (scene.ownMusic): made now unless both
+ * parts are there already from the current model (`current`, its analysis.stems). Returns their files.
+ */
+export async function makeStems(
+  projectDir: string,
+  source: Source,
+  o: {
+    readonly current?: boolean;
+    readonly signal?: AbortSignal;
+    readonly onProgress?: (f: number) => void;
+  } = {},
+): Promise<{ voice: string; music: string }> {
+  const paths = derivedPaths(projectDir);
+  const out = { voice: paths.stem(source.id, "voice"), music: paths.stem(source.id, "music") };
+  if (o.current && existsSync(out.voice) && existsSync(out.music)) return out;
+  if (!source.path) throw new Error(`${source.id} has no file to take the music out of.`);
+  await once(out.voice, async () => {
+    await separateVoice(source.path!, out, {
+      duration: source.duration,
+      ...(o.signal && { signal: o.signal }),
+      ...(o.onProgress && { onProgress: o.onProgress }),
+    });
+    return out.voice;
+  });
+  return out;
 }
 
 /**
@@ -663,6 +696,10 @@ export async function resolveDerived(
   // Made in the background (they take a while): served once they exist.
   if (d.kind === "flow") {
     const file = paths.flow(d.source, d.hash);
+    return existsSync(file) ? file : null;
+  }
+  if (d.kind === "stem") {
+    const file = paths.stem(d.source, d.part);
     return existsSync(file) ? file : null;
   }
   const file = paths.ramp(d.source, d.hash);

@@ -133,6 +133,12 @@ export class Indexer {
   reset(): void {
     this.controller.abort();
     this.controller = new AbortController();
+    // Off the window's list: this project's work stops here, and its badges would otherwise stay up.
+    for (const id of new Set([...this.queue, ...this.active, ...(this.describing ? [this.describing] : [])]))
+      this.deps.emitIndex({ source: id, stage: "ready", fraction: 1, label: "Cancelled" });
+    this.describing = null;
+    // The run stopping here isn't this project's: asking again starts a new one.
+    this.describingMissing = null;
     this.queue = [];
     this.active.clear();
     this.jobs.clear();
@@ -217,15 +223,20 @@ export class Indexer {
   }
 
   private describingMissing: Promise<void> | null = null;
+  /** The clip describeMissing is describing now, for its badge in the window. */
+  private describing: string | null = null;
   /**
    * Describes the shots of indexed clips that have none yet: Claude was unreachable when they indexed
    * (no key, signed out, offline). Runs when a project opens, after Claude has answered a request, when
    * the settings change, and when asked; one pass at a time.
    */
   describeMissing(): Promise<void> {
-    this.describingMissing ??= this.describeMissingNow(this.controller.signal).finally(() => {
-      this.describingMissing = null;
-    });
+    if (!this.describingMissing) {
+      const run = this.describeMissingNow(this.controller.signal).finally(() => {
+        if (this.describingMissing === run) this.describingMissing = null;
+      });
+      this.describingMissing = run;
+    }
     return this.describingMissing;
   }
 
@@ -243,30 +254,47 @@ export class Indexer {
       if (!analysis || this.active.has(source.id)) continue;
       const files = cachePaths(store.dir, source.id);
       const watch = { ...files, proxy: existsSync(files.proxy) ? files.proxy : source.path };
+      this.describing = source.id;
       this.deps.emitIndex({
         source: source.id,
         stage: "describe",
         fraction: 0.5,
         label: "Describing the shots",
       });
+      const started = Date.now();
+      console.log("[index] describing", source.id);
       try {
         const log = await this.describe(source, analysis, watch, signal);
         const now = this.deps.store();
-        if (signal.aborted || now !== store || !now.doc.sources.some((s) => s.id === source.id)) return;
+        if (signal.aborted || now !== store || !now.doc.sources.some((s) => s.id === source.id)) {
+          console.log("[index] describing", source.id, "stopped: the project changed");
+          return;
+        }
         const exists = now.doc.shotLogs.some((l) => l.id === source.id);
         this.commit([
           exists
             ? { op: "update", coll: "shotLogs", id: source.id, patch: { ...log } }
             : { op: "insert", coll: "shotLogs", item: log },
         ]);
+        const secs = Math.round((Date.now() - started) / 1000);
+        console.log("[index] described", source.id, `(${log.segments.length} shots, ${secs}s)`);
       } catch (err) {
-        if (signal.aborted) return;
+        if (signal.aborted) {
+          console.log("[index] describing", source.id, "stopped");
+          return;
+        }
         console.warn("[index] describing", source.id, "still failing:", (err as Error).message);
         // Claude's still unreachable: the rest would fail the same way. Next trigger tries again.
-        this.deps.emitIndex({ source: source.id, stage: "ready", fraction: 1, label: "Ready" });
         return;
+      } finally {
+        // Its badge comes down however it ended. Unless another project is open now: reset took it
+        // down, and a clip there may have the same id.
+        if (this.describing === source.id) {
+          this.describing = null;
+          if (this.deps.store() === store)
+            this.deps.emitIndex({ source: source.id, stage: "ready", fraction: 1, label: "Ready" });
+        }
       }
-      this.deps.emitIndex({ source: source.id, stage: "ready", fraction: 1, label: "Ready" });
     }
   }
 

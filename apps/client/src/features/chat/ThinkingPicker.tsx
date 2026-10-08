@@ -73,6 +73,7 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={`Thinking: ${effort}`}
         disabled={disabled}
         title={`${model?.label ?? current}, effort: ${effort}`}
         onClick={() => setOpen(!open)}
@@ -82,7 +83,7 @@ export function ThinkingPicker({ disabled }: { disabled?: boolean }) {
         )}
       >
         <LightbulbIcon size={13} className="shrink-0" />
-        {effort}
+        <span className="hidden @[400px]:inline">{effort}</span>
         <CaretDownIcon size={12} className="shrink-0 text-faint" />
       </button>
       {open && (

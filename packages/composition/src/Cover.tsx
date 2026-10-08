@@ -201,7 +201,13 @@ export function CoverComposition({ doc, mediaBase }: CoverProps) {
               style={above?.drop ? { ...push, translate: `0 ${above.drop.toFixed(1)}px` } : push}
             >
               <SubjectLook look={cover.subject} id="cover" accent={accent} length={1}>
-                <GradedImg src={url("cut")} style={fill} {...WAIT} onError={() => setCutFailed(true)} />
+                <GradedImg
+                  src={url("cut")}
+                  style={fill}
+                  {...WAIT}
+                  // onImageError, not onError: in a graded video the picture is a canvas, which takes only this.
+                  onImageError={() => setCutFailed(true)}
+                />
               </SubjectLook>
             </AbsoluteFill>
           ) : null}

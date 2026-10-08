@@ -35,6 +35,7 @@ import { AgentRequest, CommitRequestSchema } from "@vedit/bridge";
 import { clearArea } from "@vedit/checks";
 import { type InstantResult, precheck, tryInstant } from "@vedit/instant";
 import {
+  addGoogleFont,
   alignText,
   cutoutsAvailable,
   downloadMeme,
@@ -43,8 +44,11 @@ import {
   ensureWhisper,
   extractSpeechWav,
   type FoundTrack,
+  findFonts,
   findMusic,
   findSounds,
+  googleFamilies,
+  googleFamily,
   grabFrame,
   isMedia,
   makeProcessed,
@@ -142,6 +146,7 @@ import {
   thumbFile,
 } from "./projects.ts";
 import { getSettings, paths, setSettings, whisperSetup } from "./settings.ts";
+import { makeNeededStems } from "./stems.ts";
 
 const SWATCHES = ["#355761", "#2B4F63", "#5A4A36", "#45603F", "#3A3552", "#2F5A6B", "#5E4632", "#4C5A3A"];
 
@@ -205,6 +210,19 @@ export class ProjectService {
   }
 
   private readonly listeners = new Map<string, Set<(payload: never) => void>>();
+
+  /** Requests running in a project, taking in what indexing writes there meanwhile (runAgent). */
+  private readonly indexWatchers = new Map<string, Set<(ops: readonly Op[]) => void>>();
+
+  private watchIndexing(dir: string, listener: (ops: readonly Op[]) => void): () => void {
+    const set = this.indexWatchers.get(dir) ?? new Set();
+    set.add(listener);
+    this.indexWatchers.set(dir, set);
+    return () => {
+      set.delete(listener);
+      if (!set.size) this.indexWatchers.delete(dir);
+    };
+  }
 
   /** Listens to the events the window gets (the benchmark runs without one). Returns the unsubscribe. */
   on<E extends keyof EditorEvents>(event: E, listener: (payload: EditorEvents[E]) => void): () => void {
@@ -374,6 +392,9 @@ export class ProjectService {
     await this.remember(next.dir, next.doc.meta.name);
     this.refreshThumbnail(0);
     this.indexer.resume();
+    // Footage made from its clips (cutouts, steadied shots, music taken out) that's missing or failed
+    // last time: made now, not only after the next edit.
+    this.scheduleCutouts();
     void this.library.setProject(next.dir);
     if (onWindowsDrive(next.dir))
       // Once the window has the project (its warning toasts are listening by then).
@@ -443,6 +464,7 @@ export class ProjectService {
   private events(dir: string) {
     return {
       onCommit: (commit: Commit) => {
+        if (commit.author === "index") for (const l of this.indexWatchers.get(dir) ?? []) l(commit.ops);
         // A project working in the background: its changes stay in it (the window shows another one),
         // and its thumbnail follows its shots.
         if (this.store?.dir !== dir) {
@@ -464,7 +486,17 @@ export class ProjectService {
     };
   }
 
-  async restore(): Promise<ProjectSnapshot> {
+  /** A restore under way: a second ask (the window's startup running twice) waits for it, not opens again. */
+  private restoring: Promise<ProjectSnapshot> | null = null;
+
+  restore(): Promise<ProjectSnapshot> {
+    this.restoring ??= this.restoreNow().finally(() => {
+      this.restoring = null;
+    });
+    return this.restoring;
+  }
+
+  private async restoreNow(): Promise<ProjectSnapshot> {
     if (this.store) return this.snapshot();
     // The one opened last, wherever it sits in the list.
     const last = (await this.recent()).reduce<RecentProject | undefined>(
@@ -1651,6 +1683,20 @@ export class ProjectService {
         cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
       footage: async (doc: ProjectDoc) => makeNeededFootage(store.dir, doc),
+      fonts: {
+        find: async (q) => findFonts(await googleFamilies(), q),
+        add: async (name, weights, italic) => {
+          const all = await googleFamilies();
+          const family = googleFamily(all, name);
+          if (!family) {
+            const near = findFonts(all, { name: name.split(/\s+/)[0] ?? name }, 5).map((f) => f.family);
+            throw new Error(
+              `Google Fonts has no "${name}"${near.length ? `; near it: ${near.join(", ")}` : ""}.`,
+            );
+          }
+          return addGoogleFont(path.join(store.dir, FONTS_DIR), family, weights, italic);
+        },
+      },
       findStock: async (query, kind, orientation) => {
         const settings = await getSettings();
         const keys = {
@@ -1774,9 +1820,34 @@ export class ProjectService {
           console.error("[footage] failed:", err);
           this.emit("error", { message: `Couldn't steady or smooth a shot: ${(err as Error).message}` });
         }
+        if (this.store !== store) return;
+        const separating = new Set<string>();
+        try {
+          const ops = await makeNeededStems(store.dir, store.doc, {
+            onProgress: (source, fraction) => {
+              separating.add(source);
+              this.emit("index", { source, stage: "analyze", fraction, label: "Taking out the music" });
+            },
+          });
+          this.stemsError = "";
+          if (ops.length && this.store === store)
+            store.commitAndBroadcast({ author: "index", message: "Took the music out of a clip", ops });
+        } catch (err) {
+          const message = `Couldn't take the music out of a clip: ${(err as Error).message}`;
+          console.error("[stems] failed:", err);
+          // Said once: the next edit would try again, and fail the same way.
+          if (message !== this.stemsError) this.emit("error", { message });
+          this.stemsError = message;
+        } finally {
+          for (const id of separating)
+            this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
+        }
       });
     }, 800);
   }
+
+  /** The last failure taking music out of a clip, so it isn't repeated after every edit. */
+  private stemsError = "";
 
   async runAgent(raw: unknown): Promise<{ runId: string }> {
     const req = AgentRequest.parse(raw);
@@ -1856,6 +1927,7 @@ export class ProjectService {
       attachments: req.attachments.map((a) => a.source),
       handEdits: hand,
       host: this.agentHost(store),
+      indexed: (listener) => this.watchIndexing(store.dir, listener),
       backend: settings.backend,
       harness: settings.harness,
       model: settings.model,

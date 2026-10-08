@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "items": [
     {
       "file": "Sounds/Starter pack/Whoosh 1.mp3",
@@ -808,7 +808,263 @@
       "description": "A dramatic sting for a twist, a reveal or suspense. \"spooky 03\" by nomiqbomi.",
       "tags": ["dramatic", "sting", "suspense", "reveal"],
       "since": 1
+    },
+    {
+      "file": "Sounds/Starter pack/Counting 1.mp3",
+      "kind": "sound",
+      "name": "Counting 1",
+      "description": "Counting ticks for a number counting up, slowing as it lands, 0.8s. Made from \"Points_Tick1\" by BaggoNotes.",
+      "tags": ["counting", "counter", "tick", "number", "score"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Counting 2.mp3",
+      "kind": "sound",
+      "name": "Counting 2",
+      "description": "Counting ticks for a number counting up, slowing as it lands, 1.5s. Made from \"Points_Tick1\" by BaggoNotes.",
+      "tags": ["counting", "counter", "tick", "number", "score"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Counting 3.mp3",
+      "kind": "sound",
+      "name": "Counting 3",
+      "description": "Counting ticks for a number counting up, slowing as it lands, 2.5s. Made from \"Points_Tick1\" by BaggoNotes.",
+      "tags": ["counting", "counter", "tick", "number", "score"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Counting 4.mp3",
+      "kind": "sound",
+      "name": "Counting 4",
+      "description": "A retro coin-count blip for a score or a number going up. \"Coin count goes up\" by lulyc.",
+      "tags": ["counting", "counter", "tick", "number", "score"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Shine 1.mp3",
+      "kind": "sound",
+      "name": "Shine 1",
+      "description": "A shine for money, a prize, a win or a number landing. \"GLEAM-GLOW-SFX-CHIME.wav\" by newagesoup.",
+      "tags": ["shine", "sparkle", "twinkle", "money", "win"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Shine 2.mp3",
+      "kind": "sound",
+      "name": "Shine 2",
+      "description": "A shine for money, a prize, a win or a number landing. \"Crystal Twinkle\" by LaurenPonder.",
+      "tags": ["shine", "sparkle", "twinkle", "money", "win"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Shine 3.mp3",
+      "kind": "sound",
+      "name": "Shine 3",
+      "description": "A shine for money, a prize, a win or a number landing. \"Glimmer.wav\" by opticaillusions.",
+      "tags": ["shine", "sparkle", "twinkle", "money", "win"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Shine 4.mp3",
+      "kind": "sound",
+      "name": "Shine 4",
+      "description": "A shine for money, a prize, a win or a number landing. \"Northeast Bling\" by tripjazz.",
+      "tags": ["shine", "sparkle", "twinkle", "money", "win"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Shine 5.mp3",
+      "kind": "sound",
+      "name": "Shine 5",
+      "description": "A shine for money, a prize, a win or a number landing. \"MONEY_001.wav\" by rolandseer.",
+      "tags": ["shine", "sparkle", "twinkle", "money", "win"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Low hit 1.mp3",
+      "kind": "sound",
+      "name": "Low hit 1",
+      "description": "A low hit for a logo, a big claim or a word slamming in. \"Low impact.wav\" by AudioPapkin.",
+      "tags": ["low hit", "impact", "hit", "boom", "cinematic"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Low hit 2.mp3",
+      "kind": "sound",
+      "name": "Low hit 2",
+      "description": "A low hit for a logo, a big claim or a word slamming in. \"[Ambient Hits] Ambient Hit\" by waveplaySFX.",
+      "tags": ["low hit", "impact", "hit", "boom", "cinematic"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Low hit 3.mp3",
+      "kind": "sound",
+      "name": "Low hit 3",
+      "description": "A low hit for a logo, a big claim or a word slamming in. \"Low Pitched Boom Noise\" by soapybubl.",
+      "tags": ["low hit", "impact", "hit", "boom", "cinematic"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Low hit 4.mp3",
+      "kind": "sound",
+      "name": "Low hit 4",
+      "description": "A low hit for a logo, a big claim or a word slamming in. \"48.wav\" by adcbicycle.",
+      "tags": ["low hit", "impact", "hit", "boom", "cinematic"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Metallic riser 1.mp3",
+      "kind": "sound",
+      "name": "Metallic riser 1",
+      "description": "A metallic riser (a reversed cymbal) that builds into a big reveal and peaks at its end. \"cymbal-reversed-glassy-resonance.wav\" by burnttoys.",
+      "tags": ["metallic riser", "riser", "cymbal", "build up", "reveal"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Metallic riser 2.mp3",
+      "kind": "sound",
+      "name": "Metallic riser 2",
+      "description": "A metallic riser (a reversed cymbal) that builds into a big reveal and peaks at its end. \"Reversed Crash Cymbal\" by TheEndOfACycle.",
+      "tags": ["metallic riser", "riser", "cymbal", "build up", "reveal"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Metallic riser 3.mp3",
+      "kind": "sound",
+      "name": "Metallic riser 3",
+      "description": "A metallic riser (a reversed cymbal) that builds into a big reveal and peaks at its end. \"Rpeople_RevCrash2.wav\" by rhythmpeople.",
+      "tags": ["metallic riser", "riser", "cymbal", "build up", "reveal"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Camera flash 1.mp3",
+      "kind": "sound",
+      "name": "Camera flash 1",
+      "description": "A camera flash for a photo, a screenshot or a product shot appearing. \"Camera Flash_Crackle_Near_Mono.wav\" by _stubb.",
+      "tags": ["camera flash", "flash", "camera", "photo", "snapshot"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Camera flash 2.mp3",
+      "kind": "sound",
+      "name": "Camera flash 2",
+      "description": "A camera flash for a photo, a screenshot or a product shot appearing. \"Camera Flash\" by fokshtein.",
+      "tags": ["camera flash", "flash", "camera", "photo", "snapshot"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Camera flash 3.mp3",
+      "kind": "sound",
+      "name": "Camera flash 3",
+      "description": "A camera flash for a photo, a screenshot or a product shot appearing. \"photo-flash-canon5D.aif\" by Eelke.",
+      "tags": ["camera flash", "flash", "camera", "photo", "snapshot"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Flash and shutter 1.mp3",
+      "kind": "sound",
+      "name": "Flash and shutter 1",
+      "description": "A camera flash and shutter together, for a photo or screenshot landing. \"Vintage Camera Flash Powder and Shutter\" by Werra.",
+      "tags": ["flash and shutter", "camera", "flash", "shutter", "photo"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Flash and shutter 2.mp3",
+      "kind": "sound",
+      "name": "Flash and shutter 2",
+      "description": "A camera flash and shutter together, for a photo or screenshot landing. \"iOS Camera flash\" by Rvgerxini.",
+      "tags": ["flash and shutter", "camera", "flash", "shutter", "photo"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Flash and shutter 3.mp3",
+      "kind": "sound",
+      "name": "Flash and shutter 3",
+      "description": "A camera flash and shutter together, for a photo or screenshot landing. \"27.Flash.wav\" by Kriptonauta001.",
+      "tags": ["flash and shutter", "camera", "flash", "shutter", "photo"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Page flip 1.mp3",
+      "kind": "sound",
+      "name": "Page flip 1",
+      "description": "A page flip for a new chapter, step, list or document. \"Page Turn\" by davidbain.",
+      "tags": ["page flip", "page", "paper", "turn", "chapter"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Page flip 2.mp3",
+      "kind": "sound",
+      "name": "Page flip 2",
+      "description": "A page flip for a new chapter, step, list or document. \"turnPage.mp3\" by partheeban.",
+      "tags": ["page flip", "page", "paper", "turn", "chapter"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Page flip 3.mp3",
+      "kind": "sound",
+      "name": "Page flip 3",
+      "description": "A page flip for a new chapter, step, list or document. \"Page Turn 02.wav\" by MATRIXXX_.",
+      "tags": ["page flip", "page", "paper", "turn", "chapter"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Page flip 4.mp3",
+      "kind": "sound",
+      "name": "Page flip 4",
+      "description": "A page flip for a new chapter, step, list or document. \"Page Flip\" by qubodup.",
+      "tags": ["page flip", "page", "paper", "turn", "chapter"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Page flip 5.mp3",
+      "kind": "sound",
+      "name": "Page flip 5",
+      "description": "A page flip for a new chapter, step, list or document. \"Page Turn 04.wav\" by MATRIXXX_.",
+      "tags": ["page flip", "page", "paper", "turn", "chapter"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Cinematic whoosh 1.mp3",
+      "kind": "sound",
+      "name": "Cinematic whoosh 1",
+      "description": "A deep cinematic whoosh for something crossing the frame fast, a whip or a montage cut. \"Deep Whoosh #1\" by Kinoton.",
+      "tags": ["cinematic whoosh", "whoosh", "swoosh", "cinematic", "transition"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Cinematic whoosh 2.mp3",
+      "kind": "sound",
+      "name": "Cinematic whoosh 2",
+      "description": "A deep cinematic whoosh for something crossing the frame fast, a whip or a montage cut. \"Deep Whoosh #6\" by Kinoton.",
+      "tags": ["cinematic whoosh", "whoosh", "swoosh", "cinematic", "transition"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Cinematic whoosh 3.mp3",
+      "kind": "sound",
+      "name": "Cinematic whoosh 3",
+      "description": "A deep cinematic whoosh for something crossing the frame fast, a whip or a montage cut. \"Deep Whoosh #5\" by Kinoton.",
+      "tags": ["cinematic whoosh", "whoosh", "swoosh", "cinematic", "transition"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Cinematic whoosh 4.mp3",
+      "kind": "sound",
+      "name": "Cinematic whoosh 4",
+      "description": "A deep cinematic whoosh for something crossing the frame fast, a whip or a montage cut. \"ESE - WHOOSH - CALM - Fire Flame.wav\" by EpicSoundEffects.",
+      "tags": ["cinematic whoosh", "whoosh", "swoosh", "cinematic", "transition"],
+      "since": 2
+    },
+    {
+      "file": "Sounds/Starter pack/Cinematic whoosh 5.mp3",
+      "kind": "sound",
+      "name": "Cinematic whoosh 5",
+      "description": "A deep cinematic whoosh for something crossing the frame fast, a whip or a montage cut. \"wipe2.wav\" by Sclolex.",
+      "tags": ["cinematic whoosh", "whoosh", "swoosh", "cinematic", "transition"],
+      "since": 2
     }
   ],
-  "credits": "Cutroom's starter pack: sound effects to edit with from the start.\n\nEvery sound here is in the public domain (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/):\nfree to use in anything, commercially too, with no credit required. Their makers, with thanks:\n\nWhoosh 1: \"Swosh swoosh whoosh air sound, free, high quality\" by qubodup, https://freesound.org/people/qubodup/sounds/60026\nWhoosh 2: \"Swipe Whoosh\" by qubodup, https://freesound.org/people/qubodup/sounds/60007\nWhoosh 3: \"Cartoony whooshes\" by BranRainey, https://freesound.org/people/BranRainey/sounds/142348\nWhoosh 4: \"13th Whoosh Swing Sound\" by qubodup, https://freesound.org/people/qubodup/sounds/60000\nWhoosh 5: \"Little Whoosh 3\" by ch_ase, https://freesound.org/people/ch_ase/sounds/423798\nSwipe 1: \"swoop1\" by Streety, https://freesound.org/people/Streety/sounds/30240\nSwipe 2: \"swoop2g\" by Streety, https://freesound.org/people/Streety/sounds/30241\nSwipe 3: \"Knife Swish 2\" by jawbutch, https://freesound.org/people/jawbutch/sounds/344408\nSwipe 4: \"swish Bamboo pole w insect net 12\" by ra_gun, https://freesound.org/people/ra_gun/sounds/75544\nSwipe 5: \"Funny Swish\" by deleted_user_6479820, https://freesound.org/people/deleted_user_6479820/sounds/388005\nPop 1: \"Pop 2\" by greenvwbeetle, https://freesound.org/people/greenvwbeetle/sounds/244654\nPop 2: \"Pop 5\" by greenvwbeetle, https://freesound.org/people/greenvwbeetle/sounds/244657\nPop 3: \"cartoon pop or drip\" by AlaskaRobotics, https://freesound.org/people/AlaskaRobotics/sounds/221091\nPop 4: \"Balloon Pop / Christmas cracker / Confetti Cannon\" by Breviceps, https://freesound.org/people/Breviceps/sounds/458398\nPop 5: \"Pop Sound\" by ConarB13, https://freesound.org/people/ConarB13/sounds/401542\nClick 1: \"Button click\" by brnck, https://freesound.org/people/brnck/sounds/257357\nClick 2: \"Button V03\" by volkbutphan, https://freesound.org/people/volkbutphan/sounds/485486\nClick 3: \"Button 03\" by JarredGibb, https://freesound.org/people/JarredGibb/sounds/219478\nClick 4: \"button\" by Leszek_Szary, https://freesound.org/people/Leszek_Szary/sounds/146718\nClick 5: \"Button 04\" by JarredGibb, https://freesound.org/people/JarredGibb/sounds/219477\nClap: \"Disco Clap\" by NenadSimic, https://freesound.org/people/NenadSimic/sounds/169085\nCowbell 1: \"Cow Bells 03\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481433\nCowbell 2: \"Cow_Bells_01\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481151\nDing: \"Ding Station Annoucement Notification\" by JotrainG, https://freesound.org/people/JotrainG/sounds/651590\nCowbell 3: \"Cow_Bells_02\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481060\nImpact 1: \"Impact\" by chriskalos, https://freesound.org/people/chriskalos/sounds/172779\nImpact 2: \"BOOM IMPACT 2\" by XHALE303, https://freesound.org/people/XHALE303/sounds/535592\nImpact 3: \"Bass Impact - Ki_01\" by Kievinay, https://freesound.org/people/Kievinay/sounds/512389\nImpact 4: \"Metal Hit\" by NachtmahrTV, https://freesound.org/people/NachtmahrTV/sounds/556708\nImpact 5: \"book-hit\" by Kneeling, https://freesound.org/people/Kneeling/sounds/448005\nBass drop 1: \"SUB A# 2 secs\" by uzerx, https://freesound.org/people/uzerx/sounds/63138\nBass drop 2: \"sub bass 4 secondsssss\" by uzerx, https://freesound.org/people/uzerx/sounds/59540\nBass drop 3: \"SUB OCEANO C\" by uzerx, https://freesound.org/people/uzerx/sounds/81147\nBass drop 4: \"SUB OCEANO D\" by uzerx, https://freesound.org/people/uzerx/sounds/81148\nBass drop 5: \"SUB OCEANO A sharp\" by uzerx, https://freesound.org/people/uzerx/sounds/81144\nRiser 1: \"Riser\" by Rizzard, https://freesound.org/people/Rizzard/sounds/561207\nRiser 2: \"reversed riser\" by NOTOTO84, https://freesound.org/people/NOTOTO84/sounds/275512\nRiser 3: \"Energy Riser\" by magnuswaker, https://freesound.org/people/magnuswaker/sounds/522095\nRiser 4: \"Metallic Horror Riser FX\" by eldiariosonoro_, https://freesound.org/people/eldiariosonoro_/sounds/545798\nRiser 5: \"Vocal Chop Riser\" by rubenrox, https://freesound.org/people/rubenrox/sounds/487697\nRecord scratch 1: \"Record Scratch #4\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431777\nRecord scratch 2: \"Record Scratch #2\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431773\nRecord scratch 3: \"Record Scratch #3\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431778\nRecord scratch 4: \"Record Scratch #5\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431780\nRecord scratch 5: \"record_scratch\" by ludvique, https://freesound.org/people/ludvique/sounds/71853\nCamera shutter 1: \"Camera Shutter\" by roachpowder, https://freesound.org/people/roachpowder/sounds/170229\nCamera shutter 2: \"1/100 second camera shutter\" by FenrirFangs, https://freesound.org/people/FenrirFangs/sounds/213180\nCamera shutter 3: \"C220 camera shutter release\" by adeluc4, https://freesound.org/people/adeluc4/sounds/125318\nCamera shutter 4: \"Camera shutter analogue film SLR 1/4 01\" by cabled_mess, https://freesound.org/people/cabled_mess/sounds/338220\nCamera shutter 5: \"Camera shutter analogue film SLR 1/4 02\" by cabled_mess, https://freesound.org/people/cabled_mess/sounds/338219\nCash register 1: \"Cash register\" by MaoDin204, https://freesound.org/people/MaoDin204/sounds/721774\nCash register 2: \"cash register chching\" by disman, https://freesound.org/people/disman/sounds/728224\nCash register 3: \"Cash Register\" by Plonkapple, https://freesound.org/people/Plonkapple/sounds/550451\nCash register 4: \"Mechanical1\" by BMacZero, https://freesound.org/people/BMacZero/sounds/94120\nCash register 5: \"cash drawer and receipt\" by kalisemorrison, https://freesound.org/people/kalisemorrison/sounds/202531\nGlitch 1: \"Glitch 01\" by JacksonMiller0, https://freesound.org/people/JacksonMiller0/sounds/237607\nGlitch 2: \"VHS Glitch\" by Sassaby, https://freesound.org/people/Sassaby/sounds/264935\nGlitch 3: \"Glitch Corruption\" by dotY21, https://freesound.org/people/dotY21/sounds/348585\nGlitch 4: \"glitched sound 1\" by Elnosos, https://freesound.org/people/Elnosos/sounds/424375\nGlitch 5: \"Glitch Noise 1 - (Electrical, Transmission, Perturbation...)\" by Flying_Deer_Fx, https://freesound.org/people/Flying_Deer_Fx/sounds/369145\nTyping 1: \"Keyboard Typing Tapping\" by Psykophobia, https://freesound.org/people/Psykophobia/sounds/250390\nTyping 2: \"Keyboard Typing 001\" by ristooooo1, https://freesound.org/people/ristooooo1/sounds/539146\nLaugh 1: \"misc audience laughter noises\" by ChrisReierson, https://freesound.org/people/ChrisReierson/sounds/507983\nLaugh 2: \"Crowd laugh\" by deleted_user_2104797, https://freesound.org/people/deleted_user_2104797/sounds/324894\nLaugh 3: \"small audience laughter\" by cognito perceptu, https://freesound.org/people/cognito%20perceptu/sounds/17121\nLaugh 4: \"bell crowd laughter\" by cognito perceptu, https://freesound.org/people/cognito%20perceptu/sounds/17122\nLaugh 5: \"ShortStockLaughter2\" by ehohnke, https://freesound.org/people/ehohnke/sounds/242244\nApplause 1: \"A Nova Encore Claps Clap Applause Cheer - Nova Sound\" by NovaSoundTechnology, https://freesound.org/people/NovaSoundTechnology/sounds/347108\nApplause 2: \"Cheer 2\" by jayfrosting, https://freesound.org/people/jayfrosting/sounds/333404\nApplause 3: \"Applause 2\" by Sandermotions, https://freesound.org/people/Sandermotions/sounds/277021\nApplause 4: \"smallcrowd\" by sagetyrtle, https://freesound.org/people/sagetyrtle/sounds/32260\nApplause 5: \"Applause 1\" by Sandermotions, https://freesound.org/people/Sandermotions/sounds/277022\nCrickets 1: \"Cricket - Grillo\" by Lunevix, https://freesound.org/people/Lunevix/sounds/543965\nCrickets 2: \"Crickets chirping loop\" by Patrick_Corra, https://freesound.org/people/Patrick_Corra/sounds/633196\nCrickets 3: \"synth-cricket\" by guitarguy1985, https://freesound.org/people/guitarguy1985/sounds/69439\nSad trombone 1: \"horn_fail_wahwah_1\" by TaranP, https://freesound.org/people/TaranP/sounds/362206\nSad trombone 2: \"wah wah sad trombone\" by kirbydx, https://freesound.org/people/kirbydx/sounds/175409\nSad trombone 3: \"Fail\" by LittleRainySeasons, https://freesound.org/people/LittleRainySeasons/sounds/335906\nSad trombone 4: \"FX failed spell\" by v0idation, https://freesound.org/people/v0idation/sounds/115140\nSad trombone 5: \"fail down\" by jugraf, https://freesound.org/people/jugraf/sounds/370209\nSad trombone 6: \"Fail sound\" by Sjonas88, https://freesound.org/people/Sjonas88/sounds/538540\nBoing 1: \"Boing Spring Mouth harp downward 1\" by pan14, https://freesound.org/people/pan14/sounds/334031\nBoing 2: \"Boing Spring Mouth harp 04-20-13 4\" by pan14, https://freesound.org/people/pan14/sounds/334032\nBoing 3: \"Funny Boing\" by se2001, https://freesound.org/people/se2001/sounds/543641\nBoing 4: \"M tyre boing 3\" by AtevonHes, https://freesound.org/people/AtevonHes/sounds/275058\nBoing 5: \"boing 2\" by AuDRoger, https://freesound.org/people/AuDRoger/sounds/471152\nWrong buzzer 1: \"Wrong Answer\" by -Andreas, https://freesound.org/people/-Andreas/sounds/648462\nWrong buzzer 2: \"buzzer2\" by hypocore, https://freesound.org/people/hypocore/sounds/164089\nWrong buzzer 3: \"buzzer\" by hypocore, https://freesound.org/people/hypocore/sounds/164090\nWrong buzzer 4: \"Wrong Answer Buzzer\" by -Andreas, https://freesound.org/people/-Andreas/sounds/650842\nWrong buzzer 5: \"droplet_bad\" by willy_ineedthatapp_com, https://freesound.org/people/willy_ineedthatapp_com/sounds/167328\nCorrect chime 1: \"correct\" by ertfelda, https://freesound.org/people/ertfelda/sounds/243701\nCorrect chime 2: \"Correct\" by bwg2020, https://freesound.org/people/bwg2020/sounds/456161\nCorrect chime 3: \"correct\" by lionelmatthew001, https://freesound.org/people/lionelmatthew001/sounds/538333\nCorrect chime 4: \"Correct-2\" by bwg2020, https://freesound.org/people/bwg2020/sounds/456162\nCorrect chime 5: \"ding\" by mark205, https://freesound.org/people/mark205/sounds/580649\nDramatic sting 1: \"Piano Cord\" by ecfike, https://freesound.org/people/ecfike/sounds/183500\nDramatic sting 2: \"spooky 02\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/651025\nDramatic sting 3: \"Shock Stab 10\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/578372\nDramatic sting 4: \"Shock Stab 09\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/578371\nDramatic sting 5: \"spooky 03\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/651027\n\nTrimmed and evened out in volume for Cutroom. Delete any you don't want; they won't come back.\n"
+  "credits": "Cutroom's starter pack: sound effects to edit with from the start.\n\nEvery sound here is in the public domain (CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/):\nfree to use in anything, commercially too, with no credit required. Their makers, with thanks:\n\nWhoosh 1: \"Swosh swoosh whoosh air sound, free, high quality\" by qubodup, https://freesound.org/people/qubodup/sounds/60026\nWhoosh 2: \"Swipe Whoosh\" by qubodup, https://freesound.org/people/qubodup/sounds/60007\nWhoosh 3: \"Cartoony whooshes\" by BranRainey, https://freesound.org/people/BranRainey/sounds/142348\nWhoosh 4: \"13th Whoosh Swing Sound\" by qubodup, https://freesound.org/people/qubodup/sounds/60000\nWhoosh 5: \"Little Whoosh 3\" by ch_ase, https://freesound.org/people/ch_ase/sounds/423798\nSwipe 1: \"swoop1\" by Streety, https://freesound.org/people/Streety/sounds/30240\nSwipe 2: \"swoop2g\" by Streety, https://freesound.org/people/Streety/sounds/30241\nSwipe 3: \"Knife Swish 2\" by jawbutch, https://freesound.org/people/jawbutch/sounds/344408\nSwipe 4: \"swish Bamboo pole w insect net 12\" by ra_gun, https://freesound.org/people/ra_gun/sounds/75544\nSwipe 5: \"Funny Swish\" by deleted_user_6479820, https://freesound.org/people/deleted_user_6479820/sounds/388005\nPop 1: \"Pop 2\" by greenvwbeetle, https://freesound.org/people/greenvwbeetle/sounds/244654\nPop 2: \"Pop 5\" by greenvwbeetle, https://freesound.org/people/greenvwbeetle/sounds/244657\nPop 3: \"cartoon pop or drip\" by AlaskaRobotics, https://freesound.org/people/AlaskaRobotics/sounds/221091\nPop 4: \"Balloon Pop / Christmas cracker / Confetti Cannon\" by Breviceps, https://freesound.org/people/Breviceps/sounds/458398\nPop 5: \"Pop Sound\" by ConarB13, https://freesound.org/people/ConarB13/sounds/401542\nClick 1: \"Button click\" by brnck, https://freesound.org/people/brnck/sounds/257357\nClick 2: \"Button V03\" by volkbutphan, https://freesound.org/people/volkbutphan/sounds/485486\nClick 3: \"Button 03\" by JarredGibb, https://freesound.org/people/JarredGibb/sounds/219478\nClick 4: \"button\" by Leszek_Szary, https://freesound.org/people/Leszek_Szary/sounds/146718\nClick 5: \"Button 04\" by JarredGibb, https://freesound.org/people/JarredGibb/sounds/219477\nClap: \"Disco Clap\" by NenadSimic, https://freesound.org/people/NenadSimic/sounds/169085\nCowbell 1: \"Cow Bells 03\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481433\nCowbell 2: \"Cow_Bells_01\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481151\nDing: \"Ding Station Annoucement Notification\" by JotrainG, https://freesound.org/people/JotrainG/sounds/651590\nCowbell 3: \"Cow_Bells_02\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/481060\nImpact 1: \"Impact\" by chriskalos, https://freesound.org/people/chriskalos/sounds/172779\nImpact 2: \"BOOM IMPACT 2\" by XHALE303, https://freesound.org/people/XHALE303/sounds/535592\nImpact 3: \"Bass Impact - Ki_01\" by Kievinay, https://freesound.org/people/Kievinay/sounds/512389\nImpact 4: \"Metal Hit\" by NachtmahrTV, https://freesound.org/people/NachtmahrTV/sounds/556708\nImpact 5: \"book-hit\" by Kneeling, https://freesound.org/people/Kneeling/sounds/448005\nBass drop 1: \"SUB A# 2 secs\" by uzerx, https://freesound.org/people/uzerx/sounds/63138\nBass drop 2: \"sub bass 4 secondsssss\" by uzerx, https://freesound.org/people/uzerx/sounds/59540\nBass drop 3: \"SUB OCEANO C\" by uzerx, https://freesound.org/people/uzerx/sounds/81147\nBass drop 4: \"SUB OCEANO D\" by uzerx, https://freesound.org/people/uzerx/sounds/81148\nBass drop 5: \"SUB OCEANO A sharp\" by uzerx, https://freesound.org/people/uzerx/sounds/81144\nRiser 1: \"Riser\" by Rizzard, https://freesound.org/people/Rizzard/sounds/561207\nRiser 2: \"reversed riser\" by NOTOTO84, https://freesound.org/people/NOTOTO84/sounds/275512\nRiser 3: \"Energy Riser\" by magnuswaker, https://freesound.org/people/magnuswaker/sounds/522095\nRiser 4: \"Metallic Horror Riser FX\" by eldiariosonoro_, https://freesound.org/people/eldiariosonoro_/sounds/545798\nRiser 5: \"Vocal Chop Riser\" by rubenrox, https://freesound.org/people/rubenrox/sounds/487697\nRecord scratch 1: \"Record Scratch #4\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431777\nRecord scratch 2: \"Record Scratch #2\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431773\nRecord scratch 3: \"Record Scratch #3\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431778\nRecord scratch 4: \"Record Scratch #5\" by musicvision31, https://freesound.org/people/musicvision31/sounds/431780\nRecord scratch 5: \"record_scratch\" by ludvique, https://freesound.org/people/ludvique/sounds/71853\nCamera shutter 1: \"Camera Shutter\" by roachpowder, https://freesound.org/people/roachpowder/sounds/170229\nCamera shutter 2: \"1/100 second camera shutter\" by FenrirFangs, https://freesound.org/people/FenrirFangs/sounds/213180\nCamera shutter 3: \"C220 camera shutter release\" by adeluc4, https://freesound.org/people/adeluc4/sounds/125318\nCamera shutter 4: \"Camera shutter analogue film SLR 1/4 01\" by cabled_mess, https://freesound.org/people/cabled_mess/sounds/338220\nCamera shutter 5: \"Camera shutter analogue film SLR 1/4 02\" by cabled_mess, https://freesound.org/people/cabled_mess/sounds/338219\nCash register 1: \"Cash register\" by MaoDin204, https://freesound.org/people/MaoDin204/sounds/721774\nCash register 2: \"cash register chching\" by disman, https://freesound.org/people/disman/sounds/728224\nCash register 3: \"Cash Register\" by Plonkapple, https://freesound.org/people/Plonkapple/sounds/550451\nCash register 4: \"Mechanical1\" by BMacZero, https://freesound.org/people/BMacZero/sounds/94120\nCash register 5: \"cash drawer and receipt\" by kalisemorrison, https://freesound.org/people/kalisemorrison/sounds/202531\nGlitch 1: \"Glitch 01\" by JacksonMiller0, https://freesound.org/people/JacksonMiller0/sounds/237607\nGlitch 2: \"VHS Glitch\" by Sassaby, https://freesound.org/people/Sassaby/sounds/264935\nGlitch 3: \"Glitch Corruption\" by dotY21, https://freesound.org/people/dotY21/sounds/348585\nGlitch 4: \"glitched sound 1\" by Elnosos, https://freesound.org/people/Elnosos/sounds/424375\nGlitch 5: \"Glitch Noise 1 - (Electrical, Transmission, Perturbation...)\" by Flying_Deer_Fx, https://freesound.org/people/Flying_Deer_Fx/sounds/369145\nTyping 1: \"Keyboard Typing Tapping\" by Psykophobia, https://freesound.org/people/Psykophobia/sounds/250390\nTyping 2: \"Keyboard Typing 001\" by ristooooo1, https://freesound.org/people/ristooooo1/sounds/539146\nLaugh 1: \"misc audience laughter noises\" by ChrisReierson, https://freesound.org/people/ChrisReierson/sounds/507983\nLaugh 2: \"Crowd laugh\" by deleted_user_2104797, https://freesound.org/people/deleted_user_2104797/sounds/324894\nLaugh 3: \"small audience laughter\" by cognito perceptu, https://freesound.org/people/cognito%20perceptu/sounds/17121\nLaugh 4: \"bell crowd laughter\" by cognito perceptu, https://freesound.org/people/cognito%20perceptu/sounds/17122\nLaugh 5: \"ShortStockLaughter2\" by ehohnke, https://freesound.org/people/ehohnke/sounds/242244\nApplause 1: \"A Nova Encore Claps Clap Applause Cheer - Nova Sound\" by NovaSoundTechnology, https://freesound.org/people/NovaSoundTechnology/sounds/347108\nApplause 2: \"Cheer 2\" by jayfrosting, https://freesound.org/people/jayfrosting/sounds/333404\nApplause 3: \"Applause 2\" by Sandermotions, https://freesound.org/people/Sandermotions/sounds/277021\nApplause 4: \"smallcrowd\" by sagetyrtle, https://freesound.org/people/sagetyrtle/sounds/32260\nApplause 5: \"Applause 1\" by Sandermotions, https://freesound.org/people/Sandermotions/sounds/277022\nCrickets 1: \"Cricket - Grillo\" by Lunevix, https://freesound.org/people/Lunevix/sounds/543965\nCrickets 2: \"Crickets chirping loop\" by Patrick_Corra, https://freesound.org/people/Patrick_Corra/sounds/633196\nCrickets 3: \"synth-cricket\" by guitarguy1985, https://freesound.org/people/guitarguy1985/sounds/69439\nSad trombone 1: \"horn_fail_wahwah_1\" by TaranP, https://freesound.org/people/TaranP/sounds/362206\nSad trombone 2: \"wah wah sad trombone\" by kirbydx, https://freesound.org/people/kirbydx/sounds/175409\nSad trombone 3: \"Fail\" by LittleRainySeasons, https://freesound.org/people/LittleRainySeasons/sounds/335906\nSad trombone 4: \"FX failed spell\" by v0idation, https://freesound.org/people/v0idation/sounds/115140\nSad trombone 5: \"fail down\" by jugraf, https://freesound.org/people/jugraf/sounds/370209\nSad trombone 6: \"Fail sound\" by Sjonas88, https://freesound.org/people/Sjonas88/sounds/538540\nBoing 1: \"Boing Spring Mouth harp downward 1\" by pan14, https://freesound.org/people/pan14/sounds/334031\nBoing 2: \"Boing Spring Mouth harp 04-20-13 4\" by pan14, https://freesound.org/people/pan14/sounds/334032\nBoing 3: \"Funny Boing\" by se2001, https://freesound.org/people/se2001/sounds/543641\nBoing 4: \"M tyre boing 3\" by AtevonHes, https://freesound.org/people/AtevonHes/sounds/275058\nBoing 5: \"boing 2\" by AuDRoger, https://freesound.org/people/AuDRoger/sounds/471152\nWrong buzzer 1: \"Wrong Answer\" by -Andreas, https://freesound.org/people/-Andreas/sounds/648462\nWrong buzzer 2: \"buzzer2\" by hypocore, https://freesound.org/people/hypocore/sounds/164089\nWrong buzzer 3: \"buzzer\" by hypocore, https://freesound.org/people/hypocore/sounds/164090\nWrong buzzer 4: \"Wrong Answer Buzzer\" by -Andreas, https://freesound.org/people/-Andreas/sounds/650842\nWrong buzzer 5: \"droplet_bad\" by willy_ineedthatapp_com, https://freesound.org/people/willy_ineedthatapp_com/sounds/167328\nCorrect chime 1: \"correct\" by ertfelda, https://freesound.org/people/ertfelda/sounds/243701\nCorrect chime 2: \"Correct\" by bwg2020, https://freesound.org/people/bwg2020/sounds/456161\nCorrect chime 3: \"correct\" by lionelmatthew001, https://freesound.org/people/lionelmatthew001/sounds/538333\nCorrect chime 4: \"Correct-2\" by bwg2020, https://freesound.org/people/bwg2020/sounds/456162\nCorrect chime 5: \"ding\" by mark205, https://freesound.org/people/mark205/sounds/580649\nDramatic sting 1: \"Piano Cord\" by ecfike, https://freesound.org/people/ecfike/sounds/183500\nDramatic sting 2: \"spooky 02\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/651025\nDramatic sting 3: \"Shock Stab 10\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/578372\nDramatic sting 4: \"Shock Stab 09\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/578371\nDramatic sting 5: \"spooky 03\" by nomiqbomi, https://freesound.org/people/nomiqbomi/sounds/651027\nCounting 1: made from \"Points_Tick1\" by BaggoNotes, https://freesound.org/people/BaggoNotes/sounds/721513\nCounting 2: made from \"Points_Tick1\" by BaggoNotes, https://freesound.org/people/BaggoNotes/sounds/721513\nCounting 3: made from \"Points_Tick1\" by BaggoNotes, https://freesound.org/people/BaggoNotes/sounds/721513\nCounting 4: \"Coin count goes up\" by lulyc, https://freesound.org/people/lulyc/sounds/346117\nShine 1: \"GLEAM-GLOW-SFX-CHIME.wav\" by newagesoup, https://freesound.org/people/newagesoup/sounds/351408\nShine 2: \"Crystal Twinkle\" by LaurenPonder, https://freesound.org/people/LaurenPonder/sounds/639429\nShine 3: \"Glimmer.wav\" by opticaillusions, https://freesound.org/people/opticaillusions/sounds/521873\nShine 4: \"Northeast Bling\" by tripjazz, https://freesound.org/people/tripjazz/sounds/508027\nShine 5: \"MONEY_001.wav\" by rolandseer, https://freesound.org/people/rolandseer/sounds/443334\nLow hit 1: \"Low impact.wav\" by AudioPapkin, https://freesound.org/people/AudioPapkin/sounds/430978\nLow hit 2: \"[Ambient Hits] Ambient Hit\" by waveplaySFX, https://freesound.org/people/waveplaySFX/sounds/529139\nLow hit 3: \"Low Pitched Boom Noise\" by soapybubl, https://freesound.org/people/soapybubl/sounds/423458\nLow hit 4: \"48.wav\" by adcbicycle, https://freesound.org/people/adcbicycle/sounds/13900\nMetallic riser 1: \"cymbal-reversed-glassy-resonance.wav\" by burnttoys, https://freesound.org/people/burnttoys/sounds/9523\nMetallic riser 2: \"Reversed Crash Cymbal\" by TheEndOfACycle, https://freesound.org/people/TheEndOfACycle/sounds/674291\nMetallic riser 3: \"Rpeople_RevCrash2.wav\" by rhythmpeople, https://freesound.org/people/rhythmpeople/sounds/165154\nCamera flash 1: \"Camera Flash_Crackle_Near_Mono.wav\" by _stubb, https://freesound.org/people/_stubb/sounds/406614\nCamera flash 2: \"Camera Flash\" by fokshtein, https://freesound.org/people/fokshtein/sounds/249193\nCamera flash 3: \"photo-flash-canon5D.aif\" by Eelke, https://freesound.org/people/Eelke/sounds/142906\nFlash and shutter 1: \"Vintage Camera Flash Powder and Shutter\" by Werra, https://freesound.org/people/Werra/sounds/232130\nFlash and shutter 2: \"iOS Camera flash\" by Rvgerxini, https://freesound.org/people/Rvgerxini/sounds/455511\nFlash and shutter 3: \"27.Flash.wav\" by Kriptonauta001, https://freesound.org/people/Kriptonauta001/sounds/473767\nPage flip 1: \"Page Turn\" by davidbain, https://freesound.org/people/davidbain/sounds/136778\nPage flip 2: \"turnPage.mp3\" by partheeban, https://freesound.org/people/partheeban/sounds/457767\nPage flip 3: \"Page Turn 02.wav\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/397549\nPage flip 4: \"Page Flip\" by qubodup, https://freesound.org/people/qubodup/sounds/454707\nPage flip 5: \"Page Turn 04.wav\" by MATRIXXX_, https://freesound.org/people/MATRIXXX_/sounds/397551\nCinematic whoosh 1: \"Deep Whoosh #1\" by Kinoton, https://freesound.org/people/Kinoton/sounds/351256\nCinematic whoosh 2: \"Deep Whoosh #6\" by Kinoton, https://freesound.org/people/Kinoton/sounds/558826\nCinematic whoosh 3: \"Deep Whoosh #5\" by Kinoton, https://freesound.org/people/Kinoton/sounds/558827\nCinematic whoosh 4: \"ESE - WHOOSH - CALM - Fire Flame.wav\" by EpicSoundEffects, https://freesound.org/people/EpicSoundEffects/sounds/475879\nCinematic whoosh 5: \"wipe2.wav\" by Sclolex, https://freesound.org/people/Sclolex/sounds/179779\n\nTrimmed and evened out in volume for Cutroom. Delete any you don't want; they won't come back.\n"
 }

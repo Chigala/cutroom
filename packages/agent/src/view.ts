@@ -70,7 +70,17 @@ export function projectView(doc: ProjectDoc): string {
           (l) =>
             `${l}${heard.filter((x) => x.label === l).length > 1 ? ` x${heard.filter((x) => x.label === l).length}` : ""}`,
         );
+        // Music in a video's own sound (a downloaded or reposted clip): not the music track, so turning
+        // that down doesn't touch it; its shots' ownMusic does.
+        const music = s.kind === "video" ? (a?.sounds ?? []).filter((x) => x.label === "music") : [];
+        const musicSecs = music.reduce((n, x) => n + x.end - x.start, 0);
         return {
+          ...(musicSecs >= 1 && {
+            music: `in its own sound, ${Math.round(musicSecs)}s of ${Math.round(s.duration)}s (${music
+              .slice(0, 4)
+              .map((x) => `${x.start.toFixed(1)}-${x.end.toFixed(1)}s`)
+              .join(", ")}${music.length > 4 ? ", ..." : ""}): ownMusic on its shots takes it out`,
+          }),
           ...(counts.length && { sounds: counts.join(", ") }),
           ...(a?.instruments?.length && { instruments: a.instruments.map((i) => i.name).join(", ") }),
           ...(a?.voice && { voice: describeVoice(a.voice) }),

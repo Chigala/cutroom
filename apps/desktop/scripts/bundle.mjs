@@ -18,6 +18,9 @@ export const RUNTIME = [
   "@remotion/renderer",
   "@remotion/install-whisper-cpp",
   "onnxruntime-node",
+  // run_script's sandbox: its WebAssembly file is loaded from beside its package's code.
+  "quickjs-emscripten-core",
+  "@jitl/quickjs-wasmfile-release-sync",
   "zod",
 ];
 

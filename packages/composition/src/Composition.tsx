@@ -67,9 +67,11 @@ import {
   shotColor,
   shotFocus,
   sourceTime,
+  splitsSound,
   spokenWords,
   steady,
   steadyAt,
+  stemKey,
   type Timeline,
   type Title,
   timelineOf,
@@ -239,6 +241,18 @@ export const VideoComposition = ({
       ),
     [doc.scenes, fps, flows],
   );
+  // Shots whose clip's sound is split into its voice and the music under it (ownMusic), once it is.
+  const parts = useMemo(() => {
+    const made = new Set(doc.analyses.filter((a) => a.stems).map((a) => a.id));
+    return new Map(
+      doc.scenes
+        .filter((s) => splitsSound(s) && made.has(s.source))
+        .map((s) => [
+          s.id,
+          { voice: stemKey(s.source, "voice"), music: stemKey(s.source, "music"), level: s.ownMusic ?? 1 },
+        ]),
+    );
+  }, [doc.scenes, doc.analyses]);
   // Steadied shots: the moves that cancel their camera's shake, once its path is measured.
   const steadies = useMemo(() => {
     const out = new Map<string, Steadied>();
@@ -504,6 +518,7 @@ export const VideoComposition = ({
                     framed={framed}
                     layer="base"
                     duck={duck}
+                    parts={parts}
                   />
                 </Camera>
               )}
@@ -699,6 +714,17 @@ interface SoundProps {
   readonly playbackRate?: number;
   readonly muted?: boolean;
 }
+
+/** A clip's sound split in two (ownMusic): their media keys, and the share of the music kept. */
+interface SoundParts {
+  readonly voice: string;
+  readonly music: string;
+  readonly level: number;
+}
+
+/** A volume (a level, or one per frame) times a share. */
+const scaled = (v: VolumeProp, k: number): VolumeProp =>
+  typeof v === "number" ? v * k : (f: number) => v(f) * k;
 
 function Sound(p: SoundProps) {
   const live = useContext(LivePreview);
@@ -970,6 +996,7 @@ const Scenes = memo(function Scenes({
   framed,
   layer,
   duck,
+  parts,
 }: {
   tl: Timeline;
   faces: Faces;
@@ -991,6 +1018,8 @@ const Scenes = memo(function Scenes({
   ramps: ReadonlyMap<string, string>;
   /** How loud the shots' own sound is at an output time, under voiceovers (null: none, always full). */
   duck?: ((t: number) => number) | null;
+  /** Shots that play their clip's sound as its voice and music apart (ownMusic). */
+  parts?: ReadonlyMap<string, SoundParts>;
   /** Shots slowed by their speed, made smooth: the file and the stretch of the clip it covers. */
   flows: ReadonlyMap<string, { key: string; from: number; to: number }>;
   steadies: ReadonlyMap<string, Steadied>;
@@ -1183,6 +1212,7 @@ const Scenes = memo(function Scenes({
                           {...(fr?.path && { follow: { ...fr.path, offset: lead } })}
                           source={source}
                           {...(ramp && { mediaKey: ramp })}
+                          {...(!ramp && parts?.get(p.scene.id) && { parts: parts.get(p.scene.id)! })}
                           mediaBase={mediaBase}
                           quality={quality}
                           muted={muted || !!ramp}
@@ -1849,6 +1879,7 @@ function ClipMedia({
   width,
   height,
   backdrop = true,
+  parts,
 }: {
   source: Source;
   focus?: Face;
@@ -1865,6 +1896,8 @@ function ClipMedia({
   mediaKey?: string;
   /** When the footage is fitted inside the frame: draw a blurred copy of it behind (not for cutouts). */
   backdrop?: boolean;
+  /** The clip's sound as its voice and music apart: played instead of the clip's own. */
+  parts?: SoundParts;
 }) {
   const { fps } = useVideoConfig();
   const fitting = useContext(FitContext);
@@ -1912,6 +1945,39 @@ function ClipMedia({
     ) : null;
   // A photo's cutout plays like a clip's (held still).
   if (source.kind === "video" || (source.kind === "image" && mediaKey)) {
+    // Its voice and the music under it, apart: the voice where the sound is heard (the export mixes
+    // the voice itself), the music at its share wherever it plays, both in step with the picture.
+    if (parts) {
+      const trims = {
+        trimBefore: trimFrom(from, fps),
+        ...(to !== undefined && { trimAfter: trimTo(to, fps, from) }),
+        playbackRate: speed,
+      };
+      return (
+        <>
+          {behind}
+          <Video
+            src={src}
+            {...trims}
+            volume={0}
+            muted
+            objectFit={style.position ? "fill" : "cover"}
+            style={style}
+            {...graded}
+          />
+          {!muted && (
+            <Sound src={`${mediaBase}${encodeURIComponent(parts.voice)}`} {...trims} volume={volume} />
+          )}
+          {parts.level > 0 && (
+            <Sound
+              src={`${mediaBase}${encodeURIComponent(parts.music)}`}
+              {...trims}
+              volume={scaled(volume, parts.level)}
+            />
+          )}
+        </>
+      );
+    }
     // In the live preview the picture and the sound play apart: the sound through <audio> (see Sound).
     const apart = live && source.hasAudio && !muted;
     return (
@@ -1962,6 +2028,7 @@ function SceneMedia({
   quality,
   muted,
   volume,
+  parts,
 }: {
   scene: Scene;
   /** The person's path through the shot, frame by frame from `offset` frames in, to follow them. */
@@ -1975,6 +2042,7 @@ function SceneMedia({
   quality: "preview" | "export";
   muted: boolean;
   volume: VolumeProp;
+  parts?: SoundParts;
 }) {
   const { width, height } = useVideoConfig();
   if (!source) return <Placeholder color="#3A1F1F" />;
@@ -1992,6 +2060,7 @@ function SceneMedia({
             quality={quality}
             muted={muted}
             volume={volume}
+            {...(parts && { parts })}
           />
         )}
       </Following>
@@ -2007,6 +2076,7 @@ function SceneMedia({
       volume={volume}
       speed={scene.speed ?? 1}
       {...(mediaKey && { mediaKey })}
+      {...(parts && { parts })}
       muted={muted}
       mediaBase={mediaBase}
       quality={quality}

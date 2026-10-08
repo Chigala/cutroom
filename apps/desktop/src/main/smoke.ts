@@ -17,20 +17,27 @@ import type { ProjectService } from "./project-service.ts";
 
 /**
  * A scripted graphic like the agent writes: it loads every library the runtime ships (gsap and its
- * plugins, three.js, lottie, d3, Chart.js, Rough.js) and the particles, and fills the frame green
+ * plugins, three.js, lottie, d3, Chart.js, Rough.js, Matter.js) and the particles and physics, and fills the frame green
  * (animated in by a gsap tween) only if all of them loaded; red if any didn't.
  */
-const SMOKE_GRAPHIC = `<!-- graphic {"name":"Smoke test","description":"Checks the runtime's libraries","duration":3,"libs":["gsap","three","lottie","d3","chart","rough"]} -->
+const SMOKE_GRAPHIC = `<!-- graphic {"name":"Smoke test","description":"Checks the runtime's libraries","duration":3,"libs":["gsap","three","lottie","d3","chart","rough","matter"]} -->
 <style>.fill { position: absolute; inset: 0; opacity: 0; }</style>
 <div class="fill" id="fill"></div>
 <script>
   // Particles need no library: they draw behind the fill.
   graphic.particles({ preset: "confetti", behind: true });
+  // A box falling onto a floor: the physics steps from the clock.
+  graphic.physics((Matter, engine, f) => {
+    Matter.Composite.add(engine.world, [
+      Matter.Bodies.rectangle(f.width / 2, 0, 80, 80),
+      Matter.Bodies.rectangle(f.width / 2, f.height, f.width, 40, { isStatic: true }),
+    ]);
+  });
   const fill = document.getElementById("fill");
   const loaded = typeof gsap !== "undefined" && typeof lottie !== "undefined" && typeof THREE !== "undefined"
     && new THREE.Color("#00ff00").g === 1 && typeof d3 !== "undefined" && typeof d3.scaleLinear === "function"
     && typeof Chart !== "undefined" && typeof rough !== "undefined" && typeof SplitText !== "undefined"
-    && typeof DrawSVGPlugin !== "undefined" && typeof Physics2DPlugin !== "undefined";
+    && typeof DrawSVGPlugin !== "undefined" && typeof Physics2DPlugin !== "undefined" && typeof Matter !== "undefined";
   fill.style.background = loaded ? "#00ff00" : "#ff0000";
   gsap.to(fill, { opacity: 1, duration: 0.3 });
 </script>`;

@@ -78,6 +78,28 @@ export function opSchemaFor(
 
 export const OpSchema: z.ZodType<Op> = opSchemaFor(COLLECTIONS);
 
+/**
+ * The same ops with items, patches and values left as plain objects: one shape per kind of op instead of
+ * one per collection. For the model, whose tool definitions go with every request: an item's fields are
+ * checked when the op is applied (applyOp), against the same schemas.
+ */
+export function looseOpSchemaFor(
+  colls: readonly Collection[],
+  singletons: readonly Singleton[] = SINGLETONS,
+): z.ZodType<Op> {
+  const Coll = z.enum(colls as [Collection, ...Collection[]]);
+  const Key = z.enum(singletons as [Singleton, ...Singleton[]]);
+  const Fields = z.record(z.string(), z.unknown());
+  return z.discriminatedUnion("op", [
+    z.object({ op: z.literal("insert"), coll: Coll, item: Fields, index: Index.optional() }),
+    z.object({ op: z.literal("update"), coll: Coll, id: z.string(), patch: Patch }),
+    z.object({ op: z.literal("remove"), coll: Coll, id: z.string() }),
+    z.object({ op: z.literal("move"), coll: Coll, id: z.string(), index: Index }),
+    z.object({ op: z.literal("set"), key: Key, value: z.unknown() }),
+    z.object({ op: z.literal("merge"), key: Key, patch: Patch }),
+  ]) as unknown as z.ZodType<Op>;
+}
+
 export interface Applied {
   readonly doc: ProjectDoc;
   /** Ops that undo this change, in the order they must be applied. */

@@ -9,11 +9,11 @@
  * for a later cloud tier but switched off.
  */
 import type { AgentContext, AgentUsage, HarnessId, ToolCall } from "@vedit/bridge";
-import type { ChangeGroup, Op, ProjectDoc, Source } from "@vedit/project";
+import { applyOps, type ChangeGroup, type Op, type ProjectDoc, type Source } from "@vedit/project";
 import { runWithApi } from "./api.ts";
 import { buildPrompt, type Turn } from "./context.ts";
 import { HARNESSES } from "./harness.ts";
-import { type AgentHost, refitMusic, type Scratch, type ToolContext } from "./tools.ts";
+import { type AgentHost, refitMusic, type Scratch, snapCutsToBeat, type ToolContext } from "./tools.ts";
 import { type Backend, type Effort, Stalled, StepLimit } from "./types.ts";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
@@ -47,6 +47,11 @@ export interface AgentOptions {
   onTool?(call: ToolCall): void;
   /** Each change group as it's applied, for the editor's live draft. */
   onDraft?(label: string, ops: readonly Op[]): void;
+  /**
+   * What indexing writes to the project while the request runs (an attached clip finishing, its words
+   * and shots), so the request's copy takes it in. Returns the unsubscribe.
+   */
+  indexed?(listener: (ops: readonly Op[]) => void): () => void;
 }
 
 export interface AgentResult {
@@ -68,73 +73,90 @@ export function defaultBackend(): Backend {
 
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const scratch: Scratch = { doc: opts.doc, ops: [], groups: [] };
+  // Indexing that lands meanwhile goes into the copy too (the host's commit of the agent's ops sits on
+  // top of it all the same). One about a clip the agent has since removed isn't needed.
+  const unsubscribe = opts.indexed?.((ops) => {
+    try {
+      scratch.doc = applyOps(scratch.doc, ops).doc;
+    } catch {}
+  });
   const ctx: ToolContext = {
     scratch,
+    followsIndexing: Boolean(unsubscribe),
     host: opts.host,
     step: (text, status = "done") => opts.onStep?.(text, status),
     activity: (text) => opts.onActivity?.(text),
     tool: (call) => opts.onTool?.(call),
     draft: (label, ops) => opts.onDraft?.(label, ops),
   };
-  const attached = (opts.attachments ?? [])
-    .map((id) => opts.doc.sources.find((s) => s.id === id))
-    .filter((s) => s !== undefined);
-  let run = {
-    prompt: buildPrompt(opts.doc, opts.prompt, opts.context, opts.history ?? [], attached, opts.handEdits),
-    images: await attachmentImages(attached, opts.host),
-    model: opts.model ?? DEFAULT_MODEL,
-    effort: opts.effort ?? "medium",
-    maxTurns: opts.maxTurns ?? 40,
-    thinking: opts.showThinking === false ? ("omitted" as const) : ("summarized" as const),
-    ...(opts.signal && { signal: opts.signal }),
-    onText: (delta: string, turn?: boolean) => opts.onText?.(delta, turn),
-    onThinking: (delta: string, block?: boolean) => opts.onThinking?.(delta, block),
-    onActivity: (text: string) => opts.onActivity?.(text),
-    onUsage: (usage: AgentUsage) => opts.onUsage?.(usage),
-  };
-  const backend = opts.backend ?? defaultBackend();
-  const harness = HARNESSES[opts.harness ?? "claude"];
-  for (let resumed = 0; ; resumed++) {
-    try {
-      const reply = backend === "api" ? await runWithApi(run, ctx) : await harness.run(run, ctx);
-      await refitMusic(ctx);
-      const { summary, next } = splitNext(reply);
-      return { ops: scratch.ops, groups: scratch.groups, summary, ...(next && { next }), doc: scratch.doc };
-    } catch (err) {
-      // The agent went silent mid-request (a stalled connection): pick up where it stopped, on the work
-      // so far, rather than end the request half done. Twice at most.
-      if (err instanceof Stalled && resumed < MAX_RESUMES && !opts.signal?.aborted) {
-        ctx.step(`${harness.name} stalled; picking up where it stopped`, "warn");
-        run = {
-          ...run,
-          prompt: buildPrompt(
-            scratch.doc,
-            resumePrompt(
-              opts.prompt,
-              scratch.groups.map((g) => g.label),
+  try {
+    const attached = (opts.attachments ?? [])
+      .map((id) => opts.doc.sources.find((s) => s.id === id))
+      .filter((s) => s !== undefined);
+    let run = {
+      prompt: buildPrompt(opts.doc, opts.prompt, opts.context, opts.history ?? [], attached, opts.handEdits),
+      images: await attachmentImages(attached, opts.host),
+      model: opts.model ?? DEFAULT_MODEL,
+      effort: opts.effort ?? "medium",
+      maxTurns: opts.maxTurns ?? 40,
+      thinking: opts.showThinking === false ? ("omitted" as const) : ("summarized" as const),
+      ...(opts.signal && { signal: opts.signal }),
+      onText: (delta: string, turn?: boolean) => opts.onText?.(delta, turn),
+      onThinking: (delta: string, block?: boolean) => opts.onThinking?.(delta, block),
+      onActivity: (text: string) => opts.onActivity?.(text),
+      onUsage: (usage: AgentUsage) => opts.onUsage?.(usage),
+    };
+    const backend = opts.backend ?? defaultBackend();
+    const harness = HARNESSES[opts.harness ?? "claude"];
+    for (let resumed = 0; ; resumed++) {
+      try {
+        const reply = backend === "api" ? await runWithApi(run, ctx) : await harness.run(run, ctx);
+        await refitMusic(ctx);
+        snapCutsToBeat(ctx);
+        const { summary, next } = splitNext(reply);
+        return { ops: scratch.ops, groups: scratch.groups, summary, ...(next && { next }), doc: scratch.doc };
+      } catch (err) {
+        // The agent went silent mid-request (a stalled connection): pick up where it stopped, on the work
+        // so far, rather than end the request half done. Twice at most.
+        if (err instanceof Stalled && resumed < MAX_RESUMES && !opts.signal?.aborted) {
+          ctx.step(`${harness.name} stalled; picking up where it stopped`, "warn");
+          run = {
+            ...run,
+            prompt: buildPrompt(
+              scratch.doc,
+              resumePrompt(
+                opts.prompt,
+                scratch.groups.map((g) => g.label),
+              ),
+              opts.context,
+              opts.history ?? [],
+              attached,
+              opts.handEdits,
             ),
-            opts.context,
-            opts.history ?? [],
-            attached,
-            opts.handEdits,
-          ),
-        };
-        continue;
+          };
+          continue;
+        }
+        // Out of turns, or stalled again: keep what it did (often most of a first cut) rather than throw
+        // it all away.
+        if (!(err instanceof StepLimit) || !scratch.ops.length) throw err;
+        const stalled = err instanceof Stalled;
+        ctx.step(
+          stalled ? `${harness.name} stopped responding` : "Ran out of steps before finishing",
+          "warn",
+        );
+        const summary = [
+          err.partial,
+          `${stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        await refitMusic(ctx);
+        snapCutsToBeat(ctx);
+        return { ops: scratch.ops, groups: scratch.groups, summary, doc: scratch.doc };
       }
-      // Out of turns, or stalled again: keep what it did (often most of a first cut) rather than throw
-      // it all away.
-      if (!(err instanceof StepLimit) || !scratch.ops.length) throw err;
-      const stalled = err instanceof Stalled;
-      ctx.step(stalled ? `${harness.name} stopped responding` : "Ran out of steps before finishing", "warn");
-      const summary = [
-        err.partial,
-        `${stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-      await refitMusic(ctx);
-      return { ops: scratch.ops, groups: scratch.groups, summary, doc: scratch.doc };
     }
+  } finally {
+    unsubscribe?.();
   }
 }
 

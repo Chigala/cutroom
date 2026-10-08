@@ -73,17 +73,21 @@ export function UsageMeter() {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Claude usage"
-        title="Context and plan usage"
+        title={
+          tight && tight.pct >= NOTE
+            ? `${Math.round(tight.pct)}% of the ${tight.label === "5h" ? "5-hour" : "weekly"} limit used`
+            : "Context and plan usage"
+        }
         onClick={() => setOpen(!open)}
         className={clsx(
-          "inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg px-1.5 text-[11px] tabular-nums",
+          "inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg px-1.5 text-[11px] whitespace-nowrap tabular-nums",
           open ? "bg-selected text-fg" : "text-faint hover:bg-control hover:text-fg-2",
         )}
       >
         <Ring pct={context ? contextPct : 0} />
         {tight && tight.pct >= NOTE && (
           <span className={tight.pct >= WARN ? "text-bad" : "text-accent"}>
-            {Math.round(tight.pct)}% {tight.label}
+            {Math.round(tight.pct)}%<span className="hidden @[440px]:inline"> {tight.label}</span>
           </span>
         )}
       </button>

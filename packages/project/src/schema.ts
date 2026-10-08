@@ -185,6 +185,15 @@ export const Scene = z
     out: Seconds.describe("End inside the source; out - in is the scene length"),
     note: z.string().max(300).default("").describe("One sentence on what happens, shown on the story card"),
     volume: z.number().min(0).max(2).default(1).describe("Level of the clip's own sound"),
+    ownMusic: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .meta({ default: 1 })
+      .describe(
+        "The music in the clip's own sound (a downloaded or reposted video): 0 takes it out and keeps the voice, 1 when unset leaves it as recorded. Split into voice and music once per clip, on this computer",
+      ),
     speed: z
       .number()
       .min(0.25)
@@ -541,6 +550,10 @@ export const Analysis = z.object({
     .array(z.string())
     .optional()
     .describe("Slowed shots made with in-between frames (smooth slow motion), by their hash"),
+  stems: z
+    .string()
+    .optional()
+    .describe("The model the clip's sound was split into voice and music with (for ownMusic)"),
   sounds: z
     .array(
       z.object({
@@ -806,6 +819,12 @@ export const Music = z.object({
     .default(true)
     .describe(
       "Snap the start and end of graphics, titles, zooms, effects and sound effects to the music's beat when they fall within a few frames of one",
+    ),
+  lockCuts: z
+    .boolean()
+    .default(true)
+    .describe(
+      "When the agent changes the cut or the music, the cuts between shots nobody talks in move onto the nearest beat at the end of its request (talking cuts follow the words)",
     ),
   duckTo: z.number().min(0).max(1).default(0.28).describe("Share of the volume kept under speech"),
   fadeIn: Seconds.max(10).default(0.5),

@@ -59,9 +59,9 @@ describe("agent tools", () => {
       expect(tool.input_schema.type, tool.name).toBe("object");
       expect(JSON.stringify(tool.input_schema)).not.toContain("$schema");
     }
-    // Sent with every request, so it's held down. apply_ops is most of it (every collection's whole shape,
-    // spelled out); slimming that to fields looked up on demand is next, and brings this well down again.
-    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(125_000);
+    // Sent with every request, so it's held down: apply_ops lists the fields by name, and the fields tool
+    // has the rest when it's needed.
+    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(50_000);
   });
 
   it("looks at a graphic on its own without touching the timeline", async () => {
@@ -249,6 +249,83 @@ describe("agent tools", () => {
     expect(derived.isError).toBe(true);
     const invalid = await runTool("apply_ops", { label: "x", ops: [{ op: "explode" }] }, c);
     expect(invalid.isError).toBe(true);
+  });
+
+  it("apply_ops refuses a field that doesn't exist, naming it and what it could be", async () => {
+    const { c } = ctx(talking());
+    const title = { id: "t1", role: "title", anchor: { scene: "sc1", at: 1 }, duration: 2, text: "Hi" };
+    const out = await runTool(
+      "apply_ops",
+      {
+        label: "Title",
+        ops: [
+          { op: "insert", coll: "titles", item: title },
+          { op: "update", coll: "titles", id: "t1", patch: { fontSize: 90 } },
+        ],
+      },
+      c,
+    );
+    expect(out.isError).toBe(true);
+    expect(out.text).toMatch(/ops\[1\] \(update titles\): no field "fontSize"; it takes .*\bsize\b/);
+    // All or nothing: the title isn't in either.
+    expect(c.scratch.doc.titles).toEqual([]);
+    expect(c.scratch.ops).toEqual([]);
+  });
+
+  it("apply_ops says which op is wrong and where to look", async () => {
+    const { c } = ctx(talking());
+    const out = await runTool(
+      "apply_ops",
+      {
+        label: "Zoom",
+        ops: [
+          { op: "merge", key: "mix", patch: { cutFade: 0.1 } },
+          { op: "insert", coll: "zooms", item: { id: "z1", anchor: { scene: "sc1", at: 1 }, duration: 1 } },
+        ],
+      },
+      c,
+    );
+    expect(out.isError).toBe(true);
+    expect(out.text).toMatch(/^Not applied: ops\[1\] invalid zooms item/);
+    expect(out.text).toContain("scale");
+    expect(out.text).toContain("The fields tool has what each field takes.");
+    expect(c.scratch.doc.mix.cutFade).not.toBe(0.1);
+  });
+
+  it("apply_ops takes an edit as plain objects and fills in the defaults", async () => {
+    const { c } = ctx(talking());
+    const zoom = {
+      id: "z1",
+      anchor: { scene: "sc1", at: 1 },
+      duration: 1,
+      scale: 1.3,
+      focus: { x: 0.5, y: 0.4 },
+    };
+    const out = await runTool(
+      "apply_ops",
+      {
+        label: "+1 zoom",
+        ops: [
+          { op: "insert", coll: "zooms", item: zoom },
+          { op: "merge", key: "captionStyle", patch: { size: 70 } },
+          { op: "update", coll: "scenes", id: "sc1", patch: { volume: 0.8 } },
+        ],
+      },
+      c,
+    );
+    expect(out.isError).toBeFalsy();
+    expect(c.scratch.doc.zooms[0]).toMatchObject({ ...zoom, ease: "smooth" });
+    expect(c.scratch.doc.captionStyle.size).toBe(70);
+    expect(c.scratch.doc.scenes[0]!.volume).toBe(0.8);
+  });
+
+  it("fields tells the model what each field does", async () => {
+    const { c } = ctx(talking());
+    const out = await runTool("fields", { names: ["voiceovers", "music"] }, c);
+    expect(out.text).toMatch(/^voiceovers \(each item\):\n/);
+    expect(out.text).toMatch(/duck\?: number 0\.\.1 {2}\/\/ /);
+    expect(out.text).toContain("\n\nmusic:\n");
+    expect((await runTool("fields", { names: ["transcripts"] }, c)).isError).toBe(true);
   });
 
   it("look resolves output times to clip frames", async () => {

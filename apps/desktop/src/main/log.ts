@@ -86,6 +86,9 @@ export function startLog(): void {
     "FREESOUND_API_KEY",
   ])
     addSecret(process.env[key]);
+  // A terminal that's gone (the one the app was started from, closed) can't take the console's copy: a
+  // write there fails (EIO, EPIPE), and unheard it ends as an uncaught exception. The log file has it all.
+  for (const out of [process.stdout, process.stderr]) out.on("error", () => {});
   const levels = { log: "info", info: "info", warn: "warn", error: "error" } as const;
   for (const [method, level] of Object.entries(levels) as [
     keyof typeof levels,

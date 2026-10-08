@@ -200,9 +200,19 @@ describe("project fonts", () => {
 describe("graphic libraries", () => {
   it("accepts every library the runtime ships, and every starter is valid", async () => {
     const { GRAPHIC_LIBS, STARTER_GRAPHICS, isScripted, parseGraphic } = await import("./index.ts");
-    expect(Object.keys(GRAPHIC_LIBS).sort()).toEqual(["chart", "d3", "gsap", "lottie", "rough", "three"]);
+    expect(Object.keys(GRAPHIC_LIBS).sort()).toEqual([
+      "chart",
+      "d3",
+      "gsap",
+      "lottie",
+      "matter",
+      "rough",
+      "three",
+    ]);
     expect(
-      validateGraphic('<!-- graphic {"libs": ["gsap", "d3", "chart", "rough", "three", "lottie"]} -->'),
+      validateGraphic(
+        '<!-- graphic {"libs": ["gsap", "d3", "chart", "rough", "three", "lottie", "matter"]} -->',
+      ),
     ).toBeNull();
     for (const g of STARTER_GRAPHICS) expect(validateGraphic(g.html), g.id).toBeNull();
     // The new starters run in the scripted runtime: a D3 chart, and particles with no library.

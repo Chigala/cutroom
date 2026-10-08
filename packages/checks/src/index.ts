@@ -61,11 +61,12 @@ export const MAX_SHOT = 4;
 const rules: Rule[] = [
   {
     id: "hook",
-    title: "Hook shows in the first seconds",
+    title: "A hook title shows in the first seconds",
     run(doc, tl) {
+      // A hook title is optional: the opening line or picture is usually the hook. Only one that's
+      // there has to show early.
       const hook = doc.titles.find((t) => t.role === "hook");
-      if (!hook)
-        return { status: "fail", detail: "There is no hook title. Viewers decide in the first second." };
+      if (!hook) return pass;
       const start = resolveAnchor(tl, hook.anchor);
       if (start === null) return { status: "fail", detail: "The hook is pinned to a shot that was cut." };
       if (start <= R.hookWithin) return pass;

@@ -12,6 +12,18 @@ describe("checks", () => {
     expect(results["shot-length"]!.status).toBe("pass");
   });
 
+  it("ask for no hook title, only that one there shows early", () => {
+    const doc = demoProject();
+    // The opening line is the hook: no title is fine.
+    const none = applyOps(doc, [{ op: "remove", coll: "titles", id: "hook" }]).doc;
+    expect(byId(none).hook!.status).toBe("pass");
+    // A title that comes in late still gets moved to the start.
+    const late = applyOps(doc, [
+      { op: "update", coll: "titles", id: "hook", patch: { anchor: { scene: "sc5", at: 0 } } },
+    ]).doc;
+    expect(byId(late).hook!.status).toBe("warn");
+  });
+
   it("follow the project's check rules", () => {
     const doc = demoProject();
     const high = { ...doc, titles: doc.titles.map((t) => ({ ...t, position: { x: 0.1, y: 0.9 } })) };

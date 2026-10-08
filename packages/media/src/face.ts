@@ -98,3 +98,60 @@ async function openModelFace(video: string, duration: number, signal?: AbortSign
     return null;
   }
 }
+
+/** Each frame's biggest face, none where there's none: Vision on a list of stills, one answer each. */
+const VISION_EACH = `
+ObjC.import("Foundation");
+ObjC.import("Vision");
+function run(argv) {
+  const out = [];
+  for (const file of argv) {
+    const handler = $.VNImageRequestHandler.alloc.initWithURLOptions($.NSURL.fileURLWithPath(file), $());
+    const request = $.VNDetectFaceRectanglesRequest.alloc.init;
+    handler.performRequestsError($([request]), null);
+    let best = null;
+    for (let i = 0; i < request.results.count; i++) {
+      const box = request.results.objectAtIndex(i).boundingBox;
+      if (!best || box.size.width > best.size.width) best = box;
+    }
+    out.push(best ? { x: best.origin.x + best.size.width / 2, y: 1 - (best.origin.y + best.size.height / 2), size: best.size.width } : null);
+  }
+  return JSON.stringify(out);
+}
+`;
+
+/**
+ * The biggest face in a clip at each of `times` (null where there's none): how the framing changes
+ * across a cut. Vision on a Mac, the open face detector elsewhere.
+ */
+export async function facesAtTimes(
+  video: string,
+  times: readonly number[],
+  signal?: AbortSignal,
+): Promise<(Face | null)[]> {
+  if (!times.length) return [];
+  if (useOpenModels()) {
+    const { facesAt } = await import("./vision.ts");
+    return facesAt(video, times, signal);
+  }
+  if (process.platform !== "darwin") return times.map(() => null);
+  const dir = await mkdtemp(path.join(tmpdir(), "vedit-faces-"));
+  try {
+    const frames: string[] = [];
+    for (const [i, t] of times.entries()) {
+      const file = path.join(dir, `f${i}.jpg`);
+      await writeFile(file, await grabFrame(video, t, 540, signal));
+      frames.push(file);
+    }
+    const script = path.join(dir, "faces.js");
+    await writeFile(script, VISION_EACH);
+    const { stdout } = await run(
+      "/usr/bin/osascript",
+      ["-l", "JavaScript", script, ...frames],
+      signal ? { signal } : {},
+    );
+    return JSON.parse(stdout.trim()) as (Face | null)[];
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}

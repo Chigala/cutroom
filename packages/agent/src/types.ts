@@ -111,6 +111,8 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   read_style: "Reading a style",
   write_style: "Writing a style",
   look: "Rendering frames to look at",
+  watch: "Watching it play",
+  compare: "Comparing with the reference",
   track: "Tracking faces",
   find_music: "Finding music",
   find_stock: "Searching stock footage",

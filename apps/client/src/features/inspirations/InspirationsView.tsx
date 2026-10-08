@@ -31,7 +31,7 @@ import { Brief } from "./Brief.tsx";
 import { localPack, stylePreviewDoc } from "./preview.ts";
 
 const LEARN_PROMPT =
-  "Learn the editing style of the attached video and save it as one of my inspirations. Study it closely: inspiration measure, then look at every moment it lists, and at the captions, graphics, transitions and colour. Write a brief as specific as the built-in ones, with its settings, and a caption look of its own when the captions are distinctive. Don't change this video's edit.";
+  "Learn the editing style of the attached video and save it as one of my inspirations. Study it the way an editor would before copying it: inspiration measure, watch it play (the stretches it lists densely, then the whole of it), write a brief as specific as the built-in ones with its settings, a caption look of its own when the captions are distinctive, and its font if it isn't here; then compare your version with it side by side and fix what differs. Don't change this video's edit.";
 
 export function InspirationsView() {
   const [list, setList] = useState<InspirationInfo[] | null>(null);

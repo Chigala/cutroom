@@ -61,7 +61,8 @@ describe("agent tools", () => {
     }
     // Sent with every request, so it's held down: apply_ops lists the fields by name, and the fields tool
     // has the rest when it's needed.
-    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(50_000);
+    // 50,000 until run_script, watch and compare (about 2.8k between them); trim before raising it again.
+    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(52_000);
   });
 
   it("looks at a graphic on its own without touching the timeline", async () => {

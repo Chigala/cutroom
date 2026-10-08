@@ -1,5 +1,5 @@
 /** Running ffmpeg and friends: binary discovery, cancellation, and progress from ffmpeg's stderr. */
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { access } from "node:fs/promises";
 import path from "node:path";
@@ -78,6 +78,30 @@ export interface RunOptions {
   readonly binary?: boolean;
 }
 
+/**
+ * Stops a process and everything it started. On Windows a tool is often a launcher for the real one
+ * (Chocolatey's and Scoop's shims): killing the launcher leaves the real one running, its files still
+ * open, and Windows won't remove a file a process has open. Resolves once it's done.
+ */
+export function killTree(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return Promise.resolve();
+  if (process.platform !== "win32") {
+    child.kill("SIGKILL");
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const k = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    k.on("error", () => {
+      child.kill("SIGKILL");
+      resolve();
+    });
+    k.on("exit", () => resolve());
+  });
+}
+
 export async function run(
   tool: string,
   args: readonly string[],
@@ -89,7 +113,7 @@ export async function run(
     const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
     const out: Buffer[] = [];
     let stderr = "";
-    const abort = () => child.kill("SIGKILL");
+    const abort = () => void killTree(child);
     signal?.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (d: Buffer) => out.push(d));
     child.stderr.on("data", (d: Buffer) => {

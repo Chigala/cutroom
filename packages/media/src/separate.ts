@@ -11,7 +11,7 @@ import { once } from "node:events";
 import { mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Writable } from "node:stream";
-import { CancelledError, findBinary } from "./exec.ts";
+import { CancelledError, findBinary, killTree } from "./exec.ts";
 import { ensureModel, ONNX_PLATFORMS } from "./models.ts";
 import { startVoiceWorker } from "./voice-worker.ts";
 
@@ -96,7 +96,7 @@ async function wavWriter(file: string) {
       if (code !== 0)
         throw new Error(`ffmpeg couldn't write ${path.basename(file)}: ${err.trim().slice(-300)}`);
     },
-    kill: () => child.kill("SIGKILL"),
+    kill: () => killTree(child),
   };
 }
 
@@ -123,11 +123,12 @@ export async function separateVoice(
   const decoded = once(decoder, "exit");
   const voiceOut = await wavWriter(part(out.voice));
   const musicOut = await wavWriter(part(out.music));
+  // Everything it started, launchers' children included (killTree), all gone when this resolves.
+  let stopping: Promise<unknown> | null = null;
   const stop = () => {
-    decoder.kill("SIGKILL");
-    voiceOut.kill();
-    musicOut.kill();
     if (!o.model) model.close?.();
+    stopping ??= Promise.all([killTree(decoder), voiceOut.kill(), musicOut.kill()]);
+    return stopping;
   };
   o.signal?.addEventListener("abort", stop, { once: true });
 
@@ -220,13 +221,14 @@ export async function separateVoice(
     await rename(part(out.music), out.music);
     o.onProgress?.(1);
   } catch (err) {
-    stop();
-    // Windows won't remove a file a process still has open: the killed ones go first (or 5 s pass).
+    // Windows won't remove a file a process still has open: the killed ones go first (or 5 s pass),
+    // and the removal tries again while Windows lets go of the files.
     await Promise.race([
-      Promise.allSettled([decoded, voiceOut.exited, musicOut.exited]),
+      stop().then(() => Promise.allSettled([decoded, voiceOut.exited, musicOut.exited])),
       new Promise((r) => setTimeout(r, 5000)),
     ]);
-    await Promise.all([rm(part(out.voice), { force: true }), rm(part(out.music), { force: true })]);
+    const gone = { force: true, maxRetries: 10, retryDelay: 100 };
+    await Promise.all([rm(part(out.voice), gone), rm(part(out.music), gone)]);
     throw o.signal?.aborted ? new CancelledError() : err;
   } finally {
     o.signal?.removeEventListener("abort", stop);

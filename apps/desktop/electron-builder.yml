@@ -21,6 +21,13 @@ asarUnpack:
   - "**/onnxruntime-node/bin/**"
 # Nothing to rebuild: the app has no native Node modules of its own.
 npmRebuild: false
+# Where updates come from (src/main/updater.ts) and where the release workflow puts each version: the app
+# reads latest*.yml from the newest release here. The repository must be public for installed copies to
+# see it; to keep the code private, point this at a public releases-only repository.
+publish:
+  provider: github
+  owner: Chigala
+  repo: cutroom
 mac:
   # The app icon (build/icon.svg is the source; icon.icns is drawn on Apple's grid from icon-mac.svg).
   icon: build/icon.icns
@@ -40,8 +47,17 @@ mac:
       to: native/remotion-compositor
     - from: .tmp/runtime/node_modules/@anthropic-ai/claude-agent-sdk-darwin-${arch}
       to: native/claude-agent-sdk
-  target: [dmg]
+  # The .dmg is what people download; the .zip is what an installed copy updates itself from.
+  target: [dmg, zip]
+  # The architecture in every name: an Intel and an Apple silicon build go into the same release.
+  artifactName: ${productName}-${version}-${arch}.${ext}
   hardenedRuntime: true
+  # What the signed app may do under the hardened runtime: the V8 and Claude Code JITs, and loading the
+  # bundled tools' and ONNX Runtime's libraries. Only used once there's a Developer ID (release workflow).
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Notarized when the release workflow has an App Store Connect API key (APPLE_API_KEY and friends).
+  notarize: false
 win:
   icon: build/icon.png
   # ffmpeg, ffprobe, whisper and the voice cleaner (made by `pnpm tools` on Windows), the compositor and
@@ -57,7 +73,11 @@ win:
     - from: .tmp/runtime/node_modules/@anthropic-ai/claude-agent-sdk-win32-${arch}
       to: native/claude-agent-sdk
   target: [nsis]
+  # Signed with Azure Trusted Signing once the build workflow has it set up (it adds azureSignOptions);
+  # unsigned, Windows SmartScreen warns on first launch.
 nsis:
+  # No spaces: latest.yml names the installer with dashes, and the release must carry that exact name.
+  artifactName: ${productName}-Setup-${version}.${ext}
   # A normal installer: the user picks where it goes, and it installs for them alone (no admin prompt).
   oneClick: false
   allowToChangeInstallationDirectory: true

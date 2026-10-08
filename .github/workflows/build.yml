@@ -1,6 +1,14 @@
 # Installers for macOS (Apple silicon and Intel), Windows (x64) and Linux (x64), each with its own bundled
-# tools. The Intel Mac one is built on the Apple silicon runner for x64 and self-tested under Rosetta. Run it by hand (Actions → Build installers → Run workflow) or by pushing a tag
-# like v0.2.0. The installers are unsigned for now: they appear as downloadable artifacts of the run.
+# tools. The Intel Mac one is built on the Apple silicon runner for x64 and self-tested under Rosetta. Run it
+# by hand (Actions → Build installers → Run workflow) to get the installers as the run's artifacts, or push
+# a tag like v0.2.0 (the version in apps/desktop/package.json) to also make a draft GitHub release from them,
+# with the files installed copies update from (latest*.yml). Publishing the draft is what releases it.
+#
+# Signing switches on by itself once its secrets exist; until then the builds are unsigned.
+#   macOS (Developer ID, notarized): secrets CSC_LINK (the .p12, base64), CSC_KEY_PASSWORD, and an App Store
+#     Connect API key: APPLE_API_KEY (the .p8's text), APPLE_API_KEY_ID, APPLE_API_ISSUER.
+#   Windows (Azure Trusted Signing): secrets AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and
+#     variables AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT, AZURE_CERT_PROFILE, AZURE_PUBLISHER_NAME.
 name: Build installers
 
 on:
@@ -19,20 +27,34 @@ jobs:
             # Xcode 16: the newest Vision requests (the tools still run on macOS 13.3+, see bundle-tools.mts).
             os: macos-15
             arch: arm64
-            # Unsigned, but consistently ad-hoc signed so Gatekeeper's "Open Anyway" works.
-            args: --mac --arm64 -c.mac.identity=- -c.mac.hardenedRuntime=false
-            files: apps/desktop/release/*.dmg
+            args: --mac --arm64
+            # The .zip and its .blockmap are what installed copies update from; latest-mac.yml names them.
+            files: |
+              apps/desktop/release/*.dmg
+              apps/desktop/release/*.zip
+              apps/desktop/release/*.blockmap
+              apps/desktop/release/*.yml
+              !apps/desktop/release/builder-debug.yml
           - name: macOS (Intel)
             # Built for x64 on the same runner (the tools cross-compile), and self-tested under Rosetta.
             os: macos-15
             arch: x64
-            args: --mac --x64 -c.mac.identity=- -c.mac.hardenedRuntime=false
-            files: apps/desktop/release/*.dmg
+            args: --mac --x64
+            files: |
+              apps/desktop/release/*.dmg
+              apps/desktop/release/*.zip
+              apps/desktop/release/*.blockmap
+              apps/desktop/release/*.yml
+              !apps/desktop/release/builder-debug.yml
           - name: Windows (x64)
             os: windows-2022
             arch: x64
             args: --win --x64
-            files: apps/desktop/release/*.exe
+            files: |
+              apps/desktop/release/*.exe
+              apps/desktop/release/*.blockmap
+              apps/desktop/release/*.yml
+              !apps/desktop/release/builder-debug.yml
           - name: Linux (x64)
             # The oldest supported Ubuntu: what's built here runs on newer systems, not the other way round.
             os: ubuntu-22.04
@@ -41,10 +63,9 @@ jobs:
             files: |
               apps/desktop/release/*.AppImage
               apps/desktop/release/*.deb
+              apps/desktop/release/*.yml
+              !apps/desktop/release/builder-debug.yml
     runs-on: ${{ matrix.os }}
-    env:
-      # No signing certificates yet: don't go looking for them.
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -72,7 +93,51 @@ jobs:
         run: pnpm --filter @vedit/desktop runtime-deps --arch ${{ matrix.arch }}
       - name: Package
         working-directory: apps/desktop
-        run: pnpm exec electron-builder --config electron-builder.yml --publish never ${{ matrix.args }}
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_TEXT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_CERT_PROFILE: ${{ vars.AZURE_CERT_PROFILE }}
+          AZURE_PUBLISHER_NAME: ${{ vars.AZURE_PUBLISHER_NAME }}
+        run: |
+          sign=()
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            if [ -n "$CSC_LINK" ]; then
+              echo "Signing with the Developer ID certificate"
+              if [ -n "$APPLE_API_KEY_TEXT" ]; then
+                # electron-builder wants the key as a file.
+                export APPLE_API_KEY="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+                printf '%s' "$APPLE_API_KEY_TEXT" > "$APPLE_API_KEY"
+                sign+=(-c.mac.notarize=true)
+                echo "Notarizing with the App Store Connect API key"
+              fi
+            else
+              # Unsigned, but consistently ad-hoc signed so Gatekeeper's "Open Anyway" works.
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              unset CSC_LINK CSC_KEY_PASSWORD
+              sign+=(-c.mac.identity=- -c.mac.hardenedRuntime=false)
+            fi
+          elif [ "$RUNNER_OS" = "Windows" ] && [ -n "$AZURE_SIGNING_ACCOUNT" ]; then
+            echo "Signing with Azure Trusted Signing"
+            sign+=(
+              "-c.win.azureSignOptions.endpoint=$AZURE_SIGNING_ENDPOINT"
+              "-c.win.azureSignOptions.codeSigningAccountName=$AZURE_SIGNING_ACCOUNT"
+              "-c.win.azureSignOptions.certificateProfileName=$AZURE_CERT_PROFILE"
+              "-c.win.azureSignOptions.publisherName=$AZURE_PUBLISHER_NAME"
+            )
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            unset CSC_LINK CSC_KEY_PASSWORD
+          fi
+          pnpm exec electron-builder --config electron-builder.yml --publish never ${{ matrix.args }} "${sign[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -107,4 +172,50 @@ jobs:
             node apps/desktop/scripts/smoke-run.mjs --arch x64 || node apps/desktop/scripts/smoke-run.mjs --arch x64
           else
             node apps/desktop/scripts/smoke-run.mjs --arch ${{ matrix.arch }}
+          fi
+
+  # A tag (v0.2.0) makes a draft release of what every runner built, once all of them built and passed
+  # their self-test. It goes to the repository electron-builder.yml publishes to (installed copies look
+  # there), as a draft: nothing reaches anyone until it's published by hand.
+  release:
+    name: Draft the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the tag is the app's version
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "The tag is $GITHUB_REF_NAME but apps/desktop/package.json says $version" >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Gather the files (one update manifest for both Macs)
+        run: node --experimental-strip-types apps/desktop/scripts/release-files.mts artifacts release
+      - name: Make or update the draft
+        env:
+          # Another repository (a public one for releases) needs a token that can write to it.
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+        run: |
+          owner=$(sed -n 's/^  owner: //p' apps/desktop/electron-builder.yml)
+          repo="$owner/$(sed -n 's/^  repo: //p' apps/desktop/electron-builder.yml)"
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" --repo "$repo" > /dev/null 2>&1; then
+            gh release upload "$tag" release/* --repo "$repo" --clobber
+          else
+            flags=(--draft --title "Cutroom ${tag#v}")
+            # v0.3.0-beta.1 and the like are pre-releases: only the Beta channel takes them.
+            [[ "$tag" == *-* ]] && flags+=(--prerelease)
+            # Notes from the pull requests since the last release, when it's this repository's.
+            [ "$repo" = "$GITHUB_REPOSITORY" ] && flags+=(--generate-notes)
+            gh release create "$tag" release/* --repo "$repo" "${flags[@]}"
           fi

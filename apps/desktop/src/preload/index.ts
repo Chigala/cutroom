@@ -82,6 +82,12 @@ const api: EditorApi = {
     diagnostics: () => invoke(Channel.diagnostics),
     openLogs: () => invoke(Channel.openLogs),
   },
+  updates: {
+    state: () => invoke(Channel.updateState),
+    check: () => invoke(Channel.updateCheck),
+    download: () => invoke(Channel.updateDownload),
+    install: () => invoke(Channel.updateInstall),
+  },
   claude: {
     status: (refresh) => invoke(Channel.claudeStatus, refresh),
     install: () => invoke(Channel.claudeInstall),

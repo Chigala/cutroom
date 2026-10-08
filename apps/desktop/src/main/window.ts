@@ -77,10 +77,12 @@ export function rememberPlace(win: BrowserWindow): void {
 
 /**
  * The app menu: the standard ones (Edit's copy and paste, View's zoom, Window), plus the editor's own
- * Settings…, Open Project… and, under Help, the logs. `send` asks the editor's window to act.
+ * Settings…, Open Project…, Check for Updates… and, under Help, the logs. `send` asks the editor's window
+ * to act.
  */
-export function setAppMenu(send: (action: MenuAction) => void, dev: boolean): void {
+export function setAppMenu(send: (action: MenuAction) => void, dev: boolean, checkUpdates: () => void): void {
   const mac = process.platform === "darwin";
+  const updates: MenuItemConstructorOptions = { label: "Check for Updates…", click: checkUpdates };
   const settings: MenuItemConstructorOptions = {
     label: "Settings…",
     accelerator: "CmdOrCtrl+,",
@@ -93,6 +95,7 @@ export function setAppMenu(send: (action: MenuAction) => void, dev: boolean): vo
             label: app.name,
             submenu: [
               { role: "about" },
+              updates,
               { type: "separator" },
               settings,
               { type: "separator" },
@@ -143,6 +146,7 @@ export function setAppMenu(send: (action: MenuAction) => void, dev: boolean): vo
       submenu: [
         { label: "Diagnostics…", click: () => send("diagnostics") },
         { label: "Open Logs Folder", click: () => void shell.openPath(logsDir()) },
+        ...(mac ? [] : [{ type: "separator" } as const, updates]),
       ],
     },
   ];

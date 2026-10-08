@@ -116,6 +116,7 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   find_stock: "Searching stock footage",
   listen: "Listening",
   fit_music: "Fitting the music",
+  run_script: "Working it out",
   cutout: "Cutting out the person",
   add_stock: "Downloading stock footage",
   capture_page: "Capturing the page",

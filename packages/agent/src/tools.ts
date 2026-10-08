@@ -22,6 +22,7 @@ import {
   applyOps,
   assetLine,
   BUNDLED_FONTS,
+  beatLength,
   bestStretch,
   type ChangeGroup,
   cleanCutOps,
@@ -42,6 +43,7 @@ import {
   looseOpSchemaFor,
   type MotionTrack,
   measureReference,
+  musicBeats,
   type Op,
   OpError,
   ProcessRecipe,
@@ -73,6 +75,7 @@ import {
 } from "@vedit/project";
 import { z } from "zod";
 import { compactFields, EDITABLE, fieldsOf, unknownFields } from "./fields.ts";
+import { runScript } from "./script.ts";
 import { toolActivity } from "./types.ts";
 import { checkStep, checksView, projectView, searchFootage, shotsView, transcriptView } from "./view.ts";
 
@@ -518,6 +521,43 @@ export async function refitMusic(ctx: ToolContext): Promise<void> {
   if (fit && "ops" in fit) commit(ctx, "Fitted the music to the final length", fit.ops);
 }
 
+/** apply_ops's checks and commit, shared with run_script: the ops as one change the user can undo. */
+function applyAgentOps(ctx: ToolContext, label: string, ops: Op[]): ToolResult {
+  const derived = ops.find((o) => "coll" in o && DERIVED.includes(o.coll));
+  if (derived)
+    return {
+      text: "Transcripts and analysis are written by indexing; use edit_words for captions.",
+      isError: true,
+    };
+  const unknown = unknownIn(ops);
+  if (unknown.length)
+    return {
+      text: `Not applied: ${unknown.slice(0, 8).join("\n")}${unknown.length > 8 ? `\n(and ${unknown.length - 8} more)` : ""}`,
+      isError: true,
+    };
+  const stuck = overRevised(ctx, ops);
+  if (stuck.length)
+    return {
+      stuck: true,
+      text: `Not applied: you've changed ${stuck.map(itemName).join(", ")} ${MAX_REVISIONS} times after looking at it this request, and it still isn't right. Stop changing it (undo can still take back your changes): ${STOP_AND_ASK}`,
+      isError: true,
+    };
+  const result = commit(ctx, label, ops);
+  if (result.isError)
+    return /invalid \w+/.test(result.text)
+      ? { ...result, text: `${result.text}\nThe fields tool has what each field takes.` }
+      : result;
+  const last = countRevisions(ctx, ops);
+  return {
+    ...(last.length > 0 && { stuck: true }),
+    text:
+      `Applied. Project now:\n${projectView(ctx.scratch.doc)}` +
+      (last.length
+        ? `\n\nThat's the third change to ${last.map(itemName).join(", ")} after looking at it. Check it once more; if it still isn't right, ${STOP_AND_ASK}`
+        : ""),
+  };
+}
+
 const Label = z
   .string()
   .min(1)
@@ -725,39 +765,69 @@ Fields (? optional; a bare name is a string; the fields tool has what each does 
 ${compactFields()}`,
     input: z.object({ label: Label, ops: z.array(AGENT_OPS).min(1).max(400) }),
     async run({ label, ops }, ctx) {
-      const derived = ops.find((o) => "coll" in o && DERIVED.includes(o.coll));
-      if (derived)
+      return applyAgentOps(ctx, label, ops);
+    },
+  }),
+  tool({
+    name: "run_script",
+    description: `Work something out over the project with JavaScript, instead of doing the arithmetic yourself: shot lengths that land cuts on the beat, spacing visuals evenly, finding every place a word is said, the same change to many items. The code is a function body: return the answer (any JSON), and console.log what helps. Return { ops: [...] } with a label to apply them as one change, exactly as apply_ops would (same ops, same checks, undoable).
+It sees, read-only:
+- project: the project (scenes, visuals, titles, zooms, sfx, music, sources... everything but transcripts and analysis)
+- timeline: { duration, scenes: [{ id, source, in, out, speed, start, duration, index }] } (start and duration in output seconds)
+- beats: the music's beats in output seconds ([] without music); bpm (null without one)
+- transcript(clipId): its words [{ text, start, end, ... }] in the clip's own time; analysis(clipId): { beats, bpm, shots, silences, speech, face, ... }; shotLog(clipId): { segments, loud }
+A sandbox: plain JavaScript, no files, network, timers or modules, stopped after 5 seconds or 64 MB. It reads; only returned ops change the project.`,
+    input: z.object({
+      code: z.string().min(1).max(20_000).describe("A function body that returns the answer"),
+      label: Label.optional().describe("Needed when it returns ops: the change's label"),
+    }),
+    async run({ code, label }, ctx) {
+      const doc = ctx.scratch.doc;
+      const tl = timelineOf(doc);
+      const project = Object.fromEntries(Object.entries(doc).filter(([k]) => !DERIVED.includes(k as never)));
+      const run = await runScript(
+        code,
+        {
+          project,
+          timeline: {
+            duration: tl.duration,
+            scenes: tl.scenes.map(({ scene, start, duration, index }) => ({
+              id: scene.id,
+              source: scene.source,
+              in: scene.in,
+              out: scene.out,
+              speed: scene.speed ?? 1,
+              start,
+              duration,
+              index,
+            })),
+          },
+          beats: musicBeats(doc, tl.duration),
+          bpm: beatLength(doc) ? 60 / beatLength(doc)! : null,
+        },
+        {
+          transcript: (id) => doc.transcripts.find((t) => t.id === id)?.words ?? null,
+          analysis: (id) => doc.analyses.find((a) => a.id === id) ?? null,
+          shotLog: (id) => doc.shotLogs.find((l) => l.id === id) ?? null,
+        },
+      );
+      const log = run.logs.length ? `\nLogged:\n${clip(run.logs.join("\n"))}` : "";
+      if (run.error) return { text: `The script failed: ${run.error}${log}`, isError: true };
+      const value: unknown = run.json === undefined ? undefined : JSON.parse(run.json);
+      const ops =
+        value && typeof value === "object" && "ops" in value ? (value as { ops: unknown }).ops : undefined;
+      if (ops === undefined)
+        return { text: `${run.json === undefined ? "It returned nothing." : clip(run.json, 20_000)}${log}` };
+      const parsed = z.array(AGENT_OPS).min(1).max(400).safeParse(ops);
+      if (!parsed.success)
         return {
-          text: "Transcripts and analysis are written by indexing; use edit_words for captions.",
+          text: `Not applied: the ops it returned aren't valid: ${z.prettifyError(parsed.error).slice(0, 1500)}${log}`,
           isError: true,
         };
-      const unknown = unknownIn(ops);
-      if (unknown.length)
-        return {
-          text: `Not applied: ${unknown.slice(0, 8).join("\n")}${unknown.length > 8 ? `\n(and ${unknown.length - 8} more)` : ""}`,
-          isError: true,
-        };
-      const stuck = overRevised(ctx, ops);
-      if (stuck.length)
-        return {
-          stuck: true,
-          text: `Not applied: you've changed ${stuck.map(itemName).join(", ")} ${MAX_REVISIONS} times after looking at it this request, and it still isn't right. Stop changing it (undo can still take back your changes): ${STOP_AND_ASK}`,
-          isError: true,
-        };
-      const result = commit(ctx, label, ops);
-      if (result.isError)
-        return /invalid \w+/.test(result.text)
-          ? { ...result, text: `${result.text}\nThe fields tool has what each field takes.` }
-          : result;
-      const last = countRevisions(ctx, ops);
-      return {
-        ...(last.length > 0 && { stuck: true }),
-        text:
-          `Applied. Project now:\n${projectView(ctx.scratch.doc)}` +
-          (last.length
-            ? `\n\nThat's the third change to ${last.map(itemName).join(", ")} after looking at it. Check it once more; if it still isn't right, ${STOP_AND_ASK}`
-            : ""),
-      };
+      if (!label)
+        return { text: `Not applied: give a label to apply the ops it returns.${log}`, isError: true };
+      const applied = applyAgentOps(ctx, label, parsed.data as Op[]);
+      return { ...applied, text: `${applied.text}${log}` };
     },
   }),
   tool({
@@ -792,7 +862,7 @@ ${compactFields()}`,
   tool({
     name: "write_graphic",
     description:
-      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (canvas; "libs" in the header for GSAP and its plugins, D3 or Chart.js charts, Rough.js sketches, three.js or Lottie; graphic.particles for confetti, sparks, snow, embers, bokeh); no network. See the system prompt for the format. Then check it with look {graphic, params, times}: 5-6 times across it (just in, entrance, middle, just before the exit), which shows it alone over a shot without touching the timeline. Once placed, look at output times to check it in context.',
+      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (canvas; "libs" in the header for GSAP and its plugins, D3 or Chart.js charts, Rough.js sketches, three.js, Matter.js physics (graphic.physics) or Lottie; graphic.particles for confetti, sparks, snow, embers, bokeh); no network. See the system prompt for the format. Then check it with look {graphic, params, times}: 5-6 times across it (just in, entrance, middle, just before the exit), which shows it alone over a shot without touching the timeline. Once placed, look at output times to check it in context.',
     input: z.object({
       label: Label,
       id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, "lower-case letters, digits and dashes"),

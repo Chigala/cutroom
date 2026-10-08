@@ -34,6 +34,8 @@ export interface CaptionReport {
   readonly height: number;
   /** When a page comes up against its first word being said (s): negative is ahead of the voice. */
   readonly lead: number | null;
+  /** When each page comes up (s). */
+  readonly starts: readonly number[];
 }
 
 /** Whether `pattern` is in `text` give or take `errors` letters (a misread "v" for "w"): Sellers' search. */
@@ -57,6 +59,223 @@ export interface ScreenText {
   readonly start: number;
   readonly end: number;
   readonly where: "top" | "middle" | "bottom";
+}
+
+/**
+ * What studying the video found (@vedit/media's studyMotion and studyRhythm): how the frame moves in each
+ * shot, what each cut is, and the sound's beats and hits. Plain data, so it can come from anywhere.
+ */
+export interface ReferenceStudy {
+  readonly motion: null | {
+    readonly shots: readonly {
+      readonly from: number;
+      readonly to: number;
+      readonly punches: readonly { readonly at: number; readonly size: number }[];
+      readonly drift: number;
+      readonly pan: { readonly x: number; readonly y: number };
+      readonly shake: number;
+    }[];
+    readonly transitions: readonly { readonly at: number; readonly kind: string }[];
+    readonly jumps: readonly { readonly at: number; readonly size: number }[];
+  };
+  readonly rhythm: null | {
+    readonly bpm: number | null;
+    readonly pulse: number;
+    readonly beats: readonly number[];
+    readonly hits: readonly { readonly at: number; readonly strength: number }[];
+    readonly voiceless: boolean;
+    /** Every 50 ms. */
+    readonly loudness: readonly number[];
+    readonly effects: readonly { readonly at: number; readonly kind: string; readonly confidence: number }[];
+  };
+}
+
+/** How the frame moves, and the cuts. */
+export interface MotionReport {
+  readonly punches: number;
+  readonly per10s: number;
+  /** A typical punch, as a share of the frame (0.08 is 8%). */
+  readonly size: number;
+  readonly punchesIn: number;
+  /** Share of shots with at least one punch. */
+  readonly shotsPunched: number;
+  /** Slow pushes in or out over a shot (5% or more). */
+  readonly pushes: number;
+  readonly pushSize: number;
+  readonly pans: number;
+  /** Shares of the shots locked off (barely moving) and handheld. */
+  readonly locked: number;
+  readonly handheld: number;
+  readonly transitions: Readonly<Record<string, number>>;
+  /** Cuts within a take that change the framing: how many, a typical one, how many tighter. */
+  readonly jumps: number;
+  readonly jumpSize: number;
+  readonly jumpsIn: number;
+  /** The share of cuts that are jump zooms. */
+  readonly jumpShare: number;
+}
+
+/** What lands on the beat and on hits: a share, and what chance alone would give. */
+export interface Landing {
+  readonly count: number;
+  readonly onBeat: number;
+  readonly onHit: number;
+  /** Null where the voice couldn't be taken out: someone starting to talk reads as a rise too. */
+  readonly rise: number | null;
+}
+
+/** One kind of effect: how many, and what they land on. */
+export interface EffectUse {
+  readonly kind: string;
+  readonly count: number;
+  /** Leading into or landing on a cut. */
+  readonly onCuts: number;
+  /** On a punch-in or a jump zoom. */
+  readonly onZooms: number;
+  /** As text comes up (captions, kinetic words, titles). */
+  readonly onText: number;
+}
+
+export interface RhythmReport {
+  readonly bpm: number | null;
+  readonly pulse: number;
+  /** The share of moments that land within 70 ms of a beat (or a hit) by chance alone. */
+  readonly chance: { readonly beat: number; readonly hit: number };
+  readonly cuts: Landing;
+  readonly punches: Landing;
+  /** Strong hits off the beat, per 10 s (effects, accents). */
+  readonly offBeatHits: number;
+  readonly voiceless: boolean;
+  /** Effects heard, the most used first (none when the voice couldn't be taken out to hear them). */
+  readonly effects: readonly EffectUse[];
+  /** The share of the video near a cut, a zoom or text coming up: what an effect lands on by chance. */
+  readonly effectChance: { readonly cuts: number; readonly zooms: number; readonly text: number };
+}
+
+/** Near enough to land on something: two frames at 30 fps. */
+const ON = 0.07;
+/** A hit worth the name: an onset this many standard deviations above its surroundings. */
+const STRONG = 4;
+
+const TRANSITION_ONE: Record<string, string> = {
+  cut: "hard cut",
+  dissolve: "dissolve",
+  flash: "flash",
+  dip: "dip to black",
+  whip: "whip",
+};
+const TRANSITION_MANY: Record<string, string> = {
+  cut: "hard cuts",
+  dissolve: "dissolves",
+  flash: "flashes",
+  dip: "dips to black",
+  whip: "whips",
+};
+
+/** The frame's movement over the shots, and the kinds of cut. */
+export function motionReport(m: NonNullable<ReferenceStudy["motion"]>, duration: number): MotionReport {
+  const punches = m.shots.flatMap((s) => s.punches);
+  const long = m.shots.filter((s) => s.to - s.from >= 1);
+  const pushes = long.filter((s) => Math.abs(s.drift) >= 0.05);
+  const transitions: Record<string, number> = {};
+  for (const t of m.transitions) transitions[t.kind] = (transitions[t.kind] ?? 0) + 1;
+  return {
+    punches: punches.length,
+    per10s: duration > 0 ? round((punches.length / duration) * 10, 1) : 0,
+    size: round(median(punches.map((p) => Math.abs(p.size)))),
+    punchesIn: punches.filter((p) => p.size > 0).length,
+    shotsPunched: share(m.shots.filter((s) => s.punches.length).length, m.shots.length),
+    pushes: pushes.length,
+    pushSize: round(median(pushes.map((s) => Math.abs(s.drift)))),
+    pans: long.filter((s) => Math.hypot(s.pan.x, s.pan.y) >= 0.08).length,
+    locked: share(m.shots.filter((s) => s.shake < 0.0015).length, m.shots.length),
+    handheld: share(m.shots.filter((s) => s.shake >= 0.005).length, m.shots.length),
+    transitions,
+    jumps: (m.jumps ?? []).length,
+    jumpSize: round(median((m.jumps ?? []).map((j) => Math.abs(j.size)))),
+    jumpsIn: (m.jumps ?? []).filter((j) => j.size > 0).length,
+    jumpShare: share((m.jumps ?? []).length, m.transitions.length),
+  };
+}
+
+/** What lands on the beat and on hits: the cuts and the punch-ins. */
+export function rhythmReport(
+  r: NonNullable<ReferenceStudy["rhythm"]>,
+  cuts: readonly number[],
+  punches: readonly number[],
+  duration: number,
+  /** Zooms (punch-ins and jump zooms) and when text comes up, with how precisely that's known (s). */
+  more: {
+    readonly zooms?: readonly number[];
+    readonly text?: readonly number[];
+    readonly textNear?: number;
+  } = {},
+): RhythmReport {
+  const beats = r.pulse >= 2 ? r.beats : [];
+  const strong = r.hits.filter((h) => h.strength >= STRONG).map((h) => h.at);
+  const near = (t: number, xs: readonly number[]) => xs.some((x) => Math.abs(x - t) <= ON);
+  // A rise into a moment: the half second before it much louder than the half second before that.
+  const loud = (a: number, b: number) => {
+    const xs = r.loudness.slice(Math.max(0, Math.floor(a / 0.05)), Math.max(0, Math.ceil(b / 0.05)));
+    return xs.length ? xs.reduce((n, v) => n + v, 0) / xs.length : 0;
+  };
+  const rises = (t: number) =>
+    t > 1 && loud(t - 0.45, t - 0.05) > 1.8 * Math.max(1e-4, loud(t - 1, t - 0.55));
+  const landing = (ts: readonly number[]): Landing => ({
+    count: ts.length,
+    onBeat: share(ts.filter((t) => near(t, beats)).length, ts.length),
+    onHit: share(ts.filter((t) => near(t, strong)).length, ts.length),
+    rise: r.voiceless ? share(ts.filter(rises).length, ts.length) : null,
+  });
+  // A whoosh is spread over its build: near a cut is within a third of a second either side.
+  const close = (t: number, xs: readonly number[], by: number) => xs.some((x) => Math.abs(x - t) <= by);
+  const kinds = new Map<string, number[]>();
+  for (const e of r.effects ?? []) kinds.set(e.kind, [...(kinds.get(e.kind) ?? []), e.at]);
+  const effects = [...kinds.entries()]
+    .map(([kind, ats]): EffectUse => {
+      const by = kind === "whoosh" ? 0.33 : 0.12;
+      return {
+        kind,
+        count: ats.length,
+        onCuts: ats.filter((t) => close(t, cuts, by)).length,
+        onZooms: ats.filter((t) => close(t, more.zooms ?? punches, by)).length,
+        onText: ats.filter((t) => close(t, more.text ?? [], Math.max(by, more.textNear ?? 0.5))).length,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+  // How much of the video is near each kind of moment (the windows' union): where an effect would be
+  // anyway. Text comes up so often in some videos that "as text comes up" alone means nothing.
+  const covered = (xs: readonly number[], by: number) => {
+    const spans = [...xs].sort((a, b) => a - b).map((x) => [Math.max(0, x - by), Math.min(duration, x + by)]);
+    let total = 0;
+    let end = 0;
+    for (const [a, b] of spans) {
+      const from = Math.max(a!, end);
+      if (b! > from) total += b! - from;
+      end = Math.max(end, b!);
+    }
+    return duration > 0 ? round(Math.min(1, total / duration)) : 0;
+  };
+  const textBy = Math.max(0.12, more.textNear ?? 0.5);
+  const period = beats.length > 1 ? (beats.at(-1)! - beats[0]!) / (beats.length - 1) : 0;
+  return {
+    bpm: r.bpm ? round(r.bpm, 1) : null,
+    pulse: round(r.pulse, 1),
+    chance: {
+      beat: period > 0 ? round(Math.min(1, (2 * ON) / period)) : 0,
+      hit: duration > 0 ? round(Math.min(1, (strong.length * 2 * ON) / duration)) : 0,
+    },
+    cuts: landing(cuts),
+    punches: landing(punches),
+    offBeatHits: duration > 0 ? round((strong.filter((t) => !near(t, beats)).length / duration) * 10, 1) : 0,
+    voiceless: r.voiceless,
+    effects,
+    effectChance: {
+      cuts: covered(cuts, 0.12),
+      zooms: covered(more.zooms ?? punches, 0.12),
+      text: covered(more.text ?? [], textBy),
+    },
+  };
 }
 
 /** A stretch to watch play, and why. */
@@ -118,6 +337,9 @@ export interface ReferenceReport {
   readonly textRate: number;
   /** Stretches worth watching play for what numbers can't show: motion, graphics, transitions, colour. */
   readonly watch: readonly WatchStretch[];
+  /** From studying it (when it was): the frame's movement and the cuts, and the rhythm. */
+  readonly motion: MotionReport | null;
+  readonly rhythm: RhythmReport | null;
 }
 
 const norm = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -239,6 +461,7 @@ function trackOf(
     yRange: [round(at(0.1)), round(at(0.9))],
     height: round(median(lines.map((l) => l.t.h)), 3),
     lead: leads.length ? round(median(leads)) : null,
+    starts: pages.map((p) => round(p[0]!.t.start)),
   };
 }
 
@@ -267,6 +490,8 @@ export function measureReference(
   sourceId: string,
   /** Words on screen read again, densely (`rate` a second), instead of indexing's once a second. */
   read?: { readonly text: readonly SeenText[]; readonly rate: number },
+  /** Its motion and rhythm, studied. */
+  study?: ReferenceStudy,
 ): ReferenceReport | null {
   const source = doc.sources.find((s) => s.id === sourceId);
   if (source?.kind !== "video") return null;
@@ -430,6 +655,24 @@ export function measureReference(
     onScreen,
     textRate: read?.rate ?? 1,
     watch,
+    motion: study?.motion ? motionReport(study.motion, duration) : null,
+    rhythm: study?.rhythm
+      ? rhythmReport(
+          study.rhythm,
+          cuts,
+          study.motion?.shots.flatMap((s) => s.punches.map((p) => p.at)) ?? [],
+          duration,
+          {
+            zooms: [
+              ...(study.motion?.shots.flatMap((s) => s.punches.map((p) => p.at)) ?? []),
+              ...(study.motion?.jumps.map((j) => j.at) ?? []),
+            ],
+            // Every caption track's pages and the other text coming up (captions: the voice's own, mostly).
+            text: [...captions.flatMap((c) => c.starts), ...onScreen.map((o) => o.start)],
+            textNear: 0.5 / rate,
+          },
+        )
+      : null,
   };
 }
 
@@ -496,6 +739,63 @@ export function referenceText(r: ReferenceReport): string {
       `${many ? "One track is captionStyle; another is a graphic or a second caption look. " : ""}How words appear (pop, slide, a word lit), the font and the colours: watch them.`,
     );
   } else lines.push("Captions: none burned in (or too few to read).");
+  const m = r.motion;
+  if (m) {
+    const kinds = Object.entries(m.transitions)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${n} ${(n === 1 ? TRANSITION_ONE : TRANSITION_MANY)[k] ?? k}`)
+      .join(", ");
+    const jumps = m.jumps
+      ? ` ${m.jumps} jump zoom${m.jumps === 1 ? "" : "s"} (cuts within a take, reframed: ${pct(m.jumpShare)} of cuts, typically ${pct(m.jumpSize)}; ${m.jumpsIn} tighter, ${m.jumps - m.jumpsIn} looser).`
+      : "";
+    lines.push(
+      `Motion: ${m.punches ? `${m.punches} punch-ins (${m.per10s} per 10s, typically ${pct(m.size)}; ${m.punchesIn} in, ${m.punches - m.punchesIn} out) in ${pct(m.shotsPunched)} of shots` : "no punch-ins"}; ${m.pushes ? `${m.pushes} slow push${m.pushes === 1 ? "" : "es"} (about ${pct(m.pushSize)} over a shot)` : "no slow pushes"}; ${m.pans} pan${m.pans === 1 ? "" : "s"}; ${pct(m.locked)} of shots locked off, ${pct(m.handheld)} handheld.${kinds ? ` Transitions: ${kinds}.` : ""}${jumps}`,
+    );
+  }
+  const rh = r.rhythm;
+  if (rh) {
+    const land = (what: string, l: Landing) =>
+      l.count
+        ? `${what} (${l.count}): ${pct(l.onBeat)} on the beat (by chance ${pct(rh.chance.beat)}), ${pct(l.onHit)} on a hit (by chance ${pct(rh.chance.hit)})${l.rise !== null ? `, ${pct(l.rise)} with a rise into them` : ""}`
+        : "";
+    lines.push(
+      `Rhythm: ${rh.bpm ? `${rh.bpm} bpm, ${rh.pulse >= 4 ? "a clear beat" : rh.pulse >= 2 ? "a soft beat" : "no beat to speak of"} (pulse ${rh.pulse})` : "no steady beat"}. ${[land("Cuts", rh.cuts), land("Punch-ins", rh.punches)].filter(Boolean).join(". ")}. ${rh.offBeatHits} strong hits per 10s off the beat (effects, accents)${rh.voiceless ? "" : ", from the whole mix: some may be the voice"}. Well above chance is a habit worth copying; near it is coincidence.`,
+    );
+    if (rh.effects.length) {
+      const named: Record<string, string> = {
+        whoosh: "whooshes",
+        impact: "impacts",
+        pop: "pops",
+        boing: "boings",
+        click: "clicks",
+        ding: "dings",
+        "camera shutter": "camera shutters",
+        "cash register": "cash registers",
+        "whip crack": "whip cracks",
+        zing: "zings",
+        beep: "beeps",
+      };
+      const lands = (e: EffectUse) =>
+        [
+          e.onCuts ? `${e.onCuts} on cuts` : "",
+          e.onZooms ? `${e.onZooms} on zooms` : "",
+          e.onText ? `${e.onText} as text comes up` : "",
+        ]
+          .filter(Boolean)
+          .join(", ");
+      lines.push(
+        `Effects (heard in the sound without the voice): ${rh.effects
+          .map(
+            (e) =>
+              `${e.count} ${e.count === 1 ? e.kind : (named[e.kind] ?? e.kind)}${lands(e) ? ` (${lands(e)})` : ""}`,
+          )
+          .join(
+            "; ",
+          )}. By chance alone an effect lands on a cut ${pct(rh.effectChance.cuts)} of the time, on a zoom ${pct(rh.effectChance.zooms)}, as text comes up ${pct(rh.effectChance.text)}. The starter pack and find_sound have each kind.`,
+      );
+    } else if (rh.voiceless) lines.push("Effects: none heard.");
+    else lines.push("Effects: not heard (the voice couldn't be taken out to listen under it).");
+  }
   if (r.onScreen.length)
     lines.push(
       `Other text on screen: ${r.onScreen

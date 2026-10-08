@@ -50,6 +50,7 @@ import {
   type ProjectDoc,
   packFromProject,
   parseWordRef,
+  type ReferenceStudy,
   rangesFromKeeps,
   referenceText,
   rememberIn,
@@ -171,6 +172,11 @@ export interface AgentHost {
    * reference's captions, whose pages come and go faster than that. Null where it can't be read here.
    */
   readText?(sourceId: string, rate: number): Promise<readonly SeenText[] | null>;
+  /**
+   * A reference studied: how the frame moves in each shot and what each cut is, the beat and the hits
+   * (from its sound without the voice when that can be taken out). A minute or so for a long one.
+   */
+  study?(sourceId: string, onProgress?: (fraction: number) => void): Promise<ReferenceStudy | null>;
   /** Google Fonts: the open families, and fetching some into the project's fonts/ folder. */
   fonts?: {
     find(q: FontQuery): Promise<GoogleFamily[]>;
@@ -239,6 +245,8 @@ export interface Scratch {
   looks?: number;
   /** Words on screen read again densely this request (inspiration measure), by clip. */
   read?: Map<string, { readonly text: readonly SeenText[]; readonly rate: number }>;
+  /** References studied this request (inspiration measure), by clip. */
+  studied?: Map<string, ReferenceStudy>;
   revisions?: Map<string, { count: number; looks: number }>;
   /** This request's changes that undo can take back, newest last: each one's label and the ops that undo it. */
   undoable?: { label: string; inverse: Op[] }[];
@@ -1064,7 +1072,24 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
             ctx.scratch.read.set(clip.id, read);
           }
         }
-        const report = measureReference(ctx.scratch.doc, clip.id, read);
+        let studied = ctx.scratch.studied?.get(clip.id);
+        if (!studied && ctx.host.study && clip.kind === "video") {
+          ctx.activity?.("Studying its motion and its beat…");
+          studied =
+            (await ctx.host
+              .study(clip.id, (f) =>
+                ctx.activity?.(`Studying its motion and its beat… ${Math.round(f * 100)}%`),
+              )
+              .catch((err: unknown) => {
+                console.warn("[measure] studying it failed:", (err as Error).message);
+                return null;
+              })) ?? undefined;
+          if (studied) {
+            ctx.scratch.studied ??= new Map();
+            ctx.scratch.studied.set(clip.id, studied);
+          }
+        }
+        const report = measureReference(ctx.scratch.doc, clip.id, read, studied);
         return report
           ? { text: referenceText(report) }
           : { text: `${clip.id} isn't a video.`, isError: true };

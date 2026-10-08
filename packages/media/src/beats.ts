@@ -338,3 +338,40 @@ export const beatMap = async (file: string, cacheDir: string): Promise<BeatMap> 
   writeFileSync(cached, JSON.stringify(map));
   return map;
 };
+
+/** A sudden sound: when (s), and how strongly it stands out (onset strength, in standard deviations). */
+export interface Onset {
+  readonly at: number;
+  readonly strength: number;
+}
+
+/**
+ * The sudden sounds in a file, strongest first among those close together: drums, a pop, an impact, the
+ * front of a whoosh. Peaks of the onset envelope (above its local average) at least `min` standard
+ * deviations up, at least 80 ms apart. Also the loudness per frame, to find what rises into a moment.
+ */
+export const onsets = async (
+  file: string,
+  min = 1.5,
+): Promise<{ onsets: Onset[]; loudness: (t: number) => number }> => {
+  const samples = await decode(file);
+  const { flux, rms } = features(samples);
+  const env = onsetEnvelope(flux);
+  const gap = Math.round(80 / FRAME_MS);
+  const out: Onset[] = [];
+  for (let i = 1; i < env.length - 1; i++) {
+    const v = env[i] ?? 0;
+    if (v < min || v < (env[i - 1] ?? 0) || v < (env[i + 1] ?? 0)) continue;
+    const last = out.at(-1);
+    // Centred on the analysis window, like the beats.
+    const at = (i * FRAME_MS + (N / 2 / SR) * 1000) / 1000;
+    if (last && (at - last.at) * 1000 < gap * FRAME_MS) {
+      if (v > last.strength) out[out.length - 1] = { at, strength: Math.round(v * 100) / 100 };
+      continue;
+    }
+    out.push({ at, strength: Math.round(v * 100) / 100 });
+  }
+  const loudness = (t: number) =>
+    rms[Math.max(0, Math.min(rms.length - 1, Math.round((t * 1000) / FRAME_MS)))] ?? 0;
+  return { onsets: out, loudness };
+};

@@ -37,10 +37,12 @@ import { type InstantResult, precheck, tryInstant } from "@vedit/instant";
 import {
   addGoogleFont,
   alignText,
+  canSeparate,
   cutoutsAvailable,
   downloadMeme,
   downloadSound,
   downloadStock,
+  ensureHear,
   ensureWhisper,
   extractSpeechWav,
   type FoundTrack,
@@ -52,6 +54,7 @@ import {
   grabFrame,
   isMedia,
   makeProcessed,
+  makeStems,
   measureJoins,
   measureProcessed,
   type Probed,
@@ -59,6 +62,7 @@ import {
   playableCopy,
   probe,
   resolveDerived,
+  STEMS_MODEL,
   STOCK_LICENSE,
   searchMemes,
   searchStock,
@@ -66,6 +70,8 @@ import {
   sfxFile,
   soundHit,
   stockSheet,
+  studyMotion,
+  studyRhythm,
   trackRange,
   transcribeWords,
 } from "@vedit/media";
@@ -1684,6 +1690,57 @@ export class ProjectService {
         cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
       footage: async (doc: ProjectDoc) => makeNeededFootage(store.dir, doc),
+      study: async (sourceId, onProgress) => {
+        const src = store.doc.sources.find((s) => s.id === sourceId);
+        if (src?.kind !== "video" || !src.path) return null;
+        const proxy = cachePaths(store.dir, src.id).proxy;
+        const video = existsSync(proxy) ? proxy : src.path;
+        const analysis = store.doc.analyses.find((a) => a.id === src.id);
+        const failed = (what: string) => (err: unknown) => {
+          console.warn(`[study] ${what} failed for ${src.id}:`, (err as Error).message);
+          return null;
+        };
+        // Each part on its own: one failing leaves the others.
+        const motion = await studyMotion(video, analysis?.shots ?? [], src.duration, {
+          fps: src.fps ?? 30,
+          ...(src.width && src.height && { aspect: src.width / src.height }),
+          ...(onProgress && { onProgress: (f: number) => onProgress(f * 0.4) }),
+        }).catch(failed("the motion"));
+        // Its sound without the voice, for the hits and the effects (in the whole mix the music and the
+        // voice bury them); kept as the clip's own parts, so a later study or taking its music out reuses them.
+        let voiceless: string | null = null;
+        if (src.hasAudio && canSeparate()) {
+          const current = analysis?.stems === STEMS_MODEL;
+          const parts = await makeStems(store.dir, src, {
+            current,
+            ...(onProgress && { onProgress: (f: number) => onProgress(0.4 + f * 0.5) }),
+          }).catch(failed("taking the voice out"));
+          if (parts) {
+            voiceless = parts.music;
+            if (!current && this.store === store)
+              store.commitAndBroadcast({
+                author: "index",
+                message: "Took the voice out of a clip",
+                ops: [
+                  analysis
+                    ? { op: "update", coll: "analyses", id: src.id, patch: { stems: STEMS_MODEL } }
+                    : {
+                        op: "insert",
+                        coll: "analyses",
+                        item: { id: src.id, silences: [], stems: STEMS_MODEL } as never,
+                      },
+                ],
+              });
+          }
+        }
+        // The beat from the whole of it: a voice over the music doesn't hide a beat.
+        const ear = await ensureHear(paths.hear()).catch(() => null);
+        const rhythm = await studyRhythm(video, voiceless, path.join(store.dir, CACHE_DIR), ear).catch(
+          failed("the rhythm"),
+        );
+        onProgress?.(1);
+        return motion || rhythm ? { motion, rhythm } : null;
+      },
       readText: async (sourceId, rate) => {
         const src = store.doc.sources.find((s) => s.id === sourceId);
         if (!src?.path) return null;

@@ -44,6 +44,7 @@ export {
 export * from "./sounds.ts";
 export { trackCamera } from "./steady.ts";
 export * from "./stock.ts";
+export * from "./study.ts";
 export { linkTracks, type Track, type TrackPoint, trackRange } from "./track.ts";
 export * from "./transcode.ts";
 export * from "./voice.ts";

@@ -95,6 +95,27 @@ function ctx(doc: ProjectDoc, host: Partial<AgentHost> = {}) {
         reads.push(rate);
         return captions;
       },
+      study: async () => ({
+        motion: {
+          shots: [
+            { from: 0, to: 30, punches: [{ at: 2, size: 0.1 }], drift: 0, pan: { x: 0, y: 0 }, shake: 0.001 },
+          ],
+          transitions: [
+            { at: 2, kind: "cut" },
+            { at: 4, kind: "flash" },
+          ],
+          jumps: [{ at: 2, size: 0.1 }],
+        },
+        rhythm: {
+          bpm: 120,
+          pulse: 5,
+          beats: [2, 4, 6, 8],
+          hits: [],
+          voiceless: true,
+          loudness: [],
+          effects: [{ at: 2.1, kind: "whoosh", confidence: 0.6 }],
+        },
+      }),
       ...host,
     },
     step: () => {},
@@ -111,6 +132,18 @@ describe("studying a reference", () => {
     expect(out.text).toMatch(/2 words a page .* ALL CAPS; centred 64% down the frame/);
     // Up 0.1s ahead, seen at the next of 4 reads a second: 0.1 + half a read (0.125) ahead, on average.
     expect(out.text).toMatch(/a page comes up 0\.23s ahead of its first word/);
+    expect(out.text).toMatch(
+      /Motion: 1 punch-ins .* typically 10%; 1 in, 0 out.* Transitions: 1 hard cut, 1 flash\./,
+    );
+    expect(out.text).toMatch(
+      /1 jump zoom \(cuts within a take, reframed: 50% of cuts, typically 10%; 1 tighter/,
+    );
+    expect(out.text).toMatch(
+      /Effects \(heard in the sound without the voice\): 1 whoosh \(1 on cuts, 1 on zooms, 1 as text comes up\)/,
+    );
+    expect(out.text).toMatch(
+      /Rhythm: 120 bpm, a clear beat \(pulse 5\)\. Cuts \(4\): 100% on the beat \(by chance 7%\)/,
+    );
     expect(out.text).toMatch(
       /Watch it play \(watch with source ref\).*: 0-4s \(the hook\); 27-30s \(the ending\)/,
     );

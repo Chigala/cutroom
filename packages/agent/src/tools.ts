@@ -55,6 +55,7 @@ import {
   rememberIn,
   replaceTimelineOps,
   replaceWordsOps,
+  type SeenText,
   SHAPES,
   SINGLETONS,
   type Source,
@@ -165,6 +166,11 @@ export interface AgentHost {
     /** Copies project clips (a dropped song, sound, meme) into the shared library; their new asset ids. */
     keep(sourceIds: string[], doc: ProjectDoc): Promise<string[]>;
   };
+  /**
+   * The words on screen in a clip, read `rate` times a second (indexing reads them once a second): for a
+   * reference's captions, whose pages come and go faster than that. Null where it can't be read here.
+   */
+  readText?(sourceId: string, rate: number): Promise<readonly SeenText[] | null>;
   /** Google Fonts: the open families, and fetching some into the project's fonts/ folder. */
   fonts?: {
     find(q: FontQuery): Promise<GoogleFamily[]>;
@@ -231,6 +237,8 @@ export interface Scratch {
   graphicErrors?: Map<string, string>;
   /** Looks taken this request, and how often each item was changed again after a look (the loop guard). */
   looks?: number;
+  /** Words on screen read again densely this request (inspiration measure), by clip. */
+  read?: Map<string, { readonly text: readonly SeenText[]; readonly rate: number }>;
   revisions?: Map<string, { count: number; looks: number }>;
   /** This request's changes that undo can take back, newest last: each one's label and the ops that undo it. */
   undoable?: { label: string; inverse: Op[] }[];
@@ -1040,7 +1048,20 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
             text: `${clip.id} is still being indexed. Carry on with the rest of the request and measure it last.`,
             isError: true,
           };
-        const report = measureReference(ctx.scratch.doc, clip.id);
+        // The captions' pages come and go faster than indexing reads (once a second): read them again,
+        // densely (up to 4 a second, about 400 frames at most), once a request.
+        let read = ctx.scratch.read?.get(clip.id);
+        if (!read && ctx.host.readText && clip.kind === "video") {
+          const rate = Math.max(1, Math.min(4, Math.floor(400 / Math.max(1, clip.duration))));
+          ctx.activity?.("Reading the words on screen…");
+          const text = await ctx.host.readText(clip.id, rate).catch(() => null);
+          if (text) {
+            read = { text, rate };
+            ctx.scratch.read ??= new Map();
+            ctx.scratch.read.set(clip.id, read);
+          }
+        }
+        const report = measureReference(ctx.scratch.doc, clip.id, read);
         return report
           ? { text: referenceText(report) }
           : { text: `${clip.id} isn't a video.`, isError: true };

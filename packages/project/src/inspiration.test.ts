@@ -263,9 +263,9 @@ describe("measuring a reference video", () => {
     expect(r.speech!.wordsPerMinute).toBeGreaterThan(150);
     expect(r.picture!.screens).toBe(0.5);
     expect(r.sound.music).toBe(1);
-    expect(r.lookAt.length).toBeGreaterThan(3);
+    expect(r.watch[0]).toMatchObject({ from: 0, why: "the hook" });
     const text = referenceText(r);
     expect(text).toContain("It opens fastest");
-    expect(text).toContain("look with source ref");
+    expect(text).toContain("watch with source ref");
   });
 });

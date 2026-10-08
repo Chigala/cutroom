@@ -62,6 +62,7 @@ import {
   STOCK_LICENSE,
   searchMemes,
   searchStock,
+  seeClip,
   sfxFile,
   soundHit,
   stockSheet,
@@ -1683,6 +1684,14 @@ export class ProjectService {
         cutouts: async (doc: ProjectDoc) => makeNeededCutouts(store.dir, doc),
       }),
       footage: async (doc: ProjectDoc) => makeNeededFootage(store.dir, doc),
+      readText: async (sourceId, rate) => {
+        const src = store.doc.sources.find((s) => s.id === sourceId);
+        if (!src?.path) return null;
+        // The preview copy reads the same and decodes faster.
+        const proxy = cachePaths(store.dir, src.id).proxy;
+        const seen = await seeClip(existsSync(proxy) ? proxy : src.path, { rate });
+        return seen?.text ?? null;
+      },
       fonts: {
         find: async (q) => findFonts(await googleFamilies(), q),
         add: async (name, weights, italic) => {

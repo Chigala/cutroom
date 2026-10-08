@@ -329,6 +329,9 @@ function unknownIn(ops: readonly Op[]): string[] {
 const STYLE_COLLECTION = { effect: "effectKinds", transition: "transitionKinds", grade: "grades" } as const;
 const STYLE_DIR = { effect: "effects", transition: "transitions", grade: "grades" } as const;
 
+/** The most frames watch takes in one call: four sheets of twelve. */
+const WATCH_FRAMES = 48;
+
 /** Pictures in a strip at a cut: enough either side to see a flash, a black frame or a jump. */
 const STRIP_FRAMES = 8;
 
@@ -1344,6 +1347,139 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
             : ""
         }Frames in order: ${labels.join("; ")}`,
         images,
+      };
+    },
+  }),
+  tool({
+    name: "watch",
+    description:
+      "Watch a clip play: consecutive frames over a stretch, in sheets (left to right, then down) with their times. Shows what single frames can't: cuts, punch-ins, captions changing, transitions, graphics coming and going. Up to 48 frames a call: a hook at 6-12 a second, a whole short video at 1-2.",
+    input: z.object({
+      source: z.string(),
+      from: z.number().min(0).default(0),
+      to: z.number().min(0).optional(),
+      fps: z.number().min(0.2).max(12).optional().describe("Unset: as many as fit 48"),
+    }),
+    async run({ source, from, to, fps }, ctx) {
+      const src = ctx.scratch.doc.sources.find((s) => s.id === source);
+      if (src?.kind !== "video") return { text: `No video clip "${source}".`, isError: true };
+      const end = Math.min(to ?? src.duration, src.duration);
+      if (end <= from) return { text: `${source} is ${src.duration.toFixed(1)}s long.`, isError: true };
+      const rate = fps ?? Math.min(12, Math.max(0.2, WATCH_FRAMES / (end - from)));
+      const times: number[] = [];
+      for (let k = 0; times.length < WATCH_FRAMES; k++) {
+        const t = from + k / rate;
+        if (t >= end) break;
+        times.push(Math.round(t * 100) / 100);
+      }
+      const portrait = (src.height ?? 0) > (src.width ?? 0);
+      const width = portrait ? 216 : 320;
+      // A few at a time from the preview copy (each a quick keyframe seek).
+      const frames: Buffer[] = new Array(times.length);
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: 6 }, async () => {
+          while (next < times.length) {
+            const i = next++;
+            frames[i] = await ctx.host.frame(src.id, times[i]!, width);
+          }
+        }),
+      );
+      const per = 12;
+      const sheets: Buffer[] = [];
+      const lines: string[] = [];
+      for (let i = 0; i < frames.length; i += per) {
+        sheets.push(await frameStrip(frames.slice(i, i + per), { width, columns: portrait ? 6 : 4 }));
+        lines.push(
+          `Sheet ${sheets.length}: ${times
+            .slice(i, i + per)
+            .map((t) => t.toFixed(2))
+            .join(", ")}s`,
+        );
+      }
+      const last = times.at(-1)!;
+      ctx.step(`Watched ${source} ${from.toFixed(1)}-${Math.min(end, last + 1 / rate).toFixed(1)}s`);
+      const picture = await ctx.host.keepPicture?.(sheets[0]!).catch(() => undefined);
+      return {
+        ...(picture && { shown: picture }),
+        text: `${times.length} frames of ${source}, ${rate >= 1 ? `${Math.round(rate * 10) / 10} a second` : `one every ${(1 / rate).toFixed(1)}s`}, left to right then down:\n${lines.join("\n")}${last + 1 / rate < end - 0.01 ? `\nStopped at ${WATCH_FRAMES} frames: watch from ${(last + 1 / rate).toFixed(2)}s for the rest.` : ""}`,
+        images: sheets.map((b) => ({ data: b.toString("base64"), mediaType: "image/jpeg" as const })),
+      };
+    },
+  }),
+  tool({
+    name: "compare",
+    description:
+      "The reference's frames on top, this edit at matching moments below, following an inspiration (its id) without changing the edit; at unset: where someone's talking. Fix what differs, write the inspiration again, compare again.",
+    input: z.object({
+      source: z.string().describe("The reference"),
+      times: z.array(z.number().min(0)).min(1).max(4),
+      at: z.array(z.number().min(0)).max(4).optional(),
+      inspiration: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]{0,47}$/)
+        .optional(),
+    }),
+    async run({ source, times, at, inspiration }, ctx) {
+      if (!ctx.host.stills) return { text: "Rendering isn't available here.", isError: true };
+      const ref = ctx.scratch.doc.sources.find((s) => s.id === source);
+      if (ref?.kind !== "video") return { text: `No video clip "${source}".`, isError: true };
+      let doc = ctx.scratch.doc;
+      let following = "";
+      if (inspiration) {
+        const pack =
+          (await ctx.host.inspirations?.get(inspiration).catch(() => null)) ??
+          STARTER_INSPIRATIONS.find((p) => p.id === inspiration) ??
+          null;
+        if (!pack) return { text: `No inspiration "${inspiration}".`, isError: true };
+        try {
+          doc = applyOps(doc, inspirationOps(doc, pack, { keepLook: false })).doc;
+        } catch (err) {
+          return { text: `${inspiration} can't be followed: ${(err as Error).message}`, isError: true };
+        }
+        following = ` following ${inspirationMeta(pack.md)?.name ?? inspiration}`;
+      }
+      // Nothing cut yet: the reference itself stands in as the footage.
+      const standIn = !doc.scenes.length;
+      if (standIn)
+        doc = applyOps(doc, [
+          {
+            op: "insert",
+            coll: "scenes",
+            item: { id: "compare", source, in: 0, out: ref.duration } as never,
+          },
+        ]).doc;
+      const tl = timelineOf(doc);
+      // Where someone's talking, spread over the edit, so the captions show.
+      const said = spokenWords(doc).filter((w) => w.start < tl.duration);
+      const moments = times.map((_, i) => {
+        const given = at?.[i];
+        if (given !== undefined) return Math.min(given, Math.max(0, tl.duration - 0.05));
+        if (said.length) return said[Math.floor(((i + 0.5) * said.length) / times.length)]!.start + 0.15;
+        return (tl.duration * (i + 0.5)) / times.length;
+      });
+      const [theirs, ours] = await Promise.all([
+        Promise.all(times.map((t) => ctx.host.frame(source, Math.min(t, ref.duration - 0.05), 432))),
+        ctx.host.stills(doc, moments, { scale: 0.4 }),
+      ]);
+      noteErrors(ctx, ours.errors);
+      if (ours.images.length < moments.length)
+        return {
+          text: `This edit didn't render.${ours.errors.length ? ` ${ours.errors.join("; ")}` : ""}`,
+          isError: true,
+        };
+      ctx.scratch.looks = (ctx.scratch.looks ?? 0) + 1;
+      const tall = (ref.height ?? 0) > (ref.width ?? 0);
+      const sheet = await frameStrip([...theirs, ...ours.images], {
+        width: tall ? 240 : 360,
+        columns: times.length,
+      });
+      ctx.step(`Compared with ${source}${following}`);
+      const picture = await ctx.host.keepPicture?.(sheet).catch(() => undefined);
+      return {
+        ...(picture && { shown: picture }),
+        text: `Top: ${source} at ${times.map((t) => t.toFixed(2)).join(", ")}s. Bottom: this edit${following} at ${moments.map((t) => t.toFixed(2)).join(", ")}s${standIn ? " (nothing's cut yet, so the reference stands in: its own captions are burned in, and this style's are drawn over them)" : ""}. Compare caption size, place, case, font and colours, the grade, and graphics.${ours.errors.length ? ` Graphic errors: ${ours.errors.join("; ")}` : ""}`,
+        images: [{ data: sheet.toString("base64"), mediaType: "image/jpeg" }],
       };
     },
   }),

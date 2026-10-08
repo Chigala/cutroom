@@ -12,6 +12,7 @@ import {
   entrySound,
   formatTime,
   frameWindow,
+  musicBeats,
   type Op,
   type ProjectDoc,
   resolveAnchor,
@@ -127,7 +128,7 @@ const rules: Rule[] = [
     id: "beat",
     title: "Cuts land on the beat",
     run(doc, tl) {
-      const beats = musicBeats(doc);
+      const beats = musicBeats(doc, tl.duration + 5);
       if (!beats.length) return pass;
       const speech = speechIn(doc);
       // Talking cuts follow the words, not the music: only check cuts between shots nobody talks in.
@@ -634,15 +635,6 @@ const rules: Rule[] = [
   },
 ];
 
-/** Re-times every shot so each cut lands on the nearest beat, never running past the end of its clip. */
-/** Beat times of the music, in output time. Empty without a track or its beat analysis. */
-export function musicBeats(doc: ProjectDoc): number[] {
-  const id = doc.music.source;
-  if (!id) return [];
-  const beats = doc.analyses.find((a) => a.id === id)?.beats ?? [];
-  return beats.map((b) => b - doc.music.offset).filter((b) => b >= 0);
-}
-
 const speechSources = (doc: ProjectDoc) => new Set(doc.sources.filter((s) => s.speech).map((s) => s.id));
 
 /** How much of [from, to] the spans cover, in seconds. */
@@ -701,13 +693,25 @@ function nearest(sorted: readonly number[], t: number): { time: number; distance
   return { time: best, distance: Math.abs(best - t) };
 }
 
+/**
+ * The ops that move every cut after a shot nobody talks in onto the nearest beat of the music (in its
+ * section and loop), never past the end of a clip or under the shortest shot. Talking shots and speed
+ * ramps keep their length. None without music or its beats.
+ */
+export function beatCutOps(doc: ProjectDoc): Op[] {
+  const tl = timelineOf(doc);
+  const beats = musicBeats(doc, tl.duration + 5);
+  return beats.length ? snapToBeat(doc, tl, beats) : [];
+}
+
 /** Re-times non-speech shots so each cut lands on the nearest beat, never past the end of its clip. */
 function snapToBeat(doc: ProjectDoc, tl: Timeline, beats: readonly number[]): Op[] {
   const speech = speechIn(doc);
   const ops: Op[] = [];
   let t = 0;
   for (const s of tl.scenes) {
-    if (speech.shot(s.scene)) {
+    // A talking shot, or a speed ramp (its length is the ramp's), keeps the length it has.
+    if (speech.shot(s.scene) || s.scene.ramp?.length) {
       t += s.duration;
       continue;
     }
@@ -715,7 +719,7 @@ function snapToBeat(doc: ProjectDoc, tl: Timeline, beats: readonly number[]): Op
     const room = src && src.kind !== "solid" && src.kind !== "image" ? src.duration - s.scene.in : Infinity;
     const target = nearest(beats, t + s.duration).time;
     const duration = Math.min(room, Math.max(R.minShot, target - t));
-    if (Math.abs(duration - s.duration) > 0.001 && !s.scene.ramp?.length)
+    if (Math.abs(duration - s.duration) > 0.001)
       ops.push({
         op: "update",
         coll: "scenes",

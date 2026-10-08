@@ -4,7 +4,7 @@
  * separately undoable change. Inputs are zod schemas, validated before anything runs.
  */
 import type { ToolCall } from "@vedit/bridge";
-import { runChecks } from "@vedit/checks";
+import { beatCutOps, runChecks } from "@vedit/checks";
 import type {
   FontQuery,
   GoogleFamily,
@@ -507,6 +507,24 @@ async function fitMusic(
       ? `Looping ${s.start}-${s.end}s (${len.toFixed(2)}s, about ${(length / len).toFixed(1)} times over the ${length.toFixed(1)}s video). Its quietest moments sit ${Math.abs(s.floor)} dB under its loud end.`
       : `Using ${s.start}-${s.end}s of the track for the ${length.toFixed(1)}s video. Its quietest moments sit ${Math.abs(s.floor)} dB under its loud end.`,
   };
+}
+
+/**
+ * At the end of a request that changed the cut or the music (music.lockCuts): every cut after a shot
+ * nobody talks in moves onto the nearest beat, as one change the user can undo. A request that left them
+ * alone leaves them alone, so cuts the user placed by hand stay where they are.
+ */
+export function snapCutsToBeat(ctx: ToolContext): void {
+  const doc = ctx.scratch.doc;
+  if (!doc.music.lockCuts) return;
+  const touched = ctx.scratch.ops.some(
+    (o) => ("coll" in o && o.coll === "scenes") || ("key" in o && o.key === "music"),
+  );
+  if (!touched) return;
+  const ops = beatCutOps(doc);
+  if (!ops.length) return;
+  const result = commit(ctx, "Cuts on the beat", ops);
+  if (!result.isError) ctx.step(`Moved ${ops.length} cut${ops.length === 1 ? "" : "s"} onto the beat`);
 }
 
 /**

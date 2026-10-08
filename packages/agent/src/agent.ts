@@ -13,7 +13,7 @@ import { applyOps, type ChangeGroup, type Op, type ProjectDoc, type Source } fro
 import { runWithApi } from "./api.ts";
 import { buildPrompt, type Turn } from "./context.ts";
 import { HARNESSES } from "./harness.ts";
-import { type AgentHost, refitMusic, type Scratch, type ToolContext } from "./tools.ts";
+import { type AgentHost, refitMusic, type Scratch, snapCutsToBeat, type ToolContext } from "./tools.ts";
 import { type Backend, type Effort, Stalled, StepLimit } from "./types.ts";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
@@ -112,6 +112,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       try {
         const reply = backend === "api" ? await runWithApi(run, ctx) : await harness.run(run, ctx);
         await refitMusic(ctx);
+        snapCutsToBeat(ctx);
         const { summary, next } = splitNext(reply);
         return { ops: scratch.ops, groups: scratch.groups, summary, ...(next && { next }), doc: scratch.doc };
       } catch (err) {
@@ -150,6 +151,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
           .filter(Boolean)
           .join("\n\n");
         await refitMusic(ctx);
+        snapCutsToBeat(ctx);
         return { ops: scratch.ops, groups: scratch.groups, summary, doc: scratch.doc };
       }
     }

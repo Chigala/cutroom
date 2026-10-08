@@ -820,6 +820,12 @@ export const Music = z.object({
     .describe(
       "Snap the start and end of graphics, titles, zooms, effects and sound effects to the music's beat when they fall within a few frames of one",
     ),
+  lockCuts: z
+    .boolean()
+    .default(true)
+    .describe(
+      "When the agent changes the cut or the music, the cuts between shots nobody talks in move onto the nearest beat at the end of its request (talking cuts follow the words)",
+    ),
   duckTo: z.number().min(0).max(1).default(0.28).describe("Share of the volume kept under speech"),
   fadeIn: Seconds.max(10).default(0.5),
   fadeOut: Seconds.max(10).default(1.5),

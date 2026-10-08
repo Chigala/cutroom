@@ -1,0 +1,25 @@
+// Cutroom's account server. Once:
+//   npx wrangler@4 d1 create cutroom-auth        (then put its id in database_id below)
+//   npx wrangler@4 secret put BETTER_AUTH_SECRET  (openssl rand -base64 32)
+//   npx wrangler@4 secret put GOOGLE_CLIENT_ID     and GOOGLE_CLIENT_SECRET
+//   npx wrangler@4 secret put APPLE_SERVICES_ID    and APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY (the .p8)
+// Then, and after each change: pnpm --filter @vedit/auth deploy (applies new migrations first).
+{
+  "name": "cutroom-auth",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // Better Auth keeps each request's context in AsyncLocalStorage.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cutroom-auth",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Unset, the Worker answers for wherever it's reached (its workers.dev address to start with). Set it
+  // once it has its own domain: "vars": { "AUTH_URL": "https://auth.example.com" }
+  "ratelimits": [{ "name": "PER_ADDRESS", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } }]
+}

@@ -51,6 +51,8 @@ export function buildMain({ mode = "production", watch = false } = {}) {
       __RENDER_ENTRY__: JSON.stringify(renderEntry),
       // Cutroom's Jev proxy (instant edits), when the build is given one.
       __JEV_URL__: JSON.stringify(process.env.VEDIT_JEV_URL ?? ""),
+      // Cutroom's account server, when the build is given one.
+      __AUTH_URL__: JSON.stringify(process.env.VEDIT_AUTH_URL ?? ""),
     },
     ssr: { noExternal: true, external: NATIVE, target: "node" },
     build: {

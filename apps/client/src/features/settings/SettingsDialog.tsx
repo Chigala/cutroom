@@ -19,6 +19,7 @@ import {
   ScissorsIcon,
   SlidersHorizontalIcon,
   SparkleIcon,
+  UserCircleIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import type { AgentStatus, Diagnostics, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
@@ -27,6 +28,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AgentChoice } from "../../components/AgentChoice.tsx";
 import { Button, Segmented } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
+import { checkAccount, useAccount } from "../../state/account.ts";
 import { claudeModels, useClaude } from "../../state/claude.ts";
 import { useCodex } from "../../state/codex.ts";
 import { followLibrary, useLibrary } from "../../state/library.ts";
@@ -35,6 +37,7 @@ import { toast } from "../../state/toast.ts";
 import { setSideOpen, setUi, useUi } from "../../state/ui.ts";
 import { EFFORTS, RECOMMENDED } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
+import { AccountSetup } from "./AccountSetup.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
 import { CodexSetup } from "./CodexSetup.tsx";
 
@@ -43,6 +46,7 @@ const GROUPS = [
   {
     label: "Cutroom",
     sections: [
+      { id: "account", label: "Account", icon: UserCircleIcon },
       { id: "claude", label: "Agent", icon: SparkleIcon },
       { id: "editing", label: "Editing", icon: ScissorsIcon },
       { id: "transcription", label: "Transcription", icon: ClosedCaptioningIcon },
@@ -122,6 +126,11 @@ export function SettingsDialog() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [section, setSection] = useState<Section>(useUi.getState().settingsSection ?? "claude");
+  // A build without an account server has no Account section.
+  const accounts = useAccount((s) => s.status?.available !== false);
+  useEffect(() => {
+    void checkAccount();
+  }, []);
   // Codex's models for the plan it's signed in with: "Default" first, then each.
   const codex = useCodex((s) => s.status);
   const fallback = codex?.models.find((m) => m.isDefault)?.name;
@@ -173,21 +182,23 @@ export function SettingsDialog() {
         {GROUPS.map((g) => (
           <div key={g.label} className="flex flex-col gap-0.5">
             <span className="px-2.5 pb-1 text-[12px] text-faint">{g.label}</span>
-            {g.sections.map(({ id, label, icon: SectionIcon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => open(id)}
-                aria-current={section === id ? "page" : undefined}
-                className={clsx(
-                  "flex h-9 items-center gap-3 rounded-lg px-2.5 text-left text-[14px] transition-colors duration-150",
-                  section === id ? "bg-selected text-fg" : "text-fg-3 hover:bg-button hover:text-fg",
-                )}
-              >
-                <SectionIcon size={17} className={section === id ? "text-fg" : "text-muted"} />
-                {label}
-              </button>
-            ))}
+            {g.sections
+              .filter((s) => s.id !== "account" || accounts)
+              .map(({ id, label, icon: SectionIcon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => open(id)}
+                  aria-current={section === id ? "page" : undefined}
+                  className={clsx(
+                    "flex h-9 items-center gap-3 rounded-lg px-2.5 text-left text-[14px] transition-colors duration-150",
+                    section === id ? "bg-selected text-fg" : "text-fg-3 hover:bg-button hover:text-fg",
+                  )}
+                >
+                  <SectionIcon size={17} className={section === id ? "text-fg" : "text-muted"} />
+                  {label}
+                </button>
+              ))}
           </div>
         ))}
         <SaveNote saved={saved} />
@@ -195,6 +206,11 @@ export function SettingsDialog() {
 
       <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-10 pt-12 pb-16">
+          {section === "account" && (
+            <Page title="Account" intro="Your Cutroom account, for updates and anything you buy.">
+              <AccountSetup />
+            </Page>
+          )}
           {section === "claude" && (
             <Page
               title="Agent"

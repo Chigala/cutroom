@@ -18,6 +18,7 @@ import {
   SmileyIcon,
   SparkleIcon,
   TerminalWindowIcon,
+  UserCircleIcon,
   WaveformIcon,
 } from "@phosphor-icons/react";
 import type { AgentStatus, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
@@ -27,10 +28,12 @@ import { create } from "zustand";
 import { AgentChoice } from "../../components/AgentChoice.tsx";
 import { CodexLogo } from "../../components/AgentLogo.tsx";
 import { host } from "../../lib/host.ts";
+import { checkAccount, useAccount } from "../../state/account.ts";
 import { checkClaude, followClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
 import { checkCodex, signInCodex, useCodex } from "../../state/codex.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { saveSettings, useSettings } from "../../state/settings.ts";
+import { SignInButtons } from "../settings/AccountSetup.tsx";
 import { SignInHelp } from "../settings/ClaudeSetup.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "./StylePicker.tsx";
 
@@ -42,27 +45,39 @@ const useSavedKeys = create<{
 }>()(() => ({ keys: undefined, just: {} }));
 const reloadKeys = async () => useSavedKeys.setState({ keys: (await host.agent.status()).keys });
 
-const STEPS = ["welcome", "privacy", "claude", "style", "captions", "extras", "ready"] as const;
+const STEPS = ["welcome", "account", "privacy", "claude", "style", "captions", "extras", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
 export function Onboarding() {
   const settings = useSettings((s) => s.settings);
-  const [at, setAt] = useState(0);
+  // The screen by name: the account screen can drop out of the list once it's known there are no accounts.
+  const [shown, setShown] = useState<Step>("welcome");
   const keys = useSavedKeys((s) => s.keys);
+  // A build without an account server has no account screen.
+  const accounts = useAccount((s) => s.status?.available !== false);
+  const steps: readonly Step[] = accounts ? STEPS : STEPS.filter((s) => s !== "account");
   useEffect(() => {
     followClaude();
     followDownloads();
     void checkClaude(true);
+    void checkAccount();
     void reloadKeys();
   }, []);
   if (!settings) return null;
-  const step: Step = STEPS[at]!;
+  // A screen that dropped out: the one that came after it.
+  const at = Math.max(
+    0,
+    steps.includes(shown)
+      ? steps.indexOf(shown)
+      : steps.findIndex((s) => STEPS.indexOf(s) > STEPS.indexOf(shown)),
+  );
+  const step: Step = steps[at]!;
   const next = () => {
     // Leaving the captions screen starts its download, so it's ready by the first import.
     if (step === "captions") void host.downloads.prepare("transcription");
-    setAt((i) => Math.min(STEPS.length - 1, i + 1));
+    setShown(steps[Math.min(steps.length - 1, at + 1)]!);
   };
-  const back = () => setAt((i) => Math.max(0, i - 1));
+  const back = () => setShown(steps[Math.max(0, at - 1)]!);
   const finish = () => {
     // Off macOS, the open models (faces, sounds, cutouts) start now too; on a Mac this does nothing.
     void host.downloads.prepare("models");
@@ -72,7 +87,7 @@ export function Onboarding() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
       <div className="drag-region flex h-[52px] shrink-0 items-center justify-center gap-1.5">
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (
           <span
             key={s}
             className={clsx(
@@ -89,6 +104,7 @@ export function Onboarding() {
           className="ob-rise m-auto grid w-full max-w-[980px] grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-center gap-14"
         >
           {step === "welcome" && <Welcome />}
+          {step === "account" && <AccountStep />}
           {step === "privacy" && <Privacy />}
           {step === "claude" && <AgentStep settings={settings} />}
           {step === "style" && <StyleStep settings={settings} />}
@@ -228,6 +244,52 @@ function Privacy() {
         </div>
       </Stage>
     </>
+  );
+}
+
+/** A Cutroom account, in the browser with Google or Apple. */
+function AccountStep() {
+  const user = useAccount((s) => s.status?.user);
+  return (
+    <>
+      <Copy eyebrow="Your account" title="Sign in to Cutroom.">
+        <Lead>One account for updates, early features and anything you buy later.</Lead>
+        <div className="pt-2">
+          {user ? (
+            <span className="flex items-center gap-2 text-[14px] text-ok">
+              <CheckCircleIcon size={16} weight="fill" /> Signed in as {user.email}
+            </span>
+          ) : (
+            <SignInButtons wide />
+          )}
+        </div>
+        <span className="text-xs leading-relaxed text-faint">
+          Signing in opens Google's or Apple's own page in your browser. Cutroom never sees your password, and
+          your footage never leaves this computer.
+        </span>
+      </Copy>
+      <AccountStage />
+    </>
+  );
+}
+
+function AccountStage() {
+  const { status, signingIn } = useAccount();
+  const user = status?.user;
+  return (
+    <Stage>
+      <div className="flex w-[70%] flex-col items-center gap-4 rounded-2xl border border-line-strong bg-sunken px-8 py-10 shadow-2xl">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-raised text-fg">
+          <UserCircleIcon size={30} weight="light" />
+        </span>
+        <span className="max-w-full truncate text-[15px] font-medium text-fg">
+          {user ? user.name || user.email : "Your Cutroom account"}
+        </span>
+        <span className={clsx("text-[13px] transition-colors", user ? "text-ok" : "text-faint")}>
+          {user ? "✓ Signed in" : signingIn ? "Finish signing in in your browser…" : "Not signed in yet"}
+        </span>
+      </div>
+    </Stage>
   );
 }
 

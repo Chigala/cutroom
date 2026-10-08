@@ -31,6 +31,17 @@ const canEncrypt = () => {
   }
 };
 
+/** A value as it's written to disk: encrypted with the keychain (base64) where there is one, else plain. */
+export function seal(value: string): { encrypted: boolean; value: string } {
+  return canEncrypt()
+    ? { encrypted: true, value: safeStorage.encryptString(value).toString("base64") }
+    : { encrypted: false, value };
+}
+
+/** Throws when the keychain item is gone (another computer, a reset keychain). */
+export const unseal = (encrypted: boolean, value: string) =>
+  encrypted ? safeStorage.decryptString(Buffer.from(value, "base64")) : value;
+
 export async function readSecrets(): Promise<Secrets> {
   if (cache) return cache;
   await app.whenReady();
@@ -41,7 +52,7 @@ export async function readSecrets(): Promise<Secrets> {
       const value = stored.keys[field];
       if (!value) continue;
       try {
-        out[field] = stored.encrypted ? safeStorage.decryptString(Buffer.from(value, "base64")) : value;
+        out[field] = unseal(stored.encrypted, value);
         addSecret(out[field]);
       } catch {
         // The keychain item went missing (another Mac, a reset keychain): the key has to be entered again.
@@ -64,11 +75,14 @@ export async function writeSecrets(patch: Secrets): Promise<Secrets> {
       addSecret(value);
     } else delete next[field];
   }
-  const encrypted = canEncrypt();
+  let encrypted = canEncrypt();
   const keys: KeysFile["keys"] = {};
   for (const field of SECRET_FIELDS) {
     const value = next[field];
-    if (value) keys[field] = encrypted ? safeStorage.encryptString(value).toString("base64") : value;
+    if (!value) continue;
+    const sealed = seal(value);
+    keys[field] = sealed.value;
+    encrypted = sealed.encrypted;
   }
   const body: KeysFile = { version: 1, encrypted, keys };
   const tmp = `${file()}.${process.pid}.tmp`;

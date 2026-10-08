@@ -4,6 +4,7 @@
  * restart, just HMR.
  */
 import type {
+  AccountStatus,
   AgentEvent,
   ChatRecord,
   EditorApi,
@@ -70,6 +71,7 @@ export function createWebHost(): EditorApi {
   let head: string | null = null;
   const commits: Commit[] = [];
   let chat: ChatRecord[] = [];
+  let account: AccountStatus = { available: true, providers: ["google", "apple"] };
   let settings: Settings = {
     backend: "auto",
     model: "claude-opus-5-5",
@@ -226,6 +228,20 @@ export function createWebHost(): EditorApi {
       },
     },
     index: { peaks: async () => null, retry: async () => {}, describe: async () => {} },
+    // A stand-in account: signing in takes a moment, as if in the browser.
+    account: {
+      status: async () => account,
+      async signIn() {
+        await new Promise((r) => setTimeout(r, 1500));
+        account = { ...account, user: { name: "Sam Rivers", email: "sam@example.com" } };
+        return account;
+      },
+      cancelSignIn: async () => {},
+      async signOut() {
+        account = { available: true, providers: account.providers };
+        return account;
+      },
+    },
     codex: {
       status: async () => ({ installed: false, signedIn: null, models: [], error: DESKTOP_ONLY }),
       login: async () => ({ installed: false, signedIn: null, models: [], error: DESKTOP_ONLY }),

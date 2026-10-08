@@ -154,3 +154,34 @@ describe("developerIdSigned", () => {
     expect(mod.developerIdSigned("Executable=/x\nSignature=adhoc\nTeamIdentifier=not set")).toBe(false);
   });
 });
+
+describe("busyReason", () => {
+  const idle = { agentRuns: 0, exporting: false, indexing: 0, downloading: [], claudeTask: null } as const;
+
+  it("lets a restart through when nothing is running", () => {
+    expect(mod.busyReason(idle)).toBeNull();
+  });
+
+  it("names what a restart would cut short", () => {
+    expect(mod.busyReason({ ...idle, agentRuns: 1 })).toBe("The agent is still working.");
+    expect(mod.busyReason({ ...idle, exporting: true })).toBe("An export is still running.");
+    expect(mod.busyReason({ ...idle, indexing: 1 })).toBe("A clip is still being indexed.");
+    expect(mod.busyReason({ ...idle, indexing: 3 })).toBe("3 clips are still being indexed.");
+    expect(mod.busyReason({ ...idle, downloading: ["Speech recognition"] })).toBe(
+      "Speech recognition is still downloading.",
+    );
+    expect(mod.busyReason({ ...idle, downloading: ["Speech recognition", "Faces"] })).toBe(
+      "2 downloads are still downloading.",
+    );
+    expect(mod.busyReason({ ...idle, claudeTask: "update" })).toBe("Claude Code is still updating.");
+  });
+
+  it("refuses the restart with that reason", async () => {
+    fake.next = "available";
+    await mod.checkForUpdates();
+    await mod.downloadUpdate();
+    busy = mod.busyReason({ ...idle, indexing: 2 });
+    await expect(mod.installUpdate()).rejects.toThrow("2 clips are still being indexed.");
+    expect(fake.installs).toEqual([]);
+  });
+});

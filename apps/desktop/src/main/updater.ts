@@ -42,6 +42,30 @@ function set(next: UpdateState): void {
 export const updateState = (): UpdateState => state;
 
 /**
+ * What a restart would cut short, in the user's words, or null when nothing is: the agent, an export,
+ * indexing, a download, a Claude Code install. Not the background passes (reading pictures, describing
+ * shots): they pick up again by themselves after a restart.
+ */
+export function busyReason(now: {
+  agentRuns: number;
+  exporting: boolean;
+  indexing: number;
+  downloading: readonly string[];
+  claudeTask: "install" | "login" | "update" | null;
+}): string | null {
+  if (now.agentRuns) return "The agent is still working.";
+  if (now.exporting) return "An export is still running.";
+  if (now.indexing)
+    return `${now.indexing === 1 ? "A clip is" : `${now.indexing} clips are`} still being indexed.`;
+  const [one, ...more] = now.downloading;
+  if (one)
+    return `${more.length ? `${now.downloading.length} downloads are` : `${one} is`} still downloading.`;
+  if (now.claudeTask)
+    return `Claude Code is still ${{ install: "installing", login: "signing in", update: "updating" }[now.claudeTask]}.`;
+  return null;
+}
+
+/**
  * Where people download a version by hand: the releases the updater reads, as electron-builder wrote them
  * into the app (app-update.yml, from electron-builder.yml's `publish`).
  */

@@ -15,7 +15,7 @@ import { here, registerAppProtocol, registerMediaProtocol, registerSchemes } fro
 import { APP_ORIGIN, DEV_SERVER_URL, harden } from "./security.ts";
 import { setSettings } from "./settings.ts";
 import { runSmoke } from "./smoke.ts";
-import { checkForUpdates, startUpdates } from "./updater.ts";
+import { busyReason, checkForUpdates, startUpdates } from "./updater.ts";
 import { rememberPlace, savedPlace, setAppMenu } from "./window.ts";
 
 // Credentials (Claude, KLIPY, stock): the environment first, then a .env next to the user's data, then,
@@ -200,11 +200,16 @@ app.whenReady().then(() => {
   void startUpdates({
     notify: (state) => win?.webContents.send("event:update", state),
     whyBusy: () =>
-      service.activeRuns().length
-        ? "The agent is still working."
-        : service.exporter.busy
-          ? "An export is still running."
-          : null,
+      busyReason({
+        agentRuns: service.activeRuns().length,
+        exporting: service.exporter.busy,
+        indexing: service.indexer.indexing,
+        downloading: service.downloads
+          .state()
+          .filter((d) => d.state === "running")
+          .map((d) => d.label),
+        claudeTask: service.claude.running(),
+      }),
     saveAll,
   });
   // Remotion's headless Chrome, fetched once in the background (about 190 MB) so the first export or

@@ -75,11 +75,20 @@ async function wavWriter(file: string) {
     err += d;
   });
   const closed = once(child, "close") as Promise<[number | null]>;
+  // A write to a pipe whose ffmpeg is gone may never drain (Windows): it stops waiting when ffmpeg does.
+  const gone = closed.then(() => {
+    throw new Error(`ffmpeg stopped writing ${path.basename(file)}`);
+  });
+  gone.catch(() => {});
+  child.stdin?.on("error", () => {});
   const stdin = child.stdin as Writable;
+  // When the process itself has ended ("close" also waits for its output to be read, which a stop doesn't).
+  const exited = once(child, "exit");
   return {
+    exited,
     async write(samples: Float32Array) {
       if (!stdin.write(Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength)))
-        await once(stdin, "drain");
+        await Promise.race([once(stdin, "drain"), gone]);
     },
     async end() {
       stdin.end();
@@ -111,6 +120,7 @@ export async function separateVoice(
     ["-v", "error", "-i", input, "-vn", "-ac", "2", "-ar", String(STEM_RATE), "-f", "f32le", "-"],
     { stdio: ["ignore", "pipe", "ignore"] },
   );
+  const decoded = once(decoder, "exit");
   const voiceOut = await wavWriter(part(out.voice));
   const musicOut = await wavWriter(part(out.music));
   const stop = () => {
@@ -172,6 +182,7 @@ export async function separateVoice(
         mix[STEM_WINDOW + i] = buf[at + i * 2 + 1]!;
       }
       const voice = await model(mix);
+      if (o.signal?.aborted) throw new CancelledError();
       for (let i = 0; i < len; i++) {
         // The clip's own ends don't fade: nothing overlaps them.
         const w = (first && i < OVERLAP) || (last && i >= STRIDE) ? 1 : fade[i]!;
@@ -210,6 +221,11 @@ export async function separateVoice(
     o.onProgress?.(1);
   } catch (err) {
     stop();
+    // Windows won't remove a file a process still has open: the killed ones go first (or 5 s pass).
+    await Promise.race([
+      Promise.allSettled([decoded, voiceOut.exited, musicOut.exited]),
+      new Promise((r) => setTimeout(r, 5000)),
+    ]);
     await Promise.all([rm(part(out.voice), { force: true }), rm(part(out.music), { force: true })]);
     throw o.signal?.aborted ? new CancelledError() : err;
   } finally {

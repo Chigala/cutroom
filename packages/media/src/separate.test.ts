@@ -6,7 +6,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { STEM_RATE, STEM_WINDOW, separateVoice, type VoiceModel } from "./separate.ts";
 
 const dir = mkdtempSync(path.join(tmpdir(), "vedit-separate-"));
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+// Windows keeps a file locked a moment after the process that had it open ends.
+afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 /** A clip: a low tone left, a higher one right, `seconds` long (as a WAV, like a clip's sound). */
 function clip(name: string, seconds: number): string {

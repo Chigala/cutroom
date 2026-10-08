@@ -45,6 +45,23 @@ describe("the starter pack", () => {
     await rm(dir, { recursive: true });
   });
 
+  it("adds only what's new to a library that has an older pack", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "cutroom-pack-"));
+    const pack = JSON.parse(await readFile(path.join(starterDir(), "pack.json"), "utf8"));
+    const newer = pack.items.filter((i: { since: number }) => i.since > 1);
+    expect(newer.map((i: { name: string }) => i.name)).toContain("Counting 2");
+    // A library that took the first pack (and deleted a sound since).
+    settings.starterPack = 1;
+    const catalog = await addStarterPack(dir, LibraryCatalog.parse({}));
+    expect(catalog?.assets.map((a) => a.name).sort()).toEqual(
+      newer.map((i: { name: string }) => i.name).sort(),
+    );
+    expect(existsSync(path.join(dir, "Sounds", "Starter pack", "Whoosh 1.mp3"))).toBe(false);
+    expect(await readFile(path.join(dir, "Starter pack credits.txt"), "utf8")).toContain("Counting 2:");
+    expect(settings.starterPack).toBe(pack.version);
+    await rm(dir, { recursive: true });
+  });
+
   it("never replaces a file that's already there", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "cutroom-pack-"));
     await mkdir(path.join(dir, "Sounds", "Starter pack"), { recursive: true });

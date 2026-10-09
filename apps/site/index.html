@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#141413" />
+    <title>Cutroom · You direct. The agent edits.</title>
+    <meta
+      name="description"
+      content="Cutroom is a video editor built for AI agents. Drop in footage, say what you want, keep or undo each change. Free on Mac, Windows and Linux."
+    />
+    <meta property="og:title" content="Cutroom" />
+    <meta property="og:description" content="You direct. The agent edits." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" as="image" href="/demo/poster.jpg" />
+    <!-- The intro is plain HTML so it paints before the script loads; App lifts it once React is up. -->
+    <style>
+      html { background: #141413; }
+      #intro { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: #141413;
+        transition: clip-path 750ms cubic-bezier(0.76, 0, 0.24, 1); clip-path: inset(0 0 0 0); }
+      #intro.out { clip-path: inset(0 0 100% 0); }
+      #intro svg { width: 88px; height: 88px; transition: transform 500ms, opacity 400ms; }
+      #intro.out svg { transform: translateY(-60px) scale(0.8); opacity: 0; }
+      #intro .l { animation: il 700ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both; }
+      #intro .r { animation: ir 700ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both; }
+      #intro .p { animation: ip 650ms cubic-bezier(0.22, 1, 0.36, 1) 500ms both; }
+      @keyframes il { from { opacity: 0; transform: translateX(-14px); } }
+      @keyframes ir { from { opacity: 0; transform: translateX(14px); } }
+      @keyframes ip { from { opacity: 0; transform: translateY(-18px); } }
+      @media (prefers-reduced-motion: reduce) { #intro { display: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="intro" aria-hidden="true">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <rect width="100" height="100" rx="22.5" fill="#1d1d1b" />
+        <rect class="l" x="13" y="41" width="31" height="20" rx="4.5" fill="#fff" />
+        <rect class="r" x="56" y="41" width="31" height="20" rx="4.5" fill="#55555E" />
+        <g class="p">
+          <rect x="48.25" y="29" width="3.5" height="46" rx="1.75" fill="#F5A524" />
+          <path d="M44 22.5 H56 V28 L50 33.5 L44 28 Z" fill="#F5A524" stroke="#F5A524" stroke-width="2" stroke-linejoin="round" />
+        </g>
+      </svg>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

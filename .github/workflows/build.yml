@@ -87,6 +87,8 @@ jobs:
           # Cutroom's Jev proxy (instant edits), baked into the app: a repository variable, not a secret
           # (the key stays in the Worker). Unset, the app does without instant edits.
           VEDIT_JEV_URL: ${{ vars.VEDIT_JEV_URL }}
+          # Cutroom's account server (apps/auth). Unset, the app has no accounts to sign in to.
+          VEDIT_AUTH_URL: ${{ vars.VEDIT_AUTH_URL }}
       - name: Bundle ffmpeg, whisper and the voice cleaner
         run: pnpm --filter @vedit/desktop tools --arch ${{ matrix.arch }}
       - name: Stage the runtime packages

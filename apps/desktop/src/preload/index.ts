@@ -49,6 +49,12 @@ const api: EditorApi = {
     retry: (id) => invoke(Channel.retryIndex, id),
     describe: () => invoke(Channel.describeShots),
   },
+  account: {
+    status: () => invoke(Channel.accountStatus),
+    signIn: (provider) => invoke(Channel.accountSignIn, provider),
+    cancelSignIn: () => invoke(Channel.accountCancelSignIn),
+    signOut: () => invoke(Channel.accountSignOut),
+  },
   codex: {
     status: (refresh) => invoke(Channel.codexStatus, refresh),
     login: () => invoke(Channel.codexLogin),

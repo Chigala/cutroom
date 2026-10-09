@@ -2,6 +2,7 @@ import type { Diagnostics, KeyProvider } from "@vedit/bridge";
 import { Channel } from "@vedit/bridge/channels";
 import { app, type IpcMainInvokeEvent, ipcMain, shell } from "electron";
 import { z } from "zod";
+import { accountCancelSignIn, accountSignIn, accountSignOut, accountStatus } from "./account.ts";
 import { claudeStatus } from "./claude.ts";
 import { codexCancelLogin, codexLogin, codexLogout, codexStatus } from "./codex.ts";
 import { checkKey } from "./keys.ts";
@@ -56,6 +57,10 @@ export function registerIpc(service: ProjectService): void {
     [Channel.peaks]: (id) => service.indexer.peaks(str(id)),
     [Channel.retryIndex]: (id) => service.retryIndex(id),
     [Channel.describeShots]: () => service.describeMissing(),
+    [Channel.accountStatus]: () => accountStatus(),
+    [Channel.accountSignIn]: (provider) => accountSignIn(provider),
+    [Channel.accountCancelSignIn]: () => accountCancelSignIn(),
+    [Channel.accountSignOut]: () => accountSignOut(),
     [Channel.codexStatus]: (refresh) => codexStatus(refresh === true),
     [Channel.codexLogin]: () => codexLogin(),
     [Channel.codexCancelLogin]: () => codexCancelLogin(),

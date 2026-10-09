@@ -314,6 +314,21 @@ export interface CodexStatus {
   readonly error?: string;
 }
 
+/** Ways to sign in to a Cutroom account. */
+export type AccountProvider = "google" | "apple" | "github";
+
+/** The Cutroom account this computer is signed in to. */
+export interface AccountStatus {
+  /** False in a build without an account server: there's nothing to sign in to. */
+  readonly available: boolean;
+  /** The ways in the server offers (empty while it can't be reached). */
+  readonly providers: readonly AccountProvider[];
+  readonly user?: { readonly name: string; readonly email: string };
+  /** Signed in, but the server couldn't be reached to check (offline): still signed in. */
+  readonly offline?: boolean;
+  readonly error?: string;
+}
+
 export interface AgentStatus {
   readonly backend: Backend;
   readonly model: string;
@@ -561,6 +576,13 @@ export interface EditorApi {
     retry(source: string): Promise<void>;
     /** Describes the shots of clips that have none yet (Claude was unreachable when they indexed). */
     describe(): Promise<void>;
+  };
+  readonly account: {
+    status(): Promise<AccountStatus>;
+    /** Sign in in the browser; resolves when it's done, failed or cancelled. */
+    signIn(provider: AccountProvider): Promise<AccountStatus>;
+    cancelSignIn(): Promise<void>;
+    signOut(): Promise<AccountStatus>;
   };
   readonly codex: {
     /** Codex's state; `refresh` asks again rather than reusing what was last found. */

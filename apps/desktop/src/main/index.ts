@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { readyBrowser } from "@vedit/render";
 import { app, BrowserWindow, Menu } from "electron";
+import { setAccountWindow } from "./account.ts";
 import { runBench } from "./bench.ts";
 import { claudeStatus } from "./claude.ts";
 import { codexStatus } from "./codex.ts";
@@ -145,6 +146,7 @@ app.whenReady().then(() => {
   if (!DEV_SERVER_URL) registerAppProtocol(path.join(here, "../renderer"));
   registerMediaProtocol(service.resolveMedia);
   registerIpc(service);
+  setAccountWindow(() => win);
   // Find Claude Code now (the user's own, or the app's copy), so the first request needn't wait.
   void claudeStatus();
   // Codex too, so the agent can use it if it's the one chosen (and Settings shows it at once).

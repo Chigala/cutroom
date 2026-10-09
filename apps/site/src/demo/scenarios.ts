@@ -42,7 +42,7 @@ export const scenarios: Scenario[] = [
     look: 1,
     thinking: "Looking at every frame…",
     tools: [
-      "Cut her out on 200/200 frames",
+      "Cut her out on 240/240 frames",
       "Picked a plate: Kabukichō, dusk",
       "Matched light: neon rim, cool key",
     ],
@@ -56,7 +56,7 @@ export const scenarios: Scenario[] = [
       "Cut you out on every frame and put Kabukichō behind you. Added pink and cyan rims so the street lights you.",
     chips: ["Cut out person 1", "Add background", "Relight"],
     added: [
-      { lane: "cutout", from: 0, to: 8, label: "person_1 · 200 frames" },
+      { lane: "cutout", from: 0, to: 8, label: "person_1 · 240 frames" },
       { lane: "background", from: 0, to: 8, label: "tokyo_night.jpg" },
       { lane: "look", from: 0, to: 8, label: "Neon rim" },
     ],
@@ -77,7 +77,7 @@ export const scenarios: Scenario[] = [
     reply: "“MAIN CHARACTER” sits behind you, and your head stays in front of it on every frame.",
     chips: ["Add title behind", "Layer under person"],
     added: [
-      { lane: "cutout", from: 0, to: 8, label: "person_1 · 200 frames" },
+      { lane: "cutout", from: 0, to: 8, label: "person_1 · 240 frames" },
       { lane: "titles", from: 0.3, to: 8, label: "MAIN CHARACTER · behind" },
     ],
   },
@@ -101,7 +101,7 @@ export const scenarios: Scenario[] = [
     reply: "Built a sunset and a grid running towards you, graded you magenta to cyan, and lit your edge.",
     chips: ["Add sunset grid", "Look: synthwave", "Add glow", "Add synth bed"],
     added: [
-      { lane: "cutout", from: 0, to: 8, label: "person_1 · 200 frames" },
+      { lane: "cutout", from: 0, to: 8, label: "person_1 · 240 frames" },
       { lane: "background", from: 0, to: 8, label: "sunset-grid.html" },
       { lane: "look", from: 0, to: 8, label: "Synthwave" },
       { lane: "sound", from: 0, to: 8, label: "synth_bed.mp3" },
@@ -119,7 +119,7 @@ export const scenarios: Scenario[] = [
     reply: "Shallow focus from the cutout, a teal and orange grade, scope bars and a little grain.",
     chips: ["Blur background", "Look: teal & orange", "Bars 2.39:1", "Add grain"],
     added: [
-      { lane: "cutout", from: 0, to: 8, label: "person_1 · 200 frames" },
+      { lane: "cutout", from: 0, to: 8, label: "person_1 · 240 frames" },
       { lane: "background", from: 0, to: 8, label: "Lens blur 85%" },
       { lane: "look", from: 0, to: 8, label: "Teal & orange · 2.39:1" },
     ],

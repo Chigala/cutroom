@@ -223,8 +223,8 @@ function Readout({ i }: { i: number }) {
     case 0:
       return (
         <div className="flex flex-wrap gap-1.5">
-          <span className={chip}>frame {String(Math.round(t * 2.5)).padStart(3, "0")} / 200</span>
-          <span className={chip}>25 fps</span>
+          <span className={chip}>frame {String(Math.round(t * 3)).padStart(3, "0")} / 240</span>
+          <span className={chip}>30 fps</span>
           <span className={chip}>432 × 820</span>
         </div>
       );
@@ -237,7 +237,7 @@ function Readout({ i }: { i: number }) {
           <div className="flex-1">
             <div className="flex justify-between font-mono text-[11px] text-fg-3">
               <span>matte</span>
-              <span>200 / 200</span>
+              <span>240 / 240</span>
             </div>
             <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/10">
               <motion.div
@@ -267,7 +267,7 @@ function Readout({ i }: { i: number }) {
     case 3:
       return (
         <div className="flex flex-wrap gap-1.5">
-          {["pink wall", "soft key, left", "cobalt blazer", "eyes to camera"].map((x, n) => (
+          {["white wall", "soft, even light", "lilac top", "eyes to camera"].map((x, n) => (
             <motion.span
               key={x}
               initial={{ opacity: 0, y: 6 }}
@@ -363,11 +363,11 @@ function LayerArt({ i }: { i: number }) {
       return (
         <div className="relative size-full">
           {[
-            ["plain pink wall", 8, 8],
-            ["soft key, left", 6, 44],
+            ["plain white wall", 8, 8],
+            ["soft, even light", 6, 44],
             ["eyes to camera", 52, 20],
-            ["cobalt blazer", 50, 70],
-            ["white top", 38, 86],
+            ["beige trousers", 50, 74],
+            ["lilac top", 38, 50],
           ].map(([t, x, y]) => (
             <span
               key={t as string}

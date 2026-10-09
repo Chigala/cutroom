@@ -240,7 +240,7 @@ function Chat({ demo }: { demo: Demo }) {
                   {phase === "thinking" ? (
                     <span className="shimmer font-medium">{sc.thinking}</span>
                   ) : (
-                    <span className="text-faint">Saw 200 frames, 1 person, 1 face</span>
+                    <span className="text-faint">Saw 240 frames, 1 person, 1 face</span>
                   )}
                 </motion.div>
               )}
@@ -359,9 +359,9 @@ function Composer({ demo }: { demo: Demo }) {
 
 /** What it noticed, pinned where it saw it (fractions of the frame). */
 const notes = [
-  { x: 0.6, y: 0.16, text: "plain pink wall", delay: 0.5 },
-  { x: 0.56, y: 0.78, text: "cobalt blazer", delay: 0.9 },
-  { x: 0.06, y: 0.47, text: "soft key from the left", delay: 1.3 },
+  { x: 0.6, y: 0.16, text: "plain white wall", delay: 0.5 },
+  { x: 0.56, y: 0.44, text: "lilac top", delay: 0.9 },
+  { x: 0.06, y: 0.62, text: "soft, even light", delay: 1.3 },
 ];
 
 function Preview({ demo, time, running }: { demo: Demo; time: MotionValue<number>; running: boolean }) {
@@ -474,11 +474,11 @@ function Preview({ demo, time, running }: { demo: Demo; time: MotionValue<number
 }
 
 const sights = [
-  ["Person 1", "tracked on 200 / 200 frames"],
+  ["Person 1", "tracked on 240 / 240 frames"],
   ["Face", "93% · eyes to camera"],
-  ["Background", "plain pink wall · easy to replace"],
-  ["Light", "soft key from the left"],
-  ["Wardrobe", "cobalt blazer, white top"],
+  ["Background", "plain white wall · easy to replace"],
+  ["Light", "soft and even, from the front"],
+  ["Wardrobe", "lilac top, beige trousers"],
   ["Sound", "none · wants music"],
 ];
 
@@ -744,7 +744,7 @@ function Cursor({ demo, root }: { demo: Demo; root: React.RefObject<HTMLDivEleme
 }
 
 const models = [
-  ["Person cutout", "200 / 200 frames"],
+  ["Person cutout", "240 / 240 frames"],
   ["Faces", "1 found · 93%"],
   ["People", "1 tracked · 95%"],
   ["Speech", "none found"],

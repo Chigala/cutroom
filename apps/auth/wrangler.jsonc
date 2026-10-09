@@ -16,7 +16,7 @@
     {
       "binding": "DB",
       "database_name": "cutroom-auth",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "1e2c95c9-4bdd-4d31-9db6-5a0ed3aba1be",
       "migrations_dir": "migrations"
     }
   ],

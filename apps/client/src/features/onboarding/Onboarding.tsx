@@ -247,7 +247,7 @@ function Privacy() {
   );
 }
 
-/** A Cutroom account, in the browser with Google or Apple. */
+/** A Cutroom account, in the browser with Google, Apple or GitHub. */
 function AccountStep() {
   const user = useAccount((s) => s.status?.user);
   return (
@@ -264,7 +264,7 @@ function AccountStep() {
           )}
         </div>
         <span className="text-xs leading-relaxed text-faint">
-          Signing in opens Google's or Apple's own page in your browser. Cutroom never sees your password, and
+          Signing in opens your provider's own page in your browser. Cutroom never sees your password, and
           your footage never leaves this computer.
         </span>
       </Copy>

@@ -315,7 +315,7 @@ export interface CodexStatus {
 }
 
 /** Ways to sign in to a Cutroom account. */
-export type AccountProvider = "google" | "apple";
+export type AccountProvider = "google" | "apple" | "github";
 
 /** The Cutroom account this computer is signed in to. */
 export interface AccountStatus {

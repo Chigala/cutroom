@@ -1,11 +1,12 @@
 /**
  * Settings → Account: the Cutroom account this computer is signed in to, or the ways to sign in. Signing
- * in happens in the browser, with Google or Apple; Cutroom never sees a password.
+ * in happens in the browser, with Google, Apple or GitHub; Cutroom never sees a password.
  */
 import {
   AppleLogoIcon,
   CheckCircleIcon,
   CircleNotchIcon,
+  GithubLogoIcon,
   GoogleLogoIcon,
   UserIcon,
 } from "@phosphor-icons/react";
@@ -24,6 +25,7 @@ import {
 const WAYS: Record<AccountProvider, { label: string; icon: typeof GoogleLogoIcon }> = {
   google: { label: "Continue with Google", icon: GoogleLogoIcon },
   apple: { label: "Continue with Apple", icon: AppleLogoIcon },
+  github: { label: "Continue with GitHub", icon: GithubLogoIcon },
 };
 
 /** The ways in, one button each; or, while the browser's open, a way to stop waiting. */

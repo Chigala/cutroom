@@ -71,7 +71,7 @@ export function createWebHost(): EditorApi {
   let head: string | null = null;
   const commits: Commit[] = [];
   let chat: ChatRecord[] = [];
-  let account: AccountStatus = { available: true, providers: ["google", "apple"] };
+  let account: AccountStatus = { available: true, providers: ["google", "apple", "github"] };
   let settings: Settings = {
     backend: "auto",
     model: "claude-opus-5-5",

@@ -19,10 +19,12 @@ export interface Env extends AppleKeys {
   readonly AUTH_URL?: string;
   readonly GOOGLE_CLIENT_ID?: string;
   readonly GOOGLE_CLIENT_SECRET?: string;
+  readonly GITHUB_CLIENT_ID?: string;
+  readonly GITHUB_CLIENT_SECRET?: string;
   readonly PER_ADDRESS?: RateLimit;
 }
 
-export type Provider = "google" | "apple";
+export type Provider = "google" | "apple" | "github";
 
 const DAY = 24 * 3600;
 
@@ -54,6 +56,10 @@ export async function authOptions(env: Env, origin: string) {
           },
         }),
       ...(appleKey && { apple: { clientId: env.APPLE_SERVICES_ID ?? "", clientSecret: appleKey } }),
+      ...(env.GITHUB_CLIENT_ID &&
+        env.GITHUB_CLIENT_SECRET && {
+          github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET },
+        }),
     },
     // Apple answers with a POST from its own site.
     trustedOrigins: ["https://appleid.apple.com"],
@@ -77,4 +83,4 @@ export type Auth = Awaited<ReturnType<typeof authFor>>;
 
 /** The ways to sign in this Worker has working keys for. */
 export const providersOf = (auth: Auth): Provider[] =>
-  (["google", "apple"] as const).filter((p) => p in (auth.options.socialProviders ?? {}));
+  (["google", "apple", "github"] as const).filter((p) => p in (auth.options.socialProviders ?? {}));

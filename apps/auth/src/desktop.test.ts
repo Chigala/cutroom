@@ -164,6 +164,17 @@ describe("signing the desktop app in", () => {
     expect((await get(env, "/desktop/done?n=x")).status).toBe(400);
   });
 
+  it("offers GitHub once it has keys, and sends the browser there", async () => {
+    const env = testEnv(freshDb(), { GITHUB_CLIENT_ID: "gh-client", GITHUB_CLIENT_SECRET: "gh-secret" });
+    expect(await (await get(env, "/desktop/providers")).json()).toEqual({ providers: ["google", "github"] });
+    const { challenge } = pair();
+    const res = await get(env, `/desktop/start?provider=github&challenge=${challenge}&port=${PORT}`);
+    expect(res.status).toBe(302);
+    const to = new URL(res.headers.get("location")!);
+    expect(to.origin).toBe("https://github.com");
+    expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/auth/callback/github`);
+  });
+
   it("leaves Apple out when its key won't load, and Google still works", async () => {
     const env = testEnv(freshDb(), {
       APPLE_SERVICES_ID: "dev.cutroom.signin",

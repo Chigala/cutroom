@@ -16,7 +16,7 @@ import { seal, unseal } from "./secrets.ts";
 
 declare const __AUTH_URL__: string;
 
-const PROVIDERS: readonly AccountProvider[] = ["google", "apple"];
+const PROVIDERS: readonly AccountProvider[] = ["google", "apple", "github"];
 /** How long a check with the server holds before the next status asks again. */
 const CHECK_EVERY = 5 * 60_000;
 

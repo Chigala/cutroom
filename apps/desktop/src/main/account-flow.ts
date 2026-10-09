@@ -1,7 +1,7 @@
 /**
  * Signing in to a Cutroom account in the browser, the app's half of apps/auth/src/desktop.ts. Make a
  * verifier, listen on 127.0.0.1, open the browser at the account server's /desktop/start with the
- * verifier's hash and the port; the browser signs in with Google or Apple and comes back here with a
+ * verifier's hash and the port; the browser signs in with its provider and comes back here with a
  * one-time code, which, with the verifier, buys this computer a session of its own.
  *
  * No Electron here (account.ts has that): the account server's tests run it against the real thing.

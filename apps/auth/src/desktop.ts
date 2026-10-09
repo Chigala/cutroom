@@ -4,7 +4,7 @@
  *
  *   1. The app makes a secret (the verifier), listens on 127.0.0.1, and opens the browser at
  *      /desktop/start with the verifier's hash (the challenge) and its port.
- *   2. The browser signs in with Google or Apple through Better Auth, which comes back to /desktop/done.
+ *   2. The browser signs in with Google, Apple or GitHub through Better Auth, which comes back to /desktop/done.
  *   3. /desktop/done swaps the browser's session for a one-time code, good for a minute and tied to the
  *      challenge, signs the browser out again, and sends the code to the app on 127.0.0.1.
  *   4. The app trades the code and its verifier at /desktop/token for a session of its own.
@@ -101,7 +101,7 @@ async function start(request: Request, auth: Auth): Promise<Response> {
   return redirect(url, res);
 }
 
-/** 3. Back from Google or Apple: hand the sign-in to the app, and sign the browser out again. */
+/** 3. Back from the provider: hand the sign-in to the app, and sign the browser out again. */
 async function done(request: Request, auth: Auth): Promise<Response> {
   const q = new URL(request.url).searchParams;
   const ctx = await auth.$context;

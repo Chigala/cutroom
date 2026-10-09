@@ -158,6 +158,8 @@ function HeroWord({ children, delay }: { children: React.ReactNode; delay: numbe
       >
         {children}
       </motion.span>
+      {/* The words are separate boxes, so the text itself needs its spaces (search results, screen readers). */}
+      <span className="sr-only"> </span>
     </span>
   );
 }

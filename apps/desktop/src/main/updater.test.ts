@@ -140,7 +140,7 @@ describe("updates", () => {
     expect(mod.updateState()).toMatchObject({ status: "available", manual: true });
     const open = vi.spyOn(electron.shell, "openExternal");
     await mod.downloadUpdate();
-    expect(open).toHaveBeenCalledWith("https://github.com/Chigala/cutroom/releases/tag/v0.2.0");
+    expect(open).toHaveBeenCalledWith("https://github.com/Chigala/cutroom-releases/releases/tag/v0.2.0");
   });
 });
 

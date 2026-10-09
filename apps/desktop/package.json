@@ -3,7 +3,7 @@
   "productName": "Cutroom",
   "version": "0.1.0",
   "description": "A video editor built for an AI agent to edit with you",
-  "homepage": "https://github.com/Chigala/cutroom",
+  "homepage": "https://getcutroom.studio",
   "desktopName": "cutroom.desktop",
   "private": true,
   "type": "module",

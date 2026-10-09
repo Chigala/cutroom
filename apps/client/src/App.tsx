@@ -29,6 +29,7 @@ import { loadSettings, useSettings } from "./state/settings.ts";
 import { fitTimeline, setRange, zoomBy } from "./state/timeline.ts";
 import { dismissToast, toast, useToasts } from "./state/toast.ts";
 import { composerRef, setUi, toggleRail, toggleSide, useUi } from "./state/ui.ts";
+import { connectUpdates } from "./state/update.ts";
 
 /** A panel that fails alone (see Boundary), trying again whenever the project changes. */
 function Guard({ name, className, children }: { name: string; className?: string; children: ReactNode }) {
@@ -61,7 +62,7 @@ export function App() {
   const onboarded = useSettings((s) => s.settings?.onboarded);
   useEffect(() => {
     void loadSettings();
-    const offs = [connectHost(), connectChat(), connectJobs(), connectProjects()];
+    const offs = [connectHost(), connectChat(), connectJobs(), connectProjects(), connectUpdates()];
     return () => {
       for (const off of offs) off();
     };

@@ -33,6 +33,7 @@ import { followLibrary, useLibrary } from "../../state/library.ts";
 import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
 import { setSideOpen, setUi, useUi } from "../../state/ui.ts";
+import { checkNow, useUpdate } from "../../state/update.ts";
 import { EFFORTS, RECOMMENDED } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
 import { ClaudeSetup } from "./ClaudeSetup.tsx";
@@ -407,6 +408,7 @@ export function SettingsDialog() {
                   onSave={(claudePath) => void update({ claudePath })}
                 />
               </Row>
+              <UpdatesRow value={settings.updates} onChange={(updates) => void update({ updates })} />
               <Row
                 title="Setup"
                 hint="The welcome screens: Claude, transcription and the optional power-ups, with how to get each key."
@@ -825,6 +827,44 @@ function LibraryRow() {
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Which updates to look for, and a look right now. Nothing installs without a click in the header. */
+function UpdatesRow({
+  value,
+  onChange,
+}: {
+  value: Settings["updates"];
+  onChange: (v: Settings["updates"]) => void;
+}) {
+  const u = useUpdate((s) => s.state);
+  if (u.status === "off") return null;
+  return (
+    <Row
+      title="Updates"
+      hint={
+        value === "off"
+          ? "Cutroom doesn't look for new versions."
+          : `New versions${value === "beta" ? ", betas included," : ""} show in the title bar. Nothing installs until you click.`
+      }
+    >
+      <div className="flex items-center gap-2">
+        <Segmented
+          fit
+          value={value}
+          options={[
+            { value: "stable", label: "Stable" },
+            { value: "beta", label: "Beta" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={onChange}
+        />
+        <Button size="sm" disabled={u.status === "checking"} onClick={checkNow}>
+          Check now
+        </Button>
+      </div>
+    </Row>
   );
 }
 

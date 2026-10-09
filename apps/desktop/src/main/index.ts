@@ -15,6 +15,7 @@ import { here, registerAppProtocol, registerMediaProtocol, registerSchemes } fro
 import { APP_ORIGIN, DEV_SERVER_URL, harden } from "./security.ts";
 import { setSettings } from "./settings.ts";
 import { runSmoke } from "./smoke.ts";
+import { busyReason, checkForUpdates, startUpdates } from "./updater.ts";
 import { rememberPlace, savedPlace, setAppMenu } from "./window.ts";
 
 // Credentials (Claude, KLIPY, stock): the environment first, then a .env next to the user's data, then,
@@ -185,12 +186,32 @@ app.whenReady().then(() => {
       .finally(() => app.quit());
     return;
   }
-  setAppMenu((action) => {
-    if (!win || win.isDestroyed()) createWindow();
-    win?.webContents.send("event:menu", { action });
-    win?.focus();
-  }, !app.isPackaged);
+  setAppMenu(
+    (action) => {
+      if (!win || win.isDestroyed()) createWindow();
+      win?.webContents.send("event:menu", { action });
+      win?.focus();
+    },
+    !app.isPackaged,
+    () => void checkForUpdates(true),
+  );
   createWindow();
+  // Cutroom's own updates: found and offered in the header, never installed without a click.
+  void startUpdates({
+    notify: (state) => win?.webContents.send("event:update", state),
+    whyBusy: () =>
+      busyReason({
+        agentRuns: service.activeRuns().length,
+        exporting: service.exporter.busy,
+        indexing: service.indexer.indexing,
+        downloading: service.downloads
+          .state()
+          .filter((d) => d.state === "running")
+          .map((d) => d.label),
+        claudeTask: service.claude.running(),
+      }),
+    saveAll,
+  });
   // Remotion's headless Chrome, fetched once in the background (about 190 MB) so the first export or
   // look doesn't wait for it; they wait on this same download if it's still going.
   setTimeout(
@@ -207,25 +228,29 @@ app.on("window-all-closed", () => {
 });
 
 let flushed = false;
-app.on("before-quit", (event) => {
-  if (flushed) return;
-  event.preventDefault();
-  // Save and stop background work, but never hang the quit on it: after 5 seconds, quit anyway.
+/** Saves and stops background work, but never hangs on it: after 5 seconds, it's done anyway. */
+async function saveAll(): Promise<void> {
   const giveUp = new Promise<void>((ok) =>
     setTimeout(() => {
       console.error("[quit] cleanup took over 5s; quitting anyway");
       ok();
     }, 5_000),
   );
-  void Promise.race([service.close(), giveUp])
-    .catch((err: unknown) => console.error("[quit] cleanup failed:", err))
-    .finally(() => {
-      flushed = true;
-      app.quit();
-      // If the quit itself stalls (it has, with the window already gone), exit: everything is saved.
-      setTimeout(() => {
-        console.error("[quit] still running 3s after quitting; exiting");
-        app.exit(0);
-      }, 3_000);
-    });
+  await Promise.race([service.close(), giveUp]).catch((err: unknown) =>
+    console.error("[quit] cleanup failed:", err),
+  );
+  flushed = true;
+}
+
+app.on("before-quit", (event) => {
+  if (flushed) return;
+  event.preventDefault();
+  void saveAll().finally(() => {
+    app.quit();
+    // If the quit itself stalls (it has, with the window already gone), exit: everything is saved.
+    setTimeout(() => {
+      console.error("[quit] still running 3s after quitting; exiting");
+      app.exit(0);
+    }, 3_000);
+  });
 });

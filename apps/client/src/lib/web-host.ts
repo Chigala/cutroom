@@ -97,6 +97,7 @@ export function createWebHost(): EditorApi {
     instantEdits: false,
     claudePath: "",
     libraryDir: "",
+    updates: "stable",
   };
   // Every event the host can send: TypeScript insists the list is complete, so a new one can't be missed.
   const events = {
@@ -109,6 +110,7 @@ export function createWebHost(): EditorApi {
     focusProject: true,
     claude: true,
     menu: true,
+    update: true,
     library: true,
     downloads: true,
     reload: true,
@@ -289,6 +291,13 @@ export function createWebHost(): EditorApi {
         problems: [],
       }),
       openLogs: async () => {},
+    },
+    // A browser tab is always the latest version.
+    updates: {
+      state: async () => ({ status: "off" }),
+      check: async () => ({ status: "off" }),
+      download: async () => {},
+      install: async () => {},
     },
     claude: {
       status: async () => ({ source: "missing", recommended: "", versionState: "ok", signedIn: null }),

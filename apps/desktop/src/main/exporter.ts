@@ -94,6 +94,11 @@ export class Exporter {
     return { jobId: id };
   }
 
+  /** An export is under way. */
+  get busy(): boolean {
+    return this.job !== null;
+  }
+
   /** The export under way, if any: what settled() waits for. */
   private running: Promise<unknown> = Promise.resolve();
 

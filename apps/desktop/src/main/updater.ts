@@ -76,7 +76,7 @@ function releasesPage(): string {
     const repo = /^repo: *(\S+)/m.exec(yml)?.[1];
     if (owner && repo) return `https://github.com/${owner}/${repo}/releases`;
   } catch {}
-  return "https://github.com/Chigala/cutroom/releases";
+  return "https://github.com/Chigala/cutroom-releases/releases";
 }
 
 /**

@@ -232,6 +232,10 @@ export function Download() {
         <p className="mt-4 font-mono text-[11.5px] text-faint">
           v{VERSION} · macOS 13.3 or later · Apple silicon and Intel
         </p>
+        <p className="mt-2 max-w-md text-[12px] leading-relaxed text-faint">
+          First launch: macOS says it can't check Cutroom. Open System Settings → Privacy &amp; Security and
+          choose Open Anyway, once.
+        </p>
       </div>
     </section>
   );

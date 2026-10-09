@@ -1,10 +1,11 @@
 /**
  * Where the Download buttons point. The installers come from the "Build installers" workflow
- * (.github/workflows/build.yml); the names follow electron-builder's defaults for 0.1.0. Change them here
- * when releases go public. Windows and Linux show as coming soon until their installers ship.
+ * (.github/workflows/build.yml), which puts them in the public releases-only repository; the names
+ * follow electron-builder's defaults for 0.1.0. Change them here with each version. Windows and Linux
+ * show as coming soon until their installers ship.
  */
 export const VERSION = "0.1.0";
-const base = "https://github.com/Chigala/cutroom/releases/latest/download";
+const base = "https://github.com/Chigala/cutroom-releases/releases/latest/download";
 
 export type Os = "mac" | "windows" | "linux";
 

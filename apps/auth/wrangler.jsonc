@@ -20,7 +20,9 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Unset, the Worker answers for wherever it's reached (its workers.dev address to start with). Set it
-  // once it has its own domain: "vars": { "AUTH_URL": "https://auth.example.com" }
+  // The account server's own address: the sign-in providers' callbacks and the app's VEDIT_AUTH_URL point
+  // here. (With a route set, the workers.dev address is off.)
+  "routes": [{ "pattern": "auth.getcutroom.studio", "custom_domain": true }],
+  "vars": { "AUTH_URL": "https://auth.getcutroom.studio" },
   "ratelimits": [{ "name": "PER_ADDRESS", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } }]
 }

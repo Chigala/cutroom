@@ -1,15 +1,24 @@
 import { motion, useMotionValueEvent, useScroll } from "motion/react";
-import { useEffect, useState } from "react";
-import { Download } from "./sections/Download.tsx";
-import { Features } from "./sections/Features.tsx";
-import { Files } from "./sections/Files.tsx";
+import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { DownloadButton, Hero } from "./sections/Hero.tsx";
-import { Learn } from "./sections/Learn.tsx";
-import { Local } from "./sections/Local.tsx";
 import { Manifesto } from "./sections/Manifesto.tsx";
-import { Faq, Footer, Marquee } from "./sections/More.tsx";
-import { Sees } from "./sections/Sees.tsx";
+import { Footer, Marquee } from "./sections/More.tsx";
 import { Logo } from "./ui/Logo.tsx";
+
+// Everything below the first screen loads as its own files, after the first screen has painted: what you
+// see first doesn't wait for the demo, the graphics or the answers.
+const Sees = lazy(() => import("./sections/Sees.tsx").then((m) => ({ default: m.Sees })));
+const Features = lazy(() => import("./sections/Features.tsx").then((m) => ({ default: m.Features })));
+const Learn = lazy(() => import("./sections/Learn.tsx").then((m) => ({ default: m.Learn })));
+const Files = lazy(() => import("./sections/Files.tsx").then((m) => ({ default: m.Files })));
+const Local = lazy(() => import("./sections/Local.tsx").then((m) => ({ default: m.Local })));
+const Faq = lazy(() => import("./sections/More.tsx").then((m) => ({ default: m.Faq })));
+const Download = lazy(() => import("./sections/Download.tsx").then((m) => ({ default: m.Download })));
+
+/** Holds a section's place (and its anchor) until its code has arrived, so the page doesn't jump. */
+function Later({ id, height, children }: { id: string; height: string; children: ReactNode }) {
+  return <Suspense fallback={<div id={id} style={{ minHeight: height }} />}>{children}</Suspense>;
+}
 
 export function App() {
   return (
@@ -20,13 +29,27 @@ export function App() {
         <Hero />
         <Marquee />
         <Manifesto />
-        <Sees />
-        <Features />
-        <Learn />
-        <Files />
-        <Local />
-        <Faq />
-        <Download />
+        <Later id="sees" height="260vh">
+          <Sees />
+        </Later>
+        <Later id="features" height="1100px">
+          <Features />
+        </Later>
+        <Later id="learn" height="1000px">
+          <Learn />
+        </Later>
+        <Later id="files" height="800px">
+          <Files />
+        </Later>
+        <Later id="local" height="700px">
+          <Local />
+        </Later>
+        <Later id="faq" height="800px">
+          <Faq />
+        </Later>
+        <Later id="download" height="1000px">
+          <Download />
+        </Later>
       </main>
       <Footer />
     </div>

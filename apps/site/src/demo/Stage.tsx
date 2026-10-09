@@ -335,10 +335,9 @@ export function Stage({ look, seeing, running, onTime, face }: StageProps) {
         ref={video}
         src="/demo/creator.mp4"
         muted
-        autoPlay
         loop
         playsInline
-        preload="auto"
+        preload="none"
         crossOrigin="anonymous"
         className="pointer-events-none absolute size-px opacity-0"
       />

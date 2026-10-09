@@ -10,6 +10,7 @@ import { logsDir, recentProblems } from "./log.ts";
 import type { ProjectService } from "./project-service.ts";
 import { assertTrustedSender } from "./security.ts";
 import { getSettings, publicSettings, setSettings } from "./settings.ts";
+import { checkForUpdates, downloadUpdate, installUpdate, updateState } from "./updater.ts";
 
 type Handler = (...args: unknown[]) => unknown;
 
@@ -107,6 +108,10 @@ export function registerIpc(service: ProjectService): void {
     [Channel.openLogs]: async () => {
       await shell.openPath(logsDir());
     },
+    [Channel.updateState]: () => updateState(),
+    [Channel.updateCheck]: () => checkForUpdates(true),
+    [Channel.updateDownload]: () => downloadUpdate(),
+    [Channel.updateInstall]: () => installUpdate(),
     [Channel.claudeStatus]: (refresh) => claudeStatus(refresh === true),
     [Channel.claudeInstall]: () => service.claude.install(),
     [Channel.claudeLogin]: () => service.claude.login(),

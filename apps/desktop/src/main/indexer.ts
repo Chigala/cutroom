@@ -183,6 +183,11 @@ export class Indexer {
     this.pump();
   }
 
+  /** Clips waiting for or going through indexing: what the window's "Indexing" pill shows. */
+  get indexing(): number {
+    return this.queue.length + this.active.size;
+  }
+
   enqueue(ids: readonly string[], batch?: { firstImport: boolean }): void {
     // Indexing goes first: reading pictures stops, and starts again when indexing is done.
     if (ids.length) this.readStop?.abort();

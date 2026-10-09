@@ -9,6 +9,7 @@ export type EditorEventName =
   | "focusProject"
   | "claude"
   | "menu"
+  | "update"
   | "library"
   | "downloads"
   | "reload"
@@ -71,6 +72,10 @@ export const Channel = {
   libraryKeep: "library:keep",
   diagnostics: "app:diagnostics",
   openLogs: "app:open-logs",
+  updateState: "update:state",
+  updateCheck: "update:check",
+  updateDownload: "update:download",
+  updateInstall: "update:install",
   claudeStatus: "claude:status",
   claudeInstall: "claude:install",
   claudeLogin: "claude:login",

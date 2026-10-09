@@ -488,6 +488,8 @@ export function claudeTasks(emit: (t: ClaudeTask) => void) {
       if (!file) throw new Error("Install Claude Code first.");
       await start("update", file, ["update"]);
     },
+    /** What's installing, signing in or updating Claude Code right now (a sign-in in the user's own terminal isn't). */
+    running: (): ClaudeTask["kind"] | null => task?.kind ?? null,
     cancel: async () => {
       // Stops watching a sign-in (the terminal is the user's to close); whatever it reached stands.
       if (watching) {

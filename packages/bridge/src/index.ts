@@ -278,6 +278,8 @@ export const Settings = z.object({
   codexPath: z.string().max(1000).default(""),
   /** The shared asset library (sounds, music, memes). Empty: Cutroom Library in the videos folder. */
   libraryDir: z.string().max(1000).default(""),
+  /** Cutroom's own updates: stable releases, pre-releases too (beta), or don't look. Never installs unasked. */
+  updates: z.enum(["stable", "beta", "off"]).default("stable"),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -367,6 +369,25 @@ export interface LibraryState {
   readonly roles: Readonly<Record<string, string>>;
   /** Files still being looked at (sounds heard, tempo measured, memes described). */
   readonly pending: number;
+}
+
+/** Cutroom's own update, as the header's pill shows it. */
+export interface UpdateState {
+  /**
+   * "off": this copy doesn't update (run from the repo, or the web). "current": nothing newer.
+   * "available": `version` is out. "ready": downloaded, installs on restart. "error": a check the user
+   * asked for, or a download, failed.
+   */
+  readonly status: "off" | "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "error";
+  readonly version?: string;
+  /** Of the download. */
+  readonly fraction?: number;
+  /** This copy can't install it itself (a Mac build without a Developer ID): get it from its page. */
+  readonly manual?: boolean;
+  /** The check was asked for (menu, Settings): "up to date" or a failure is worth showing. */
+  readonly asked?: boolean;
+  readonly checkedAt?: number;
+  readonly error?: string;
 }
 
 /** What the app menu asks of the editor. */
@@ -616,6 +637,16 @@ export interface EditorApi {
     /** Shows the logs folder in Finder. */
     openLogs(): Promise<void>;
   };
+  /** Cutroom's own updates. Each step waits for a click: nothing downloads or restarts by itself. */
+  readonly updates: {
+    state(): Promise<UpdateState>;
+    /** Looks now, as asked by the user (the answer shows even when there's nothing new). */
+    check(): Promise<UpdateState>;
+    /** Downloads the version found, or opens its download page where this copy can't install it. */
+    download(): Promise<void>;
+    /** Restarts into it; refuses while the agent or an export is still working. */
+    install(): Promise<void>;
+  };
   readonly claude: {
     /** Where Claude Code is and who it's signed in as; `refresh` looks again instead of answering from cache. */
     status(refresh?: boolean): Promise<ClaudeStatus>;
@@ -684,6 +715,7 @@ export interface EditorEvents {
   focusProject: { dir: string };
   claude: ClaudeTask;
   menu: { action: MenuAction };
+  update: UpdateState;
   library: LibraryState;
   downloads: DownloadState[];
   /** The host's doc diverged from ours; replace local state. */

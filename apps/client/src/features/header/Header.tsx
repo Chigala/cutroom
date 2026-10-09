@@ -1,4 +1,5 @@
 import {
+  ArrowCircleUpIcon,
   ArrowUUpLeftIcon,
   ArrowUUpRightIcon,
   CircleNotchIcon,
@@ -12,7 +13,9 @@ import { isMac } from "../../lib/keys.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { useJobs } from "../../state/jobs.ts";
 import { edit, redo, undo, useDoc, useProject } from "../../state/project.ts";
+import { toast } from "../../state/toast.ts";
 import { setUi, toggleRail, toggleSide, useUi } from "../../state/ui.ts";
+import { useUpdate } from "../../state/update.ts";
 
 /** The title bar: the rail's switch, the project's name, what's running, undo and redo, and Export. */
 export function Header() {
@@ -42,6 +45,7 @@ export function Header() {
         <DownloadsPill />
       </div>
       <div className="no-drag ml-auto flex items-center gap-1.5">
+        <UpdatePill />
         <IconButton
           label={`${sideOpen ? "Hide" : "Show"} the side panel (${isMac ? "⇧⌘" : "Ctrl+Shift+"}B)`}
           onClick={toggleSide}
@@ -84,6 +88,46 @@ function DownloadsPill() {
       Downloading {labels.length === 1 ? labels[0]!.toLowerCase() : `${labels.length} things`} ·{" "}
       {Math.round(fraction * 100)}%
     </span>
+  );
+}
+
+/**
+ * "Update 0.2.0" when a new version is out, "Updating · 42%" while it downloads, "Restart to update" once
+ * it's ready. Each step waits for a click; the tooltip says what the click does.
+ */
+function UpdatePill() {
+  const u = useUpdate((s) => s.state);
+  const pill =
+    "flex h-[26px] items-center gap-1.5 rounded-full whitespace-nowrap px-2.5 text-xs animate-fade-in";
+  if (u.status === "downloading")
+    return (
+      <span className={`${pill} bg-button font-mono text-fg-2 tabular`}>
+        <CircleNotchIcon size={12} className="animate-spin text-muted" />
+        Updating · {Math.round((u.fraction ?? 0) * 100)}%
+      </span>
+    );
+  const ready = u.status === "ready";
+  const offered = u.status === "available" || (u.status === "error" && u.version);
+  if (!ready && !offered) return null;
+  const title = ready
+    ? `Cutroom ${u.version} is downloaded. Click to restart into it, or it installs when you next quit.`
+    : u.manual
+      ? `Cutroom ${u.version} is out. Click to open its download page.`
+      : `Cutroom ${u.version} is out. Click to download it; you choose when to restart.`;
+  const act = () =>
+    (ready ? host.updates.install() : host.updates.download()).catch((err: unknown) =>
+      toast((err as Error).message, "warn"),
+    );
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={() => void act()}
+      className={`${pill} bg-accent/10 font-medium text-accent hover:bg-accent/15`}
+    >
+      <ArrowCircleUpIcon size={13} weight="bold" />
+      {ready ? "Restart to update" : `Update ${u.version}`}
+    </button>
   );
 }
 

@@ -195,11 +195,10 @@ export function Faq() {
 export function Footer() {
   return (
     <footer className="border-t border-line px-4 py-10 sm:px-6">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-[13px] text-faint sm:flex-row">
+      <div className="mx-auto flex max-w-6xl items-center justify-center text-[13px] text-faint">
         <span className="flex items-center gap-2">
           <Mark size={20} /> Cutroom © {new Date().getFullYear()}
         </span>
-        <span>Demo footage from Pexels.</span>
       </div>
     </footer>
   );

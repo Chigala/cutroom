@@ -1,0 +1,11 @@
+// Cutroom's website: the built site (vite build → dist), served from Cloudflare's network.
+//   pnpm --filter @vedit/site build && pnpm --filter @vedit/site deploy
+{
+  "name": "cutroom-site",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" },
+  "routes": [
+    { "pattern": "getcutroom.studio", "custom_domain": true },
+    { "pattern": "www.getcutroom.studio", "custom_domain": true }
+  ]
+}

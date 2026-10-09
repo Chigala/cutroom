@@ -199,6 +199,12 @@ export function Footer() {
         <span className="flex items-center gap-2">
           <Mark size={20} /> Cutroom © {new Date().getFullYear()}
         </span>
+        <a href="/privacy" className="ml-5 transition-colors hover:text-fg-2">
+          Privacy
+        </a>
+        <a href="/terms" className="ml-4 transition-colors hover:text-fg-2">
+          Terms
+        </a>
       </div>
     </footer>
   );

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#141413" />
+<title>Privacy · Cutroom</title>
+<meta name="description" content="What Cutroom keeps on your computer, what it sends to others, and what an account stores." />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<style>
+  :root { color-scheme: dark; }
+  html { background: #141413; }
+  body { margin: 0; background: #141413; color: #d8d7d2; font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: #f5a524; }
+  main { max-width: 680px; margin: 0 auto; padding: 28px 20px 96px; }
+  nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 56px; font-size: 14px; }
+  nav a { color: #a3a29b; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+  nav a:hover { color: #eeede9; }
+  nav svg { width: 26px; height: 26px; }
+  h1 { font-size: 36px; line-height: 1.12; letter-spacing: -0.03em; color: #eeede9; margin: 0 0 8px; }
+  h2 { font-size: 19px; color: #eeede9; margin: 40px 0 8px; letter-spacing: -0.01em; }
+  p, li { color: #c6c5bf; }
+  p { margin: 0 0 14px; }
+  ul { margin: 0 0 14px; padding-left: 22px; }
+  li { margin: 0 0 8px; }
+  .meta { color: #777670; font-size: 14px; margin: 0 0 36px; }
+  .lead { font-size: 18px; color: #eeede9; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid #272726; font-size: 13px; color: #777670; }
+  footer a { color: #a3a29b; }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="/"><svg viewBox="0 0 100 100" role="img" aria-label="Cutroom"><rect width="100" height="100" rx="22.5" fill="#16161A"/><rect x="13" y="41" width="31" height="20" rx="4.5" fill="#fff"/><rect x="56" y="41" width="31" height="20" rx="4.5" fill="#55555E"/><rect x="48.25" y="29" width="3.5" height="46" rx="1.75" fill="#F5A524"/><path d="M44 22.5H56V28L50 33.5L44 28Z" fill="#F5A524" stroke="#F5A524" stroke-width="2" stroke-linejoin="round"/></svg> Cutroom</a><a href="/">getcutroom.studio</a></nav>
+<h1>Privacy</h1>
+<p class="meta">Last updated October 9, 2026</p>
+<p class="lead">Cutroom edits on your computer. Your video files stay there. This page says what does leave it, and who sees it.</p>
+
+<h2>What stays on your computer</h2>
+<ul>
+<li>Your footage, your projects (ordinary folders of files you own), and their transcripts.</li>
+<li>Transcribing, tracking, cutting out people, rendering and exporting all happen on your computer.</li>
+</ul>
+
+<h2>What is sent to others, and when</h2>
+<ul>
+<li><strong>Your AI provider.</strong> To edit, the agent reads what it needs to decide: the words said in your clips, a few frames, and your project's files. That goes to the AI provider whose account you signed in with (Anthropic's Claude through your own Claude Code sign-in, or OpenAI's Codex through your ChatGPT plan). Cutroom doesn't receive it. Their own terms and privacy policies apply to it.</li>
+<li><strong>Services you turn on with your own keys.</strong> If you choose Groq for transcription, the audio goes to Groq. If you add keys for KLIPY, Pexels or Pixabay, what you search for goes to them.</li>
+<li><strong>Instant edits.</strong> Where a build has them, a short request goes through Cutroom's server to a model that decides which kind of edit it is. It carries your request and the state of your project. We don't keep it, and it carries only an anonymous random id for this installation (used to give each installation its fair share).</li>
+<li><strong>Updates.</strong> The app looks for new versions on GitHub, which sees your network address and the app's version, as any download would.</li>
+</ul>
+
+<h2>Your Cutroom account</h2>
+<p>An account is for signing in, for updates, and for anything you buy. You sign in with Google or GitHub (Apple may be added), in your own browser. Cutroom never sees a password.</p>
+<ul>
+<li><strong>What we receive:</strong> your name, your email address, a link to your profile picture if the provider has one, and the provider's identifier for you.</li>
+<li><strong>What we record:</strong> your sessions (when they began and ended, the network address and kind of app or browser they came from). The provider's own tokens are stored encrypted and aren't used for anything.</li>
+<li><strong>Where:</strong> in a database run for us by Cloudflare. Your computer keeps its sign-in in the system's keychain.</li>
+<li><strong>What for:</strong> signing you in and keeping you signed in; telling you about your account, your purchases and new versions; and, later, billing through a payment provider who is the seller of record.</li>
+<li><strong>Signing out</strong> ends the session on our server and removes it from your computer. <strong>To delete your account</strong> and what we hold about it, email us.</li>
+</ul>
+
+<h2>This website</h2>
+<p>It's served by Cloudflare, which keeps ordinary logs of requests (network address, page, time) to run and protect it. There are no ads, no analytics and no tracking cookies on it.</p>
+
+<h2>What we don't do</h2>
+<ul>
+<li>We don't sell your data, and we don't show ads.</li>
+<li>We don't receive your footage, and we don't use your projects to train anything.</li>
+</ul>
+
+<h2>Children</h2>
+<p>Cutroom isn't meant for children under 13, and we don't knowingly collect their information.</p>
+
+<h2>Changes</h2>
+<p>If this changes in a way that matters, the date above changes and the app or this site will say so.</p>
+
+<h2>Contact</h2>
+<p>Questions, or to delete your account: <a href="mailto:hello@getcutroom.studio">hello@getcutroom.studio</a>.</p>
+<footer>Cutroom · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:hello@getcutroom.studio">hello@getcutroom.studio</a></footer>
+</main>
+</body>
+</html>

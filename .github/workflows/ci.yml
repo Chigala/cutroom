@@ -1,4 +1,6 @@
-# Checks on every push and pull request, on all three systems: lint (once), typecheck and tests.
+# Lint (once), typecheck and tests. A pull request runs on Windows and Linux; what's merged to main runs
+# on all three, macOS too. GitHub counts a macOS minute as ten and a Windows minute as two, so macOS on
+# every push of every pull request is most of what the month's included minutes would buy.
 name: CI
 
 on:
@@ -16,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022, ubuntu-22.04]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-2022","ubuntu-22.04"]' || '["macos-14","windows-2022","ubuntu-22.04"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

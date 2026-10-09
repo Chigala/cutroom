@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* The desktop app's own tokens (apps/client/src/styles.css): warm greys, one amber accent. */
+@theme {
+  --color-bg: #141413;
+  --color-sunken: #10100f;
+  --color-panel: #1a1a19;
+  --color-track: #151514;
+  --color-card: #1e1e1d;
+  --color-raised: #222221;
+  --color-button: #262625;
+  --color-chip: #2b2b29;
+  --color-control: #2d2d2b;
+  --color-selected: #343432;
+  --color-line: #272726;
+  --color-line-strong: #31312f;
+  --color-edge: #3e3e3b;
+
+  --color-fg: #eeede9;
+  --color-fg-2: #d8d7d2;
+  --color-fg-3: #c6c5bf;
+  --color-muted: #a3a29b;
+  --color-faint: #777670;
+
+  --color-accent: #f5a524;
+  --color-accent-hover: #ffc35c;
+  --color-accent-fg: #1a1204;
+  --color-playhead: #f5a524;
+  --color-ok: #7dd3a7;
+  --color-bad: #f87171;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "IBM Plex Sans", system-ui,
+    sans-serif;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "IBM Plex Mono", monospace;
+}
+
+@layer base {
+  html {
+    background: var(--color-bg);
+    scroll-behavior: smooth;
+    overflow-x: clip;
+  }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: clip;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Faint grid that fades out from the middle, behind the hero. */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+}
+
+/* Film grain over everything, very light. */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain 1s steps(4) infinite;
+}
+@keyframes grain {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-3%, 2%);
+  }
+  50% {
+    transform: translate(2%, -3%);
+  }
+  75% {
+    transform: translate(-2%, -1%);
+  }
+}
+
+/* Claude's "thinking" shimmer, as in the app. */
+.shimmer {
+  background:
+    linear-gradient(
+      90deg,
+      var(--color-accent) 35%,
+      color-mix(in srgb, var(--color-accent) 35%, white) 50%,
+      var(--color-accent) 65%
+    )
+    0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+/* A light sweeping across text, for the big headline accent. */
+.sheen {
+  background:
+    linear-gradient(
+      100deg,
+      var(--color-accent) 0%,
+      var(--color-accent) 40%,
+      #ffe0a6 50%,
+      var(--color-accent) 60%,
+      var(--color-accent) 100%
+    )
+    0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sheen 5s cubic-bezier(0.65, 0, 0.35, 1) 1.6s infinite;
+}
+@keyframes sheen {
+  0% {
+    background-position: 100% 0;
+  }
+  45%,
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+/* The travelling arc round something Claude is working on. */
+@property --ring-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.working-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--ring-turn),
+    transparent 0deg 190deg,
+    color-mix(in srgb, var(--color-accent) 35%, transparent) 260deg,
+    var(--color-accent) 345deg,
+    transparent 360deg
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  animation: ring-turn 1.5s linear infinite;
+}
+@keyframes ring-turn {
+  to {
+    --ring-turn: 360deg;
+  }
+}
+
+.marquee {
+  animation: marquee 40s linear infinite;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .grain::after,
+  .shimmer,
+  .sheen,
+  .working-ring,
+  .marquee {
+    animation: none;
+  }
+}

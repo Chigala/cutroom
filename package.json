@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @vedit/desktop dev",
     "dev:web": "pnpm --filter @vedit/client dev",
+    "dev:site": "pnpm --filter @vedit/site dev",
     "build": "pnpm --filter @vedit/desktop build",
     "dist": "pnpm --filter @vedit/desktop dist",
     "typecheck": "pnpm -r --parallel typecheck",

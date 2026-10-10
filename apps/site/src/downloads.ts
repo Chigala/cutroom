@@ -17,7 +17,7 @@ export const downloads: Record<
     name: "macOS",
     files: [
       { label: "Apple silicon", href: `${base}/Cutroom-${VERSION}-arm64.dmg` },
-      { label: "Intel", href: `${base}/Cutroom-${VERSION}.dmg` },
+      { label: "Intel", href: `${base}/Cutroom-${VERSION}-x64.dmg` },
     ],
   },
   windows: { name: "Windows", soon: true, files: [] },

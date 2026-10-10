@@ -129,11 +129,6 @@ export function Faq() {
                       : "border-white/[0.07] bg-panel/70 hover:border-white/15 hover:bg-panel",
                   )}
                 >
-                  <motion.span
-                    className="absolute inset-y-0 left-0 w-[3px] origin-top bg-accent"
-                    animate={{ scaleY: on ? 1 : 0 }}
-                    transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                  />
                   <button
                     type="button"
                     onClick={() => setOpen(on ? null : i)}

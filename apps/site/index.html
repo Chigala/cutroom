@@ -5,14 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#141413" />
-    <title>Cutroom · You direct. The agent edits.</title>
-    <meta
-      name="description"
-      content="Cutroom is a video editor built for AI agents. Drop in footage, say what you want, keep or undo each change. Free on Mac, Windows and Linux."
-    />
-    <meta property="og:title" content="Cutroom" />
-    <meta property="og:description" content="You direct. The agent edits." />
+    <title>Cutroom · The AI video editor you direct</title>
+    <meta name="description" content="Cutroom is a free video editor for Mac built for AI agents. It sees every frame and hears every word, so you can ask Claude Code or Codex to edit." />
+    <link rel="canonical" href="https://getcutroom.studio/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="author" content="Cutroom" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cutroom" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://getcutroom.studio/" />
+    <meta property="og:title" content="Cutroom: You direct. The agent edits." />
+    <meta property="og:description" content="You direct. The agent edits. A free video editor for Mac that sees every frame and hears every word." />
+    <meta property="og:image" content="https://getcutroom.studio/og.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Cutroom: a clip as it was shot beside the same clip edited by an agent, with the amber playhead between them." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Cutroom: You direct. The agent edits." />
+    <meta name="twitter:description" content="You direct. The agent edits. A free video editor for Mac that sees every frame and hears every word." />
+    <meta name="twitter:image" content="https://getcutroom.studio/og.jpg" />
+    <meta name="twitter:image:alt" content="Cutroom: a clip as it was shot beside the same clip edited by an agent, with the amber playhead between them." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://getcutroom.studio/#org","name":"Cutroom","url":"https://getcutroom.studio/","logo":"https://getcutroom.studio/icon-512.png"},{"@type":"WebSite","@id":"https://getcutroom.studio/#site","url":"https://getcutroom.studio/","name":"Cutroom","description":"Cutroom is a free video editor for Mac built for AI agents. It sees every frame and hears every word, so you can ask Claude Code or Codex to edit.","publisher":{"@id":"https://getcutroom.studio/#org"}},{"@type":"SoftwareApplication","@id":"https://getcutroom.studio/#app","name":"Cutroom","url":"https://getcutroom.studio/","description":"Cutroom is a free video editor for Mac built for AI agents. It sees every frame and hears every word, so you can ask Claude Code or Codex to edit.","applicationCategory":"MultimediaApplication","operatingSystem":"macOS 13.3 or later","image":"https://getcutroom.studio/og.jpg","downloadUrl":"https://github.com/Chigala/cutroom-releases/releases/latest","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@id":"https://getcutroom.studio/#org"}}]}</script>
     <link rel="preload" as="image" href="/demo/poster.jpg" />
     <!-- The intro is plain HTML so it paints before the script loads; App lifts it once React is up. -->
     <style>
@@ -30,6 +48,8 @@
       @keyframes ip { from { opacity: 0; transform: translateY(-18px); } }
       @media (prefers-reduced-motion: reduce) { #intro { display: none; } }
     </style>
+    <!-- Without scripts nothing would lift the intro, and it would cover the page. -->
+    <noscript><style>#intro { display: none; }</style></noscript>
   </head>
   <body>
     <div id="intro" aria-hidden="true">
@@ -44,6 +64,13 @@
       </svg>
     </div>
     <div id="root"></div>
+    <noscript>
+      <main style="max-width:640px;margin:0 auto;padding:48px 20px;font:17px/1.6 -apple-system,system-ui,sans-serif;color:#d8d7d2">
+        <h1 style="font-size:40px;line-height:1.1;margin:0 0 12px;color:#eeede9">Cutroom: You direct. The agent edits.</h1>
+        <p>Cutroom is a free video editor for Mac, built for AI agents. It sees every frame and hears every word, so you can ask Claude Code or Codex for a cut, captions, a new background or a title behind someone, and keep or undo each change. Your footage never leaves your computer.</p>
+        <p><a href="https://github.com/Chigala/cutroom-releases/releases/latest" style="color:#f5a524">Download for Mac</a> · <a href="/privacy" style="color:#f5a524">Privacy</a> · <a href="/terms" style="color:#f5a524">Terms</a></p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

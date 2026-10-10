@@ -1,5 +1,7 @@
 import { clsx } from "clsx";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { motion } from "motion/react";
+import { type ButtonHTMLAttributes, type ReactNode, useId } from "react";
+import { glide } from "../lib/motion.ts";
 
 type Variant = "default" | "accent" | "ghost" | "control";
 
@@ -110,6 +112,8 @@ export function Segmented<T extends string>({
   /** As wide as its options (a setting's control), not the full width (tabs). */
   fit?: boolean;
 }) {
+  // The selected pill glides to the option clicked (its own, per switcher).
+  const pill = useId();
   return (
     <div role="tablist" className={clsx("rounded-[10px] bg-button p-[3px]", fit ? "inline-flex" : "flex")}>
       {options.map((o) => (
@@ -120,14 +124,19 @@ export function Segmented<T extends string>({
           aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
           className={clsx(
-            "h-[30px] rounded-[7px] text-[13px] whitespace-nowrap transition-colors duration-150",
+            "relative h-[30px] rounded-[7px] text-[13px] whitespace-nowrap transition-colors duration-150",
             fit ? "px-3.5" : "flex-1",
-            value === o.value
-              ? "bg-selected text-fg shadow-[0_1px_2px_rgba(0,0,0,0.35)]"
-              : "text-muted hover:text-fg-2",
+            value === o.value ? "text-fg" : "text-muted hover:text-fg-2",
           )}
         >
-          {o.label}
+          {value === o.value && (
+            <motion.span
+              layoutId={pill}
+              transition={glide}
+              className="absolute inset-0 rounded-[7px] bg-selected shadow-[0_1px_2px_rgba(0,0,0,0.35)]"
+            />
+          )}
+          <span className="relative">{o.label}</span>
         </button>
       ))}
     </div>

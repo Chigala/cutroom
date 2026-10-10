@@ -24,13 +24,16 @@ import {
 import type { AgentContext, WorkEntry } from "@vedit/bridge";
 import { activeInspiration, formatTime, inspirationMeta } from "@vedit/project";
 import { clsx } from "clsx";
-import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Collapse } from "../../components/Collapse.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
 import { ChangeChip } from "../../components/ui.tsx";
 import { type Attachment, pending, upload } from "../../lib/attach.ts";
 import { took } from "../../lib/duration.ts";
 import { host, MEDIA_BASE } from "../../lib/host.ts";
 import { mod } from "../../lib/keys.ts";
+import { pop } from "../../lib/motion.ts";
 import {
   type AgentRun,
   type ChangeNote,
@@ -64,6 +67,16 @@ export function ChatPanel() {
   const dir = useProject((s) => s.dir);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  // Messages that arrive rise in; the history already there when a project opens just appears.
+  const settled = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a project switch starts the history afresh
+  useEffect(() => {
+    settled.current = false;
+    const id = requestAnimationFrame(() => {
+      settled.current = true;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [dir]);
 
   // Stick to the bottom while the agent streams, unless the user scrolled up to read.
   useLayoutEffect(() => {
@@ -86,10 +99,16 @@ export function ChatPanel() {
           <Empty />
         ) : (
           items.map((item, i) => (
-            <Fragment key={item.id}>
+            <motion.div
+              key={item.id}
+              initial={settled.current ? { opacity: 0, y: 10 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={pop}
+              className="flex flex-col gap-4"
+            >
               <Item item={item} />
               {item.kind !== "user" && <HandEdits after={item} next={items[i + 1]} />}
-            </Fragment>
+            </motion.div>
           ))
         )}
       </div>
@@ -448,7 +467,7 @@ function Work({ run }: { run: AgentRun }) {
           </span>
         )}
       </button>
-      {shown && (
+      <Collapse open={shown}>
         <div className="ml-[6px] flex flex-col gap-1.5 border-l border-line pl-3 text-[13px] leading-[1.4] text-fg-2">
           {run.work.map((w, i) => (
             <WorkLine
@@ -458,7 +477,7 @@ function Work({ run }: { run: AgentRun }) {
             />
           ))}
         </div>
-      )}
+      </Collapse>
     </div>
   );
 }
@@ -508,12 +527,12 @@ function WorkLine({ entry, live }: { entry: WorkEntry; live: boolean }) {
             </span>
           </button>
           {entry.image && <Seen image={entry.image} />}
-          {open && (
+          <Collapse open={open}>
             <div className="mt-1 mb-1.5 flex flex-col gap-1.5">
               <Block title="Input" text={entry.input} />
               {entry.output !== undefined && <Block title="Output" text={entry.output} />}
             </div>
-          )}
+          </Collapse>
         </div>
       );
   }
@@ -598,7 +617,7 @@ function Thinking({ text, live }: { text: string; live: boolean }) {
         />
         {!shown && peek && <span className="min-w-0 truncate text-faint">{peek}</span>}
       </button>
-      {shown && (
+      <Collapse open={shown}>
         <div
           ref={body}
           className={clsx(
@@ -608,7 +627,7 @@ function Thinking({ text, live }: { text: string; live: boolean }) {
         >
           <Markdown text={text} className="text-[12px] leading-[1.55] text-muted italic" />
         </div>
-      )}
+      </Collapse>
     </div>
   );
 }

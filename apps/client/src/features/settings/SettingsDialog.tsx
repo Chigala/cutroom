@@ -24,10 +24,12 @@ import {
 } from "@phosphor-icons/react";
 import type { AgentStatus, Diagnostics, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
+import { motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AgentChoice } from "../../components/AgentChoice.tsx";
 import { Button, Segmented } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
+import { glide, swap } from "../../lib/motion.ts";
 import { checkAccount, useAccount } from "../../state/account.ts";
 import { claudeModels, useClaude } from "../../state/claude.ts";
 import { useCodex } from "../../state/codex.ts";
@@ -192,12 +194,22 @@ export function SettingsDialog() {
                   onClick={() => open(id)}
                   aria-current={section === id ? "page" : undefined}
                   className={clsx(
-                    "flex h-9 items-center gap-3 rounded-lg px-2.5 text-left text-[14px] transition-colors duration-150",
-                    section === id ? "bg-selected text-fg" : "text-fg-3 hover:bg-button hover:text-fg",
+                    "relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-left text-[14px] transition-colors duration-150",
+                    section === id ? "text-fg" : "text-fg-3 hover:bg-button hover:text-fg",
                   )}
                 >
-                  <SectionIcon size={17} className={section === id ? "text-fg" : "text-muted"} />
-                  {label}
+                  {section === id && (
+                    <motion.span
+                      layoutId="settings-section"
+                      transition={glide}
+                      className="absolute inset-0 rounded-lg bg-selected"
+                    />
+                  )}
+                  <SectionIcon
+                    size={17}
+                    className={clsx("relative", section === id ? "text-fg" : "text-muted")}
+                  />
+                  <span className="relative">{label}</span>
                 </button>
               ))}
           </div>
@@ -206,7 +218,13 @@ export function SettingsDialog() {
       </nav>
 
       <div ref={scroller} className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[680px] px-10 pt-12 pb-16">
+        <motion.div
+          key={section}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={swap}
+          className="mx-auto max-w-[680px] px-10 pt-12 pb-16"
+        >
           {section === "account" && (
             <Page title="Account" intro="Your Cutroom account, for updates and anything you buy.">
               <AccountSetup />
@@ -443,7 +461,7 @@ export function SettingsDialog() {
           )}
 
           {section === "diagnostics" && <DiagnosticsPage />}
-        </div>
+        </motion.div>
       </div>
     </Sheet>
   );
@@ -471,7 +489,7 @@ function Sheet({ onClose, children }: { onClose: () => void; children: ReactNode
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="m-auto h-[min(820px,calc(100vh-56px))] w-[min(1080px,calc(100vw-56px))] max-w-none overflow-hidden rounded-2xl border border-line-strong bg-panel p-0 text-fg shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop:bg-black/55 backdrop:backdrop-blur-[3px] open:flex open:animate-rise"
+      className="m-auto h-[min(820px,calc(100vh-56px))] w-[min(1080px,calc(100vw-56px))] max-w-none overflow-hidden rounded-2xl border border-line-strong bg-panel p-0 text-fg shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop:bg-black/55 backdrop:backdrop-blur-[3px] open:flex open:animate-dialog-in backdrop:animate-backdrop-in"
     >
       {children}
       <button

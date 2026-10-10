@@ -14,19 +14,16 @@ import {
   CheckIcon,
   CircleNotchIcon,
   FilmSlateIcon,
-  LockIcon,
   SmileyIcon,
   SparkleIcon,
-  TerminalWindowIcon,
-  UserCircleIcon,
   WaveformIcon,
 } from "@phosphor-icons/react";
 import type { AgentStatus, KeyCheck, KeyProvider, Settings } from "@vedit/bridge";
 import { clsx } from "clsx";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { AgentChoice } from "../../components/AgentChoice.tsx";
-import { CodexLogo } from "../../components/AgentLogo.tsx";
 import { host } from "../../lib/host.ts";
 import { checkAccount, useAccount } from "../../state/account.ts";
 import { checkClaude, followClaude, useClaude, useClaudeWatch } from "../../state/claude.ts";
@@ -35,6 +32,17 @@ import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { saveSettings, useSettings } from "../../state/settings.ts";
 import { SignInButtons } from "../settings/AccountSetup.tsx";
 import { SignInHelp } from "../settings/ClaudeSetup.tsx";
+import {
+  AccountScene,
+  CodexScene,
+  ease,
+  PrivacyScene,
+  ReadyScene,
+  Stage,
+  TerminalScene,
+  Waveform,
+  WelcomeScene,
+} from "./Scenes.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "./StylePicker.tsx";
 
 /** Which keys are saved: read when onboarding opens and again after each one is saved. */
@@ -48,10 +56,19 @@ const reloadKeys = async () => useSavedKeys.setState({ keys: (await host.agent.s
 const STEPS = ["welcome", "account", "privacy", "claude", "style", "captions", "extras", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
+/** In development, `?onboarding=privacy` opens on that screen (for working on one screen at a time). */
+const firstStep = ((): Step => {
+  const asked = import.meta.env.DEV ? new URLSearchParams(location.search).get("onboarding") : null;
+  return STEPS.find((s) => s === asked) ?? "welcome";
+})();
+
 export function Onboarding() {
   const settings = useSettings((s) => s.settings);
+  const reduce = useReducedMotion();
+  // Which way the screens slide: forward, or back.
+  const [dir, setDir] = useState(1);
   // The screen by name: the account screen can drop out of the list once it's known there are no accounts.
-  const [shown, setShown] = useState<Step>("welcome");
+  const [shown, setShown] = useState<Step>(firstStep);
   const keys = useSavedKeys((s) => s.keys);
   // A build without an account server has no account screen.
   const accounts = useAccount((s) => s.status?.available !== false);
@@ -75,9 +92,13 @@ export function Onboarding() {
   const next = () => {
     // Leaving the captions screen starts its download, so it's ready by the first import.
     if (step === "captions") void host.downloads.prepare("transcription");
+    setDir(1);
     setShown(steps[Math.min(steps.length - 1, at + 1)]!);
   };
-  const back = () => setShown(steps[Math.max(0, at - 1)]!);
+  const back = () => {
+    setDir(-1);
+    setShown(steps[Math.max(0, at - 1)]!);
+  };
   const finish = () => {
     // Off macOS, the open models (faces, sounds, cutouts) start now too; on a Mac this does nothing.
     void host.downloads.prepare("models");
@@ -88,30 +109,44 @@ export function Onboarding() {
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
       <div className="drag-region flex h-[52px] shrink-0 items-center justify-center gap-1.5">
         {steps.map((s, i) => (
-          <span
+          <motion.span
             key={s}
             className={clsx(
-              "h-1 rounded-full transition-all duration-500",
-              i === at ? "w-6 bg-fg" : i < at ? "w-3 bg-fg-3/60" : "w-3 bg-line-strong",
+              "h-1 rounded-full",
+              i === at ? "bg-fg" : i < at ? "bg-fg-3/60" : "bg-line-strong",
             )}
+            animate={{ width: i === at ? 24 : 12 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
         ))}
       </div>
-      <div className="flex min-h-0 flex-1 overflow-y-auto px-10 py-6">
-        <div
-          key={step}
-          // m-auto centres the screen when it fits, and lets it scroll from the top when it doesn't.
-          className="ob-rise m-auto grid w-full max-w-[980px] grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-center gap-14"
-        >
-          {step === "welcome" && <Welcome />}
-          {step === "account" && <AccountStep />}
-          {step === "privacy" && <Privacy />}
-          {step === "claude" && <AgentStep settings={settings} />}
-          {step === "style" && <StyleStep settings={settings} />}
-          {step === "captions" && <Captions settings={settings} keys={keys} />}
-          {step === "extras" && <Extras keys={keys} />}
-          {step === "ready" && <Ready settings={settings} />}
-        </div>
+      <div className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-10 py-6">
+        <AnimatePresence mode="wait" custom={dir} initial={false}>
+          <motion.div
+            key={step}
+            custom={dir}
+            variants={{
+              in: (d: number) => (reduce ? { opacity: 0 } : { opacity: 0, x: 36 * d, filter: "blur(8px)" }),
+              on: { opacity: 1, x: 0, filter: "blur(0px)" },
+              out: (d: number) => (reduce ? { opacity: 0 } : { opacity: 0, x: -28 * d, filter: "blur(6px)" }),
+            }}
+            initial="in"
+            animate="on"
+            exit="out"
+            transition={{ duration: 0.42, ease }}
+            // m-auto centres the screen when it fits, and lets it scroll from the top when it doesn't.
+            className="m-auto grid w-full max-w-[980px] grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-center gap-14"
+          >
+            {step === "welcome" && <Welcome />}
+            {step === "account" && <AccountStep />}
+            {step === "privacy" && <Privacy />}
+            {step === "claude" && <AgentStep settings={settings} />}
+            {step === "style" && <StyleStep settings={settings} />}
+            {step === "captions" && <Captions settings={settings} keys={keys} />}
+            {step === "extras" && <Extras keys={keys} />}
+            {step === "ready" && <Ready settings={settings} />}
+          </motion.div>
+        </AnimatePresence>
       </div>
       <div className="flex h-[72px] shrink-0 items-center justify-between border-t border-line px-10">
         <button
@@ -145,13 +180,29 @@ export function Onboarding() {
   );
 }
 
+/** Arriving a moment after the screen: rising a little and sharpening. */
+const arrive = (delay: number) => ({
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.55, ease, delay },
+});
+
 /** The title side of a screen. */
 function Copy({ eyebrow, title, children }: { eyebrow: string; title: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
-      <span className="text-xs font-medium uppercase tracking-[0.14em] text-faint">{eyebrow}</span>
-      <h1 className="text-[34px] font-semibold leading-[1.1] tracking-[-0.02em] text-fg">{title}</h1>
-      {children}
+      <motion.span {...arrive(0.05)} className="text-xs font-medium uppercase tracking-[0.14em] text-faint">
+        {eyebrow}
+      </motion.span>
+      <motion.h1
+        {...arrive(0.1)}
+        className="text-[34px] font-semibold leading-[1.1] tracking-[-0.02em] text-fg"
+      >
+        {title}
+      </motion.h1>
+      <motion.div {...arrive(0.17)} className="flex flex-col gap-4">
+        {children}
+      </motion.div>
     </div>
   );
 }
@@ -159,47 +210,6 @@ function Copy({ eyebrow, title, children }: { eyebrow: string; title: ReactNode;
 const Lead = ({ children }: { children: ReactNode }) => (
   <p className="text-[15px] leading-[1.6] text-muted">{children}</p>
 );
-
-/** The visual side: a quiet stage the illustration or demo sits on. */
-function Stage({ children, tall }: { children: ReactNode; tall?: boolean }) {
-  return (
-    <div
-      className={clsx(
-        "relative flex items-center justify-center overflow-hidden rounded-[28px] border border-line bg-panel",
-        tall ? "aspect-[4/5]" : "aspect-[5/4]",
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** The app's mark: two clips on a timeline, the playhead arriving on the cut, then reviewing it. */
-function PlayheadMark() {
-  return (
-    <svg viewBox="0 0 100 100" className="h-[46%] w-[46%]" role="img" aria-label="Cutroom">
-      <rect width="100" height="100" rx="22.5" fill="#16161A" />
-      <g className="ob-clip-left">
-        <rect x="13" y="41" width="31" height="20" rx="4.5" fill="#FFFFFF" />
-      </g>
-      <g className="ob-clip-right">
-        <rect x="56" y="41" width="31" height="20" rx="4.5" fill="#55555E" />
-      </g>
-      <g className="ob-playhead">
-        <g className="ob-sweep" style={{ transformBox: "view-box" }}>
-          <rect x="48.25" y="29" width="3.5" height="46" rx="1.75" fill="#FF6A1F" />
-          <path
-            d="M44 22.5 H56 V28 L50 33.5 L44 28 Z"
-            fill="#FF6A1F"
-            stroke="#FF6A1F"
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-        </g>
-      </g>
-    </svg>
-  );
-}
 
 function Welcome() {
   return (
@@ -213,13 +223,14 @@ function Welcome() {
         <Lead>Setup takes a minute or two. Anything optional can wait.</Lead>
       </Copy>
       <Stage>
-        <PlayheadMark />
+        <WelcomeScene />
       </Stage>
     </>
   );
 }
 
 function Privacy() {
+  const agent = useSettings((s) => s.settings?.harness) === "codex" ? "codex" : "claude";
   return (
     <>
       <Copy eyebrow="Private by design" title="Your footage stays on your computer.">
@@ -233,15 +244,7 @@ function Privacy() {
         </Lead>
       </Copy>
       <Stage>
-        <div className="flex flex-col items-center gap-5">
-          <div className="flex size-24 items-center justify-center rounded-[26px] bg-raised">
-            <LockIcon size={40} weight="light" className="text-fg-2" />
-          </div>
-          <div className="flex flex-col items-center gap-1.5 text-[13px] text-muted">
-            <span>Footage · on this computer</span>
-            <span>Words and a few frames · to Claude</span>
-          </div>
-        </div>
+        <PrivacyScene agent={agent} />
       </Stage>
     </>
   );
@@ -275,20 +278,9 @@ function AccountStep() {
 
 function AccountStage() {
   const { status, signingIn } = useAccount();
-  const user = status?.user;
   return (
     <Stage>
-      <div className="flex w-[70%] flex-col items-center gap-4 rounded-2xl border border-line-strong bg-sunken px-8 py-10 shadow-2xl">
-        <span className="flex size-14 items-center justify-center rounded-2xl bg-raised text-fg">
-          <UserCircleIcon size={30} weight="light" />
-        </span>
-        <span className="max-w-full truncate text-[15px] font-medium text-fg">
-          {user ? user.name || user.email : "Your Cutroom account"}
-        </span>
-        <span className={clsx("text-[13px] transition-colors", user ? "text-ok" : "text-faint")}>
-          {user ? "✓ Signed in" : signingIn ? "Finish signing in in your browser…" : "Not signed in yet"}
-        </span>
-      </div>
+      <AccountScene user={status?.user} signingIn={Boolean(signingIn)} />
     </Stage>
   );
 }
@@ -371,26 +363,10 @@ function ClaudeBox() {
 }
 
 function ClaudeStage() {
-  const signedIn = useClaude((s) => s.status?.signedIn === true);
+  const status = useClaude((s) => s.status);
   return (
     <Stage>
-      <div className="flex w-[78%] flex-col overflow-hidden rounded-2xl border border-line-strong bg-sunken shadow-2xl">
-        <div className="flex items-center gap-1.5 border-b border-line px-4 py-3">
-          <span className="size-2.5 rounded-full bg-line-strong" />
-          <span className="size-2.5 rounded-full bg-line-strong" />
-          <span className="size-2.5 rounded-full bg-line-strong" />
-          <TerminalWindowIcon size={13} className="ml-2 text-faint" />
-        </div>
-        <div className="flex flex-col gap-2 p-5 font-mono text-[12px] leading-relaxed">
-          <span className="text-fg-2">
-            <span className="text-faint">$</span> claude auth login
-          </span>
-          <span className="text-muted">Opening your browser to sign in…</span>
-          <span className={clsx("transition-colors", signedIn ? "text-ok" : "text-faint")}>
-            {signedIn ? "✓ Signed in. You can close this window." : "Waiting for you to sign in…"}
-          </span>
-        </div>
-      </div>
+      <TerminalScene signedIn={status?.signedIn === true} email={status?.email} />
     </Stage>
   );
 }
@@ -448,15 +424,7 @@ function CodexStage() {
   const signedIn = useCodex((s) => s.status?.signedIn === true);
   return (
     <Stage>
-      <div className="flex w-[70%] flex-col items-center gap-4 rounded-2xl border border-line-strong bg-sunken px-8 py-10 shadow-2xl">
-        <span className="flex size-14 items-center justify-center rounded-2xl bg-raised text-fg">
-          <CodexLogo size={30} />
-        </span>
-        <span className="text-[15px] font-medium text-fg">Sign in with ChatGPT</span>
-        <span className={clsx("text-[13px] transition-colors", signedIn ? "text-ok" : "text-faint")}>
-          {signedIn ? "✓ Signed in. Codex is ready to edit." : "Waiting for you to sign in…"}
-        </span>
-      </div>
+      <CodexScene signedIn={signedIn} />
     </Stage>
   );
 }
@@ -619,14 +587,22 @@ function CaptionsDemo({ chosen }: { chosen: Transcriber }) {
       <span className="text-xs uppercase tracking-[0.14em] text-faint">
         The same moment of a noisy livestream
       </span>
+      <Waveform />
       {(["best", "light", "instant"] as const).map((t) => (
         <div
           key={t}
           className={clsx(
-            "flex flex-col gap-1.5 rounded-2xl px-5 py-4 transition-all duration-500",
-            t === chosen ? "bg-raised opacity-100" : "opacity-40",
+            "relative flex flex-col gap-1.5 rounded-2xl px-5 py-4 transition-opacity duration-500",
+            t === chosen ? "opacity-100" : "opacity-40",
           )}
         >
+          {t === chosen && (
+            <motion.span
+              layoutId="ob-heard"
+              className="absolute inset-0 -z-10 rounded-2xl bg-raised ring-1 ring-white/[0.06]"
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+            />
+          )}
           <span className="text-xs text-muted">{TRANSCRIBERS.find((x) => x.id === t)!.name}</span>
           <span className="text-[17px] font-medium text-fg">“{lines[t].heard}”</span>
           <span className="text-xs text-faint">{lines[t].note}</span>
@@ -1067,17 +1043,23 @@ function Demo({ name, title }: { name: string; title: string }) {
             <span className="text-xs">{title}</span>
           </div>
         ) : (
-          <video
-            key={src}
-            src={src}
-            autoPlay
-            loop
-            // The meme and the sound effects are heard: their sound is the point.
-            muted={name === "stock"}
-            playsInline
-            onError={() => setMissing(true)}
-            className="h-full w-full object-cover"
-          />
+          <AnimatePresence initial={false}>
+            <motion.video
+              key={src}
+              src={src}
+              autoPlay
+              loop
+              // The meme and the sound effects are heard: their sound is the point.
+              muted={name === "stock"}
+              playsInline
+              onError={() => setMissing(true)}
+              initial={{ opacity: 0, scale: 1.02 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.45, ease }}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          </AnimatePresence>
         )}
       </div>
       <div className="flex justify-center gap-1 p-3">
@@ -1087,10 +1069,17 @@ function Demo({ name, title }: { name: string; title: string }) {
             key={k}
             onClick={() => setWithIt(k === "with")}
             className={clsx(
-              "rounded-full px-4 py-1.5 text-xs transition-colors",
-              (k === "with") === withIt ? "bg-fg text-bg" : "text-muted hover:text-fg-2",
+              "relative rounded-full px-4 py-1.5 text-xs transition-colors",
+              (k === "with") === withIt ? "text-bg" : "text-muted hover:text-fg-2",
             )}
           >
+            {(k === "with") === withIt && (
+              <motion.span
+                layoutId={`ob-take-${name}`}
+                className="absolute inset-0 -z-10 rounded-full bg-fg"
+                transition={{ type: "spring", stiffness: 380, damping: 32 }}
+              />
+            )}
             {k === "with" ? `With ${title.toLowerCase()}` : "Without"}
           </button>
         ))}
@@ -1133,7 +1122,7 @@ function Ready({ settings }: { settings: Settings }) {
         )}
       </Copy>
       <Stage>
-        <PlayheadMark />
+        <ReadyScene />
       </Stage>
     </>
   );

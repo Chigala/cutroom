@@ -49,8 +49,10 @@ mac:
       to: native/claude-agent-sdk
   # The .dmg is what people download; the .zip is what an installed copy updates itself from.
   target: [dmg, zip]
-  # The architecture in every name: an Intel and an Apple silicon build go into the same release.
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  # The architecture in every name: an Intel and an Apple silicon build go into the same release. No
+  # version: .../releases/latest/download/Cutroom-arm64.dmg is always the newest, so the website's links
+  # never change (each release is still its own tag, which is what updates read).
+  artifactName: ${productName}-${arch}.${ext}
   hardenedRuntime: true
   # What the signed app may do under the hardened runtime: the V8 and Claude Code JITs, and loading the
   # bundled tools' and ONNX Runtime's libraries. Only used once there's a Developer ID (release workflow).
@@ -77,7 +79,7 @@ win:
   # unsigned, Windows SmartScreen warns on first launch.
 nsis:
   # No spaces: latest.yml names the installer with dashes, and the release must carry that exact name.
-  artifactName: ${productName}-Setup-${version}.${ext}
+  artifactName: ${productName}-Setup.${ext}
   # A normal installer: the user picks where it goes, and it installs for them alone (no admin prompt).
   oneClick: false
   allowToChangeInstallationDirectory: true
@@ -100,9 +102,13 @@ linux:
   target: [AppImage, deb]
   # The .deb needs a maintainer (its package metadata); no email is published.
   maintainer: Cutroom
+appImage:
+  # Versionless, like the others: the latest-release link to it never changes.
+  artifactName: ${productName}-${arch}.${ext}
 deb:
-  # Named for the app, not the workspace package (@vedit/desktop would put it in a folder).
-  artifactName: cutroom_${version}_${arch}.${ext}
+  # Named for the app, not the workspace package (@vedit/desktop would put it in a folder); no version,
+  # like the others, so the latest-release link to it never changes.
+  artifactName: cutroom_${arch}.${ext}
   # Ubuntu 24.04 renamed several libraries (the t64 transition): accept either name.
   depends:
     - libgtk-3-0t64 | libgtk-3-0

@@ -187,11 +187,11 @@ function PlayheadMark() {
       </g>
       <g className="ob-playhead">
         <g className="ob-sweep" style={{ transformBox: "view-box" }}>
-          <rect x="48.25" y="29" width="3.5" height="46" rx="1.75" fill="#FF6A1F" />
+          <rect x="48.25" y="29" width="3.5" height="46" rx="1.75" fill="#F5A524" />
           <path
             d="M44 22.5 H56 V28 L50 33.5 L44 28 Z"
-            fill="#FF6A1F"
-            stroke="#FF6A1F"
+            fill="#F5A524"
+            stroke="#F5A524"
             strokeWidth="2"
             strokeLinejoin="round"
           />

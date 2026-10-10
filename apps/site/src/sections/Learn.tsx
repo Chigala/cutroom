@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { AnimatePresence, animate, motion, useInView, useMotionValue, useTransform } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Reveal, Words } from "../ui/Reveal.tsx";
+import { usePlayWhenVisible } from "../ui/useVisibleVideo.ts";
 
 /**
  * Learning a style, start to finish: a reference plays and gets measured (the numbers are from a real
@@ -90,6 +91,7 @@ const REF_CUTS = [2.25, 3.75];
 
 function Reference() {
   const video = useRef<HTMLVideoElement>(null);
+  usePlayWhenVisible(video);
   const [cut, setCut] = useState(0);
   useEffect(() => {
     let raf = 0;
@@ -113,9 +115,9 @@ function Reference() {
           ref={video}
           src="/demo/memes-with.mp4"
           muted
-          autoPlay
           loop
           playsInline
+          preload="none"
           className="size-full object-cover"
         />
         <motion.div
@@ -361,6 +363,8 @@ function PushViz() {
 const caption = ["SO", "HERE'S", "THE", "THING", "ABOUT", "MONDAYS"];
 
 function Yours({ applied }: { applied: boolean }) {
+  const clip = useRef<HTMLVideoElement>(null);
+  usePlayWhenVisible(clip);
   // On-beat punch-ins and word-by-word captions in the reference's style, once the style is applied.
   const [beat, setBeat] = useState(0);
   useEffect(() => {
@@ -390,11 +394,12 @@ function Yours({ applied }: { applied: boolean }) {
           style={{ transformOrigin: "50% 32%" }}
         >
           <video
+            ref={clip}
             src="/demo/creator.mp4"
             muted
-            autoPlay
             loop
             playsInline
+            preload="none"
             className="absolute top-0 left-0 h-[200%] w-full object-cover object-top"
           />
         </motion.div>

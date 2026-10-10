@@ -20,7 +20,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { type Look, Stage } from "../demo/Stage.tsx";
 import { faceAt } from "../demo/track.ts";
-import { downloads, VERSION } from "../downloads.ts";
+import { downloads, useLatest } from "../downloads.ts";
 import { Words } from "../ui/Reveal.tsx";
 import { DownloadButton } from "./Hero.tsx";
 
@@ -69,6 +69,7 @@ function Count({ on, Icon, to, fill }: { on: boolean; Icon: typeof HeartIcon; to
  * through the hero's looks), and the amber playhead drops onto the cut between them as the section scrolls in.
  */
 export function Download() {
+  const version = useLatest();
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "start 0.15"] });
   const p = useSpring(scrollYProgress, { stiffness: 110, damping: 26 });
@@ -230,7 +231,7 @@ export function Download() {
           })}
         </motion.div>
         <p className="mt-4 font-mono text-[11.5px] text-faint">
-          v{VERSION} · macOS 13.3 or later · Apple silicon and Intel
+          {version ? `v${version} · ` : ""}macOS 13.3 or later · Apple silicon and Intel
         </p>
         <p className="mt-2 max-w-md text-[12px] leading-relaxed text-faint">
           First launch: macOS says it can't check Cutroom. Open System Settings → Privacy &amp; Security and

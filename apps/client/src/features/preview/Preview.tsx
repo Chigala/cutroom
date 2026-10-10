@@ -71,6 +71,7 @@ function PreviewBody() {
     >
       {hasScenes ? (
         <>
+          <DraftBadge />
           <StageBar />
           <Stage />
           <Transport />
@@ -101,7 +102,8 @@ function DraftBadge() {
           : "Your project as it is. Click to see the agent's draft."
       }
       className={clsx(
-        "flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] whitespace-nowrap transition-colors animate-fade-in",
+        // Its own corner, across from Comments: appearing never pushes the stage bar into them.
+        "absolute top-6 left-[22px] flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[11px] whitespace-nowrap transition-colors animate-fade-in",
         shown ? "bg-accent/15 text-accent" : "text-muted hover:text-fg",
       )}
     >
@@ -122,10 +124,18 @@ function StageBar() {
   const stage = useUi((s) => s.stage);
   const stageShape = useUi((s) => s.stageShape);
   const own = useDoc((d) => shapeOf(d.meta.format));
+  const comments = useUi((s) => s.commentsOpen);
   const chip = (on: boolean) =>
     clsx("rounded-md px-2 py-0.5 text-[11px]", on ? "bg-button text-fg" : "text-muted hover:text-fg");
   return (
-    <div className="flex items-center gap-3 font-mono">
+    <div
+      className={clsx(
+        // Centred, clear of the corners (the Draft pill, and the Comments button while the rail is hidden):
+        // a narrow window wraps it rather than running it under them.
+        "flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 font-mono",
+        comments ? "px-[104px]" : "px-[150px]",
+      )}
+    >
       <div className="flex gap-0.5">
         {(["video", "cover"] as const).map((s) => (
           <button key={s} type="button" className={chip(stage === s)} onClick={() => setUi({ stage: s })}>
@@ -145,7 +155,6 @@ function StageBar() {
           </button>
         ))}
       </div>
-      <DraftBadge />
     </div>
   );
 }

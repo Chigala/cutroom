@@ -48,6 +48,13 @@ const LABEL_W = 88;
 const View = createContext({ offset: 0 });
 
 /** The timeline shows the agent's live draft while it works (view only then), or the project. */
+/**
+ * What the agent just changed lands with a brief amber glow (a growing settle for what's new), so you
+ * see at a glance what it did. Two identical animations, taking turns with each commit, so the same item
+ * glows again when the next edit touches it too.
+ */
+const landed = () => (useProject.getState().commits.length % 2 ? "agent-land-a" : "agent-land-b");
+
 export function Timeline() {
   return (
     <DraftViewContext.Provider value={true}>
@@ -683,7 +690,7 @@ const SceneBlock = memo(function SceneBlock({
       title={scene.note || scene.id}
       className={clsx(
         "group absolute top-0 h-full overflow-hidden rounded border-[1.5px]",
-        touched ? "border-accent" : selected ? "border-fg-3" : "border-transparent",
+        touched ? clsx("border-accent", landed()) : selected ? "border-fg-3" : "border-transparent",
       )}
       style={{ left: start * pps, width, backgroundColor: source?.color ?? "#2c2c34" }}
     >
@@ -858,7 +865,7 @@ const AnchoredTrack = memo(function AnchoredTrack({
               selected === item.id
                 ? "z-10 border-fg"
                 : touched.has(item.id)
-                  ? "border-accent"
+                  ? clsx("border-accent", landed())
                   : "border-[#4a4a52]/0",
             )}
           >

@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-sans/700.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./styles.css";
+import { MotionConfig } from "motion/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
@@ -20,7 +21,10 @@ createRoot(document.getElementById("root")!).render(
       name="window"
       className="flex h-full flex-col items-center justify-center gap-3 bg-bg p-8 text-center"
     >
-      <App />
+      {/* Every animation in the app stays still when the system asks for reduced motion. */}
+      <MotionConfig reducedMotion="user">
+        <App />
+      </MotionConfig>
     </Boundary>
   </StrictMode>,
 );

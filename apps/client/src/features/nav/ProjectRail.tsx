@@ -26,12 +26,14 @@ import {
 } from "@phosphor-icons/react";
 import type { ProjectFolder, RecentProject } from "@vedit/bridge";
 import { clsx } from "clsx";
+import { motion } from "motion/react";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AGENTS, AgentWorking } from "../../components/AgentLogo.tsx";
 import { Dialog } from "../../components/Dialog.tsx";
 import { Button } from "../../components/ui.tsx";
 import { host } from "../../lib/host.ts";
 import { isMac, mod } from "../../lib/keys.ts";
+import { glide } from "../../lib/motion.ts";
 import { useWorking } from "../../state/chat.ts";
 import { useProject } from "../../state/project.ts";
 import {
@@ -623,15 +625,22 @@ function RailButton({
       aria-label={label}
       {...props}
       className={clsx(
-        "flex h-9 shrink-0 items-center gap-3 rounded-lg text-[13px] transition-colors",
+        "relative flex h-9 shrink-0 items-center gap-3 rounded-lg text-[13px] transition-colors duration-150",
         open ? "px-2.5" : "justify-center",
-        active ? "bg-selected text-fg" : "text-muted hover:bg-button hover:text-fg",
+        active ? "text-fg" : "text-muted hover:bg-button hover:text-fg",
       )}
     >
-      <span className="shrink-0">{icon}</span>
+      {active && (
+        <motion.span
+          layoutId="rail-nav"
+          transition={glide}
+          className="absolute inset-0 rounded-lg bg-selected"
+        />
+      )}
+      <span className="relative shrink-0">{icon}</span>
       {open && (
         <>
-          <span className="flex-1 truncate text-left">{label}</span>
+          <span className="relative flex-1 truncate text-left">{label}</span>
           {keys && <Keys>{keys}</Keys>}
         </>
       )}
@@ -694,18 +703,25 @@ function ProjectButton({
         aria-haspopup="menu"
         {...hint(project.name, [meta, shortcut].filter(Boolean).join(" · "))}
         className={clsx(
-          "flex w-full items-center gap-3 rounded-lg py-1.5 text-left transition-colors",
+          "relative flex w-full items-center gap-3 rounded-lg py-1.5 text-left transition-colors duration-150",
           open ? (indent ? "pr-2 pl-7" : "px-2") : "justify-center",
-          open && current ? "bg-selected" : "hover:bg-button",
+          !(open && current) && "hover:bg-button",
         )}
       >
+        {open && current && (
+          <motion.span
+            layoutId="rail-project"
+            transition={glide}
+            className="absolute inset-0 rounded-lg bg-selected"
+          />
+        )}
         <span className="relative shrink-0">
           <ProjectThumb dir={project.dir} name={project.name} ring={current && !open && !working} />
           {/* Claude working in it: an arc travels round the thumbnail. */}
           {working && <span aria-hidden className="working-ring" />}
         </span>
         {open && (
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5 pr-6">
+          <span className="relative flex min-w-0 flex-1 flex-col gap-0.5 pr-6">
             <span
               className={clsx(
                 "flex items-center gap-1 truncate text-[13px] text-fg",

@@ -39,8 +39,21 @@
 
   --animate-fade-in: fade-in 160ms ease-out both;
   --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-dialog-in: dialog-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-backdrop-in: backdrop-in 220ms ease-out both;
 
   @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+  @keyframes backdrop-in {
     from {
       opacity: 0;
     }
@@ -238,6 +251,106 @@
 @media (prefers-reduced-motion: reduce) {
   .working-ring,
   .shimmer {
+    animation: none;
+  }
+}
+
+/* Onboarding's stage: a fine grid fading out from the middle, an amber light drifting, a caret, a voice. */
+.ob-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 70% 65% at 50% 50%, #000 15%, transparent 75%);
+}
+.ob-ambient {
+  animation: ob-ambient 14s ease-in-out infinite alternate;
+}
+@keyframes ob-ambient {
+  from {
+    transform: translate(-30%, -20%);
+  }
+  to {
+    transform: translate(35%, 25%);
+  }
+}
+.ob-caret {
+  animation: ob-caret 1s steps(1) infinite;
+}
+@keyframes ob-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.ob-bar {
+  transform-origin: center;
+  animation-name: ob-bar;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-timing-function: ease-in-out;
+}
+@keyframes ob-bar {
+  from {
+    transform: scaleY(0.25);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-ambient,
+  .ob-caret,
+  .ob-bar {
+    animation: none;
+  }
+}
+
+/* An item the agent's edit just touched: a short amber glow as it settles in (Timeline's landed()). */
+@keyframes agent-land {
+  0% {
+    opacity: 0.35;
+    transform: scaleY(0.82);
+    box-shadow: 0 0 0 0 rgba(245, 165, 36, 0);
+  }
+  35% {
+    opacity: 1;
+    transform: scaleY(1);
+    box-shadow:
+      0 0 0 2px rgba(245, 165, 36, 0.55),
+      0 0 18px rgba(245, 165, 36, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 165, 36, 0);
+  }
+}
+.agent-land-a {
+  animation: agent-land 900ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+/* The same, under another name: switching name replays it for the next edit. */
+.agent-land-b {
+  animation: agent-land 900ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-name: agent-land-b;
+}
+@keyframes agent-land-b {
+  0% {
+    opacity: 0.35;
+    transform: scaleY(0.82);
+    box-shadow: 0 0 0 0 rgba(245, 165, 36, 0);
+  }
+  35% {
+    opacity: 1;
+    transform: scaleY(1);
+    box-shadow:
+      0 0 0 2px rgba(245, 165, 36, 0.55),
+      0 0 18px rgba(245, 165, 36, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 165, 36, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-land-a,
+  .agent-land-b {
     animation: none;
   }
 }

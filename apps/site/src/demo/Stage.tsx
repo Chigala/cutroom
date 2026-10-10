@@ -304,11 +304,13 @@ export function Stage({ look, seeing, running, onTime, face }: StageProps) {
       last = now;
       const s = state.current;
       if (!props.current.running) return;
-      if (v.readyState >= 2) {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, tVid);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, v);
-      }
+      // Nothing is drawn until the video has a frame: until then (or for good, where a phone won't play
+      // it, as iOS in Low Power Mode won't) the still behind the canvas shows the person, never black.
+      if (v.readyState < 2) return;
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tVid);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, v);
+      if (cv.style.opacity !== "1") cv.style.opacity = "1";
       const mix = Math.min(1, (now - s.start) / 1200);
       s.see += ((s.seeing ? 1 : 0) - s.see) * Math.min(1, dt * 6);
       s.textIn += (1 - s.textIn) * Math.min(1, dt * (mix > 0.4 ? 4 : 0));
@@ -341,11 +343,14 @@ export function Stage({ look, seeing, running, onTime, face }: StageProps) {
         crossOrigin="anonymous"
         className="pointer-events-none absolute size-px opacity-0"
       />
+      <div className="absolute inset-0 bg-[url(/demo/creator.jpg)] bg-cover" />
+      {/* Shown once it has drawn a frame of the video, over the still. */}
       <canvas
         ref={canvas}
         width={432}
         height={820}
-        className="absolute inset-0 size-full bg-[url(/demo/creator.jpg)] bg-cover"
+        style={{ opacity: 0 }}
+        className="absolute inset-0 size-full transition-opacity duration-500"
       />
     </>
   );

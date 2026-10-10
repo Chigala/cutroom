@@ -1,5 +1,7 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { Segmented } from "../../components/ui.tsx";
+import { swap } from "../../lib/motion.ts";
 import { setUi, useUi } from "../../state/ui.ts";
 import { Checks } from "./Checks.tsx";
 import { ExportSettings } from "./ExportSettings.tsx";
@@ -24,13 +26,22 @@ export function SidePanel() {
   return (
     <aside className="flex min-h-0 w-[320px] shrink-0 flex-col gap-3.5 border-l border-line bg-panel p-4">
       <Segmented value={tab} options={TABS} onChange={(sideTab) => setUi({ sideTab })} />
-      <div className="flex min-h-0 flex-1 flex-col">
-        {tab === "story" && <Story />}
-        {tab === "transcript" && <WordsTab />}
-        {tab === "library" && <Library />}
-        {tab === "files" && <Files />}
-        {tab === "export" && <ExportSettings />}
-      </div>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, transition: { duration: 0.08 } }}
+          transition={swap}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {tab === "story" && <Story />}
+          {tab === "transcript" && <WordsTab />}
+          {tab === "library" && <Library />}
+          {tab === "files" && <Files />}
+          {tab === "export" && <ExportSettings />}
+        </motion.div>
+      </AnimatePresence>
       <Checks />
     </aside>
   );

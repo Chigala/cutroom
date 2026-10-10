@@ -31,7 +31,7 @@ export function Dialog({
       }}
       aria-label={title}
       // Never taller than the window: the title stays put and only the contents scroll.
-      className="m-auto max-h-[calc(100vh-48px)] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-2xl border border-line-strong bg-panel p-0 text-fg shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-[2px] open:flex open:animate-rise"
+      className="m-auto max-h-[calc(100vh-48px)] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-2xl border border-line-strong bg-panel p-0 text-fg shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-[2px] open:flex open:animate-dialog-in backdrop:animate-backdrop-in"
       style={{ width }}
     >
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3.5">

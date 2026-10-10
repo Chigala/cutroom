@@ -79,6 +79,7 @@ import {
   type AssetEntry,
   ATTACHMENTS_DIR,
   anchorAt,
+  applyOps,
   assetId,
   CACHE_DIR,
   CHAT_LOG,
@@ -313,8 +314,47 @@ export class ProjectService {
    * Resolves a media:// key to a file the open project references; nothing else is reachable.
    * "<id>" is the clip itself, "<id>?proxy" its preview copy, "sfx/<name>" a built-in sound.
    */
-  resolveMedia = (key: string, query: string): Promise<string | null> =>
-    this.resolveIn(this.store?.doc ?? null, key, query);
+  resolveMedia = async (key: string, query: string): Promise<string | null> =>
+    (await this.resolveIn(this.store?.doc ?? null, key, query)) ?? this.resolveInDraft(key, query);
+
+  /**
+   * A clip that's only in a running request's draft so far (a track it just found, footage it just
+   * made): the preview shows the draft, so it asks for them before they're saved. Answering "not found"
+   * then left the player failed even once the edit was applied (the same address, never asked again).
+   */
+  private async resolveInDraft(key: string, query: string): Promise<string | null> {
+    const store = this.store;
+    if (!store) return null;
+    for (const [runId, held] of this.partials) {
+      if (held.dir !== store.dir || held.ops.length === 0) continue;
+      const draft = this.draftDoc(runId, store, held.ops);
+      if (!draft) continue;
+      const file = await this.resolveIn(draft, key, query);
+      if (file) return file;
+    }
+    return null;
+  }
+
+  /**
+   * A run's draft, built once per change it makes rather than once per request: a playing clip asks for
+   * its file many times a second. Rebuilt when the run adds a change or the project changes under it.
+   */
+  private drafts = new Map<string, { saved: ProjectDoc; count: number; doc: ProjectDoc | null }>();
+
+  private draftDoc(runId: string, store: ProjectStore, ops: readonly Op[]): ProjectDoc | null {
+    const kept = this.drafts.get(runId);
+    if (kept && kept.saved === store.doc && kept.count === ops.length) return kept.doc;
+    // Runs that have ended leave nothing behind.
+    for (const id of this.drafts.keys()) if (!this.partials.has(id)) this.drafts.delete(id);
+    let doc: ProjectDoc | null = null;
+    try {
+      doc = applyOps(store.doc, ops).doc;
+    } catch {
+      // A draft that doesn't apply to the project as it is now: nothing to find in it.
+    }
+    this.drafts.set(runId, { saved: store.doc, count: ops.length, doc });
+    return doc;
+  }
 
   /**
    * A media key to a file, looked up in a given state of the project: the saved one, or the agent's

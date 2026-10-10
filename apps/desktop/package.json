@@ -1,7 +1,7 @@
 {
   "name": "@vedit/desktop",
   "productName": "Cutroom",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A video editor built for an AI agent to edit with you",
   "homepage": "https://getcutroom.studio",
   "desktopName": "cutroom.desktop",

@@ -5,7 +5,15 @@
  * never plays the animation, we place it at exactly frame / fps.
  */
 
-import { type Graphic, graphicParams, isScripted, parseGraphic, renderTemplate } from "@vedit/project";
+import {
+  type Graphic,
+  graphicParams,
+  isScripted,
+  KIT_CSS,
+  parseGraphic,
+  prepareKit,
+  renderTemplate,
+} from "@vedit/project";
 import DOMPurify from "dompurify";
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
@@ -134,7 +142,9 @@ export function GraphicView(props: GraphicViewProps) {
     const el = host.current;
     if (!el || result.html === null) return;
     root.current ??= el.shadowRoot ?? el.attachShadow({ mode: "open" });
-    root.current.innerHTML = result.html;
+    // The kit's building blocks go first, so the graphic's own CSS always wins.
+    root.current.innerHTML = `<style>${KIT_CSS}</style>${result.html}`;
+    prepareKit(root.current);
     sizeBars(root.current);
   }, [result.html]);
 

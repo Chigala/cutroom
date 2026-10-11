@@ -3,6 +3,7 @@ export * from "./diff.ts";
 export * from "./fonts.ts";
 export * from "./grading.ts";
 export * from "./graphic.ts";
+export * from "./graphic-kit.ts";
 export * from "./graphic-lint.ts";
 export * from "./graphic-preview.ts";
 export * from "./history.ts";

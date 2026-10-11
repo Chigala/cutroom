@@ -1,8 +1,7 @@
-import type { MotionReport } from "@vedit/bridge";
 import { emptyProject, type Op, type ProjectDoc } from "@vedit/project";
 import { describe, expect, it } from "vitest";
 import { finishReview } from "./review.ts";
-import type { Scratch, ToolContext } from "./tools.ts";
+import type { MotionReport, Scratch, ToolContext } from "./tools.ts";
 
 function talking(): ProjectDoc {
   return {
@@ -70,8 +69,7 @@ const placed = (doc: ProjectDoc, html: string): ProjectDoc => ({
 
 const clean: MotionReport = {
   issues: [],
-  metrics: { entries: 1, onBeat: null, graphicSeconds: 2, faceCovered: 0, faces: 0 },
-  elapsedMs: 1,
+  metrics: { entries: 1, onBeat: null, graphicSeconds: 2, faceCovered: 0, faces: false },
 };
 
 describe("finishReview", () => {

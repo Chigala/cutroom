@@ -24,6 +24,7 @@ import {
   STALL_MS,
   Stalled,
   StepLimit,
+  Stuck,
   toolActivity,
   Watchdog,
 } from "./types.ts";
@@ -78,7 +79,16 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
   run.signal?.addEventListener("abort", onAbort, { once: true });
   // A connection that goes quiet for good: stop, and keep what was done (runAgent).
   const watchdog = new Watchdog(STALL_MS, () => abort.abort());
-  const ctx: ToolContext = { ...outer, running: (busy) => watchdog.tool(busy) };
+  // A run stuck repeating a failure (runTool's streak) ends here, keeping its work (runAgent).
+  let stuck = "";
+  const ctx: ToolContext = {
+    ...outer,
+    running: (busy) => watchdog.tool(busy),
+    halt: (why) => {
+      stuck = why;
+      abort.abort();
+    },
+  };
   let summary = "";
   let turnText = "";
   let thinkingStarts = false;
@@ -222,6 +232,7 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
     return summary.trim();
   } catch (err) {
     if (run.signal?.aborted) throw new AgentError("Stopped");
+    if (stuck) throw new Stuck(summary, stuck);
     if (watchdog.stalled) throw new Stalled(summary);
     if (err instanceof AgentError) throw err;
     const msg = (err as Error).message ?? String(err);

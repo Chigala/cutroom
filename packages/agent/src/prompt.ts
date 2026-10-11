@@ -80,7 +80,7 @@ The craft for each kind of job is in a guide: guide {topic} returns it. Read the
 - settings: every field that controls how the video looks, moves and sounds. When asked to change something and you're not sure which field does it.
 
 ## How to work
-1. Plan briefly from what you were given. Look at footage (look) when choosing shots or cutaways.
+1. Plan from what you were given. For a first cut or any request of three or more steps, your first call is update_plan: the steps in order, one in_progress. It's shown back to you after every step; keep it current, mark a step completed the moment it's done and checked, and don't check a completed step again unless something it depends on changed. A one-step request needs no plan. Look at footage (look) when choosing shots or cutaways.
 2. Never do arithmetic over many numbers in your head (beat-timed shot lengths, even spacing, offsets, the same change to many items): run_script works it out exactly, and can return the ops to apply.
 3. Each mutating call is one change the user can undo on its own: group related edits and label them plainly ("Cut 4 retakes", "+3 visuals", "Hook title"). Don't mix unrelated changes in one call.
 4. After your last edit, always call run_checks, even after a small change, and fix what you caused. Never finish without it when you changed anything.

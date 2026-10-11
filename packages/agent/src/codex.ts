@@ -20,6 +20,7 @@ import {
   STALL_MS,
   Stalled,
   StepLimit,
+  Stuck,
   toolActivity,
   Watchdog,
 } from "./types.ts";
@@ -151,7 +152,16 @@ export function codexLimits(snapshot: {
 export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise<string> {
   const cwd = await mkdtemp(path.join(tmpdir(), "cutroom-codex-"));
   const watchdog = new Watchdog(STALL_MS, () => stop("stalled"));
-  const ctx: ToolContext = { ...outer, running: (busy) => watchdog.tool(busy) };
+  // A run stuck repeating a failure (runTool's streak) ends here, keeping its work (runAgent).
+  let stuck = "";
+  const ctx: ToolContext = {
+    ...outer,
+    running: (busy) => watchdog.tool(busy),
+    halt: (why) => {
+      stuck = why;
+      stop("limit");
+    },
+  };
   let server: CodexServer | null = null;
   let threadId = "";
   let turnId = "";
@@ -382,13 +392,13 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
     reply = lastText;
     if (stopped === "user") throw new AgentError("Stopped");
     if (stopped === "stalled") throw new Stalled(reply);
-    if (stopped === "limit") throw new StepLimit(reply);
+    if (stopped === "limit") throw stuck ? new Stuck(reply, stuck) : new StepLimit(reply);
     if (end.status === "failed") throw new AgentError(friendly(end.error ?? "Codex stopped with an error."));
     return reply.trim();
   } catch (err) {
     if (run.signal?.aborted || stopped === "user") throw new AgentError("Stopped");
     if (stopped === "stalled") throw new Stalled(reply);
-    if (stopped === "limit") throw new StepLimit(reply);
+    if (stopped === "limit") throw stuck ? new Stuck(reply, stuck) : new StepLimit(reply);
     if (err instanceof AgentError) throw err;
     throw new AgentError(friendly((err as Error).message));
   } finally {

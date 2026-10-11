@@ -20,6 +20,17 @@ export class StepLimit extends AgentError {
   }
 }
 
+/** The agent kept repeating a call that failed the same way: stopped early, keeping what it did. */
+export class Stuck extends StepLimit {
+  override name = "Stuck";
+  constructor(
+    partial: string,
+    readonly why: string,
+  ) {
+    super(partial, `Stopped: ${why}.`);
+  }
+}
+
 /** Claude went silent mid-request (a stalled connection). What it did so far is kept, like StepLimit. */
 export class Stalled extends StepLimit {
   override name = "Stalled";
@@ -114,6 +125,7 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   fields: "Checking the fields",
   read_graphic: "Reading a graphic",
   guide: "Reading the guide",
+  update_plan: "Planning",
   design: "Deciding the design",
   write_graphic: "Designing a graphic",
   edit_graphic: "Refining a graphic",

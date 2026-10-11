@@ -257,6 +257,14 @@ export interface Scratch {
   /** References studied this request (inspiration measure), by clip. */
   studied?: Map<string, ReferenceStudy>;
   revisions?: Map<string, { count: number; looks: number }>;
+  /** The request's plan (update_plan): its steps, each pending, in progress or completed. */
+  plan?: { content: string; status: "pending" | "in_progress" | "completed" }[];
+  /** A first cut or big request: the agent is asked for a plan before anything else. */
+  planWanted?: boolean;
+  /** The last look: what was asked and the project it saw, so the same look at the same project is skipped. */
+  lastLook?: { key: string; doc: ProjectDoc };
+  /** The run of identical tool calls just made (stuck detection in runTool). */
+  streak?: { key: string; count: number; failing: number; reminded: boolean };
   /** Graphics being designed in the background (make_graphics), by id: what each came to, once done. */
   pending?: Map<string, Promise<string>>;
   /** The guides read this request (guide), so a tool that needs one asks only once. */
@@ -284,6 +292,8 @@ export interface ToolContext {
    * HTML once written, looked at and refined. make_graphics runs several at once.
    */
   graphicMaker?(id: string, brief: string): Promise<string>;
+  /** Ends the request now, keeping what's done (the harness's own stop): a run stuck repeating a failure. */
+  halt?(why: string): void;
 }
 
 /** How long a tool waits for a clip that's still being indexed (an attachment, usually under a minute). */
@@ -619,6 +629,58 @@ const Label = z
   .max(80)
   .describe('Short human label for this change, e.g. "+3 zooms" or "Cut the retakes"');
 
+/** The plan as the agent sees it after every step: what's done, what's on now, what's left. */
+export function planView(steps: NonNullable<Scratch["plan"]>): string {
+  const mark = { completed: "x", in_progress: ">", pending: " " } as const;
+  const done = steps.filter((s) => s.status === "completed").length;
+  return [
+    `Plan (${done} of ${steps.length} done):`,
+    ...steps.map((s) => `[${mark[s.status]}] ${s.content}`),
+  ].join("\n");
+}
+
+/** Identical calls in a row before the agent is nudged to change course, and failing ones before it stops. */
+const STREAK_NUDGE = 5;
+const STREAK_STOP = 8;
+
+/**
+ * What runTool adds to a result: a nudge when the same call keeps repeating (and the stop when it keeps
+ * failing the same way), the first-step reminder to plan, and the plan itself after every step.
+ */
+function afterCall(name: string, key: string, result: ToolResult, ctx: ToolContext): ToolResult {
+  const notes: string[] = [];
+  const failed = Boolean(result.isError);
+  const prev = ctx.scratch.streak;
+  const streak =
+    prev?.key === key
+      ? { ...prev, count: prev.count + 1, failing: failed ? prev.failing + 1 : 0 }
+      : { key, count: 1, failing: failed ? 1 : 0, reminded: false };
+  ctx.scratch.streak = streak;
+  if (streak.failing >= STREAK_STOP) {
+    ctx.halt?.(`it called ${name} the same way ${streak.failing} times and it kept failing`);
+    notes.push(`Stopped: ${name} failed the same way ${streak.failing} times.`);
+  } else if (!streak.reminded && (streak.count >= STREAK_NUDGE || streak.failing >= STREAK_NUDGE)) {
+    streak.reminded = true;
+    notes.push(
+      streak.failing >= STREAK_NUDGE
+        ? `You've called ${name} with the same input ${streak.failing} times and it keeps failing the same way. Repeating it won't work: read the error, then try something different, or step back and change the plan. Don't make this call again.`
+        : `You've called ${name} with the same input ${streak.count} times: you already have this result. Move on to the next step instead of repeating it.`,
+    );
+  }
+  if (name !== "update_plan") {
+    const plan = ctx.scratch.plan;
+    if (plan) notes.push(planView(plan));
+    else if (ctx.scratch.planWanted) {
+      // Asked once: a first cut or big request gets a plan before the work.
+      ctx.scratch.planWanted = false;
+      notes.push(
+        "You haven't made a plan yet: call update_plan now to lay out this request's steps, then keep it current.",
+      );
+    }
+  }
+  return notes.length ? { ...result, text: `${result.text}\n\n${notes.join("\n\n")}` } : result;
+}
+
 /** A tool whose job needs a guide asks for it first, once a request: the refusal says which. */
 function needsGuide(ctx: ToolContext, topic: GuideTopic, also = ""): ToolResult | null {
   if (ctx.scratch.guides?.has(topic)) return null;
@@ -637,6 +699,32 @@ export const TOOLS: readonly AgentTool[] = [
       ctx.scratch.guides ??= new Set();
       ctx.scratch.guides.add(topic);
       return { text: GUIDES[topic] };
+    },
+  }),
+  tool({
+    name: "update_plan",
+    description:
+      "This request's plan, shown back after every step. Send the whole list each time; one step in_progress; completed once done and checked.",
+    input: z.object({
+      steps: z
+        .array(
+          z.object({
+            content: z.string().min(2).max(200),
+            status: z.enum(["pending", "in_progress", "completed"]),
+          }),
+        )
+        .min(1)
+        .max(30),
+    }),
+    async run({ steps }, ctx) {
+      const active = steps.filter((s) => s.status === "in_progress").length;
+      if (active > 1)
+        return {
+          text: "Keep exactly one step in_progress: finish one before starting the next.",
+          isError: true,
+        };
+      ctx.scratch.plan = steps;
+      return { text: planView(steps) };
     },
   }),
   tool({
@@ -1076,7 +1164,7 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
   tool({
     name: "make_graphics",
     description:
-      "Design the video's set of graphics at once, in the background, each by an agent of its own in this video's design. Give each an id and a brief: what it shows, its params, layout, how it moves. Carry on with the cut and captions meanwhile; graphics_ready brings them in.",
+      "Design the video's graphics at once in the background, each by its own agent in this design. Each: an id and a brief (what it shows, params, layout, motion). Carry on cutting; graphics_ready brings them in.",
     input: z.object({
       graphics: z
         .array(
@@ -1131,7 +1219,7 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
   }),
   tool({
     name: "graphics_ready",
-    description: "Wait for the graphics make_graphics is designing, and get each one's params to place it.",
+    description: "Wait for make_graphics' graphics; returns each one's params.",
     input: z.object({}),
     async run(_input, ctx) {
       const pending = ctx.scratch.pending;
@@ -1450,7 +1538,7 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
   tool({
     name: "look",
     description:
-      "See frames. Give output times to see the finished video as it renders now (graphics, captions, motion and all, with any graphic errors). Give around (a cut's time) instead to see a strip of consecutive frames either side of it in one picture, with a red bar where the cut falls: that's how to check a cut, a flash, a black frame or a jump, which single stills miss. Give a graphic id (with params and layout) and times into it to see that graphic on its own over a shot, without placing it. Give a clip id with times in that clip to look at raw footage. Use it to find the best moments, check framing and verify your graphics. Up to 6 frames per call.",
+      "See frames. Output times: the finished video as it renders now (with any graphic errors). around (a cut's time): consecutive frames either side of it in one picture, a red bar at the cut, to check a cut, flash, black frame or jump. A graphic id (with params, layout) and times into it: that graphic alone over a shot, unplaced. A clip id with clip times: raw footage. Up to 6 frames per call.",
     input: z.object({
       source: z.string().optional().describe("Clip id: look at raw footage at times in that clip"),
       graphic: z
@@ -1488,6 +1576,13 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       times: z.array(z.number().min(0)).min(1).max(6).optional(),
     }),
     async run({ source, graphic, params, layout, shape, cover, around, step, times = [] }, ctx) {
+      // The same look at an unchanged project shows the same frames: say so instead of sending them again.
+      const key = JSON.stringify({ source, graphic, params, layout, shape, cover, around, step, times });
+      if (ctx.scratch.lastLook?.key === key && ctx.scratch.lastLook.doc === ctx.scratch.doc)
+        return {
+          text: "Nothing has changed since your last look at exactly this, so the frames are the same as above. Change something first, or look at other times.",
+        };
+      ctx.scratch.lastLook = { key, doc: ctx.scratch.doc };
       ctx.scratch.looks = (ctx.scratch.looks ?? 0) + 1;
       if (!times.length && !cover && (around === undefined || source || graphic))
         return {
@@ -2547,9 +2642,15 @@ export async function runTool(name: string, input: unknown, ctx: ToolContext): P
         );
       }),
     ]);
+    result = afterCall(name, JSON.stringify(parsed.data), result, ctx);
     return result;
   } catch (err) {
-    result = { text: `Tool failed: ${(err as Error).message}`, isError: true };
+    result = afterCall(
+      name,
+      JSON.stringify(parsed.data),
+      { text: `Tool failed: ${(err as Error).message}`, isError: true },
+      ctx,
+    );
     return result;
   } finally {
     clearTimeout(timer);

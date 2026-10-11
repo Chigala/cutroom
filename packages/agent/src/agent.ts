@@ -16,7 +16,7 @@ import { GUIDES } from "./guides.ts";
 import { HARNESSES } from "./harness.ts";
 import { finishReview } from "./review.ts";
 import { type AgentHost, refitMusic, type Scratch, snapCutsToBeat, type ToolContext } from "./tools.ts";
-import { type Backend, type Effort, Stalled, StepLimit } from "./types.ts";
+import { type Backend, type Effort, Stalled, StepLimit, Stuck } from "./types.ts";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
@@ -79,7 +79,9 @@ export function defaultBackend(): Backend {
 }
 
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
-  const scratch: Scratch = { doc: opts.doc, ops: [], groups: [] };
+  // A first cut or big request is planned first (update_plan): it keeps a long run on track and stops it
+  // re-checking what's done.
+  const scratch: Scratch = { doc: opts.doc, ops: [], groups: [], planWanted: opts.review !== "light" };
   // Indexing that lands meanwhile goes into the copy too (the host's commit of the agent's ops sits on
   // top of it all the same). One about a clip the agent has since removed isn't needed.
   const unsubscribe = opts.indexed?.((ops) => {
@@ -184,13 +186,18 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
         // it all away.
         if (!(err instanceof StepLimit) || !scratch.ops.length) throw err;
         const stalled = err instanceof Stalled;
+        const stuck = err instanceof Stuck ? err.why : "";
         ctx.step(
-          stalled ? `${harness.name} stopped responding` : "Ran out of steps before finishing",
+          stuck
+            ? "Stopped repeating a failing step"
+            : stalled
+              ? `${harness.name} stopped responding`
+              : "Ran out of steps before finishing",
           "warn",
         );
         const summary = [
           err.partial,
-          `${stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
+          `${stuck ? `I stopped because ${stuck}` : stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
         ]
           .filter(Boolean)
           .join("\n\n");

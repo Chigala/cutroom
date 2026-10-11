@@ -8,6 +8,8 @@ import { readSecrets, SECRET_FIELDS, type SecretField, type Secrets, writeSecret
 export const paths = {
   settings: () => path.join(app.getPath("userData"), "settings.json"),
   recent: () => path.join(app.getPath("userData"), "recent.json"),
+  /** The designs of recent videos, so a new one's can be held apart from them (designs.ts). */
+  designs: () => path.join(app.getPath("userData"), "designs.json"),
   /** The projects (folders of videos) in the sidebar. */
   folders: () => path.join(app.getPath("userData"), "folders.json"),
   demo: () => path.join(app.getPath("userData"), "Demo Project"),

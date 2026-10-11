@@ -123,6 +123,7 @@ import { capturePage } from "./capture.ts";
 import { claudeStatus, claudeTasks } from "./claude.ts";
 import { codexStatus } from "./codex.ts";
 import { makeNeededCutouts } from "./cutouts.ts";
+import { recentDesigns, recordDesign } from "./designs.ts";
 import { Downloads } from "./downloads.ts";
 import { Exporter, entry as renderEntry } from "./exporter.ts";
 import {
@@ -1613,6 +1614,7 @@ export class ProjectService {
     // In the background, the library's "project" assets are the open project's: only the shared ones.
     const here = () => store === this.store;
     return {
+      recentDesigns: () => recentDesigns(paths.designs(), store.dir),
       frame: async (sourceId, time, width) => {
         const src = store.doc.sources.find((s) => s.id === sourceId);
         if (!src?.path) throw new Error("no such clip");
@@ -2025,8 +2027,9 @@ export class ProjectService {
       .then(handEdits)
       .catch(() => []);
 
+    const before = store.doc;
     void runAgent({
-      doc: store.doc,
+      doc: before,
       prompt: req.prompt,
       context: req.context,
       history: req.history,
@@ -2072,6 +2075,11 @@ export class ProjectService {
             ops: result.ops,
             groups: result.groups,
           });
+          // This video's design, kept so the next video's can be held apart from it.
+          if (JSON.stringify(result.doc.design) !== JSON.stringify(before.design))
+            void recordDesign(paths.designs(), store.dir, store.doc.meta.name, store.doc.design).catch(
+              (err) => console.warn(`[designs] not recorded: ${(err as Error).message}`),
+            );
           // Music the agent found still needs its waveform measured (in the background: when it's opened).
           if (store === this.store)
             this.indexer.enqueue(store.doc.sources.filter((s) => s.status === "pending").map((s) => s.id));

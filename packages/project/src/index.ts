@@ -1,4 +1,5 @@
 export * from "./caption-looks.ts";
+export * from "./design.ts";
 export * from "./diff.ts";
 export * from "./fonts.ts";
 export * from "./grading.ts";

@@ -1513,6 +1513,33 @@ export const Comment = z.object({
 });
 export type Comment = z.infer<typeof Comment>;
 
+/**
+ * design.json: this video's own design, decided before its first graphic so every graphic, title and
+ * transition shares one system, and so this video doesn't look like the last one. The agent writes it
+ * (the design tool); look.accent and look.font follow its palette and display face.
+ */
+export const Design = z.object({
+  idea: z
+    .string()
+    .max(300)
+    .default("")
+    .describe("The look in one line: what it should feel like, and why that fits this video's subject"),
+  palette: z.array(Color).max(6).default([]).describe("The accent first, then the neutrals"),
+  display: z.string().max(80).default("").describe("Display face: kinetic words, titles, numbers"),
+  text: z.string().max(80).default("").describe("Text face: labels and small type"),
+  motion: z
+    .string()
+    .max(200)
+    .default("")
+    .describe("Its motion language: the curve family, the direction things travel, the energy"),
+  graphics: z
+    .array(z.string().max(60))
+    .max(12)
+    .default([])
+    .describe("The kinds of graphic designed for this video (a route map, a price tag, a rep counter)"),
+});
+export type Design = z.infer<typeof Design>;
+
 /** Collections are lists of items with ids; singletons are whole values. Ops address both. */
 export const CollectionSchemas = {
   sources: Source,
@@ -1550,6 +1577,7 @@ export const SingletonSchemas = {
   checkRules: CheckRules,
   look: Look,
   cover: Cover,
+  design: Design,
   style: z.string().max(20_000),
 } as const;
 

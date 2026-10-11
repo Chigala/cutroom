@@ -3,6 +3,7 @@
  * Agent SDK). Mutating tools work on a scratch copy of the project; each call becomes one labelled,
  * separately undoable change. Inputs are zod schemas, validated before anything runs.
  */
+
 import type { ToolCall } from "@vedit/bridge";
 import { beatCutOps, runChecks } from "@vedit/checks";
 import type {
@@ -17,6 +18,7 @@ import type {
   StockOrientation,
 } from "@vedit/media";
 import { frameStrip } from "@vedit/media";
+import type { PastDesign } from "@vedit/project";
 import {
   type AssetEntry,
   applyOps,
@@ -29,6 +31,7 @@ import {
   cutReport,
   DERIVED,
   describeSound,
+  designEchoes,
   fontFromFile,
   gradeColorOf,
   graphicPreviewDoc,
@@ -140,6 +143,8 @@ export interface AgentHost {
     kind: StockKind,
     orientation: StockOrientation,
   ): Promise<{ candidates: StockCandidate[]; sheet: Buffer | null }>;
+  /** The designs of the user's recent videos (other projects), newest first. */
+  recentDesigns?(): Promise<PastDesign[]>;
   /** Measures the motion of the rendered video: flicker, pops, dead stops, graphics over faces, and more. */
   senseMotion?(doc: ProjectDoc): Promise<MotionReport>;
   /** Measures how every dialogue cut sounds: level, pitch and room either side, the pause, mid-sound. */
@@ -899,9 +904,59 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
     },
   }),
   tool({
+    name: "design",
+    description:
+      "This video's own design, before its first graphic: the look and why it fits, palette (accent first), faces, motion, graphic kinds. Sets look.accent and look.font; refused if it repeats a recent video's.",
+    input: z.object({
+      label: Label,
+      idea: z.string().min(10).max(300),
+      palette: z
+        .array(z.string().regex(/^#[0-9a-fA-F]{6}$/, "colors are #rrggbb"))
+        .min(2)
+        .max(6),
+      display: z.string().min(1).max(80),
+      text: z.string().min(1).max(80),
+      motion: z.string().min(10).max(200),
+      graphics: z.array(z.string().min(1).max(60)).min(1).max(12),
+    }),
+    async run({ label, ...design }, ctx) {
+      const echoes = designEchoes(design, (await ctx.host.recentDesigns?.()) ?? []);
+      if (echoes.length)
+        return {
+          text: [
+            "Not saved: this repeats a recent video's design, and every video gets its own.",
+            ...echoes.map((e) => `- "${e.name}": ${e.traits.join(", ")}`),
+            "Change what it repeats (a different pairing of faces, another accent, a different motion language or graphic kinds that come from this video's subject), then call design again.",
+          ].join("\n"),
+          isError: true,
+        };
+      const doc = ctx.scratch.doc;
+      const families = new Set([...BUNDLED_FONTS.map((f) => f.family), ...doc.fonts.map((f) => f.family)]);
+      const missing = [design.display, design.text].filter(
+        (f, i, all) => !families.has(f) && all.indexOf(f) === i,
+      );
+      const result = commit(ctx, label, [
+        { op: "set", key: "design", value: design },
+        { op: "merge", key: "look", patch: { accent: design.palette[0], font: design.display } },
+      ]);
+      if (result.isError) return result;
+      return {
+        text: [
+          "Saved design.json; look.accent and look.font follow it.",
+          missing.length
+            ? `Not in the project yet: ${missing.join(", ")}. find_font it and add_font the weights you'll use, or the closest bundled face shows instead.`
+            : "",
+          "Build its graphics from the kit (KIT in the graphics format): its curves, entrances and exits, data-split, data-fit and the safe-area helpers, styled in this design.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      };
+    },
+  }),
+  tool({
     name: "write_graphic",
     description:
-      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (canvas; "libs" in the header for GSAP and its plugins, D3 or Chart.js charts, Rough.js sketches, three.js, Matter.js physics (graphic.physics) or Lottie; graphic.particles for confetti, sparks, snow, embers, bokeh); no network. See the system prompt for the format. Then check it with look {graphic, params, times}: 5-6 times across it (just in, entrance, middle, just before the exit), which shows it alone over a shot without touching the timeline. Once placed, look at output times to check it in context.',
+      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (libs in the header); no network. Build it from the kit; the graphics guide has the format. Then look {graphic, params, times} at 5-6 times across it (alone over a shot, off the timeline: just in, entrance, middle, before the exit), and in context once placed.',
     input: z.object({
       label: Label,
       id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, "lower-case letters, digits and dashes"),
@@ -911,6 +966,11 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       const problem = validateGraphic(html);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const exists = ctx.scratch.doc.graphics.some((g) => g.id === id);
+      if (!exists && !ctx.scratch.doc.design.idea)
+        return {
+          text: "Not saved: decide this video's design first (design: its palette, faces, motion and graphic kinds), so every graphic you write shares it and the video doesn't look like the last one.",
+          isError: true,
+        };
       ctx.scratch.graphicErrors?.delete(id);
       const result = commit(ctx, label, [
         exists

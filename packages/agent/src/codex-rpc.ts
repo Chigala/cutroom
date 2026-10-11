@@ -76,6 +76,8 @@ export class CodexServer {
       this.ended(err);
     };
     this.child.on("error", (err) => end(err));
+    // Writing to a Codex that just died (EPIPE) would otherwise throw out of the app: its exit says why.
+    this.child.stdin?.on("error", () => {});
     this.child.on("exit", (code) =>
       end(
         new CodexError(

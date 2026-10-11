@@ -99,8 +99,17 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     const attached = (opts.attachments ?? [])
       .map((id) => opts.doc.sources.find((s) => s.id === id))
       .filter((s) => s !== undefined);
+    const recent = opts.doc.design.idea ? [] : ((await opts.host.recentDesigns?.().catch(() => [])) ?? []);
     let run = {
-      prompt: buildPrompt(opts.doc, opts.prompt, opts.context, opts.history ?? [], attached, opts.handEdits),
+      prompt: buildPrompt(
+        opts.doc,
+        opts.prompt,
+        opts.context,
+        opts.history ?? [],
+        attached,
+        opts.handEdits,
+        recent,
+      ),
       images: await attachmentImages(attached, opts.host),
       model: opts.model ?? DEFAULT_MODEL,
       effort: opts.effort ?? "medium",

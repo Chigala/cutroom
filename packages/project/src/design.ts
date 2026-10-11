@@ -15,6 +15,9 @@ export interface PastDesign {
 /** How many shared traits make two designs too alike. */
 export const TOO_ALIKE = 3;
 
+/** What a viewer sees first: the same display face with nearly the same accent reads as the same look. */
+const FIRST_SEEN = ["the display face", "an accent of nearly the same hue"];
+
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase() && a.trim() !== "";
 
 /** Hue in degrees, and whether the colour has enough saturation for its hue to read. */
@@ -72,7 +75,19 @@ export function designEchoes(
   recent: readonly PastDesign[],
   brand = false,
 ): { name: string; traits: string[] }[] {
+  const seen = (traits: readonly string[]) => FIRST_SEEN.every((f) => traits.some((t) => t.startsWith(f)));
   return recent
     .map((p) => ({ name: p.name, traits: sharedTraits(design, p.design, brand) }))
-    .filter((e) => e.traits.length >= (brand ? 2 : TOO_ALIKE));
+    .filter((e) => e.traits.length >= (brand ? 2 : TOO_ALIKE) || (!brand && seen(e.traits)));
+}
+
+/** The recent designs, one line each, for the agent to steer clear of before it decides this one. */
+export function recentDesignsView(recent: readonly PastDesign[]): string {
+  return recent
+    .slice(0, 6)
+    .map(
+      (p) =>
+        `- ${p.name}: ${p.design.display || "?"} / ${p.design.text || "?"}, accent ${p.design.palette[0] ?? "?"}; ${p.design.motion || "?"}; ${p.design.graphics.join(", ") || "?"}`,
+    )
+    .join("\n");
 }

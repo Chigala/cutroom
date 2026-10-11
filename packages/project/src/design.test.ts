@@ -71,3 +71,26 @@ describe("designs under a brand kit", () => {
     ]);
   });
 });
+
+describe("what a viewer sees first", () => {
+  it("calls the same display face with nearly the same accent too alike, even with new motion", () => {
+    const amber = Design.parse({
+      display: "DM Serif Display",
+      text: "IBM Plex Mono",
+      palette: ["#F2A65A"],
+      motion: "lines draw first, then type follows",
+      graphics: ["dimension line", "title block"],
+    });
+    const ember = Design.parse({
+      display: "DM Serif Display",
+      text: "Inter Tight",
+      palette: ["#F0A43A"],
+      motion: "slow letterpress landings",
+      graphics: ["branded rope rule"],
+    });
+    expect(designEchoes(ember, [{ name: "Architect", design: amber }])[0]!.traits).toEqual([
+      "the display face (DM Serif Display)",
+      "an accent of nearly the same hue (#F0A43A and #F2A65A)",
+    ]);
+  });
+});

@@ -85,3 +85,24 @@ describe("guides", () => {
     expect(again.text).toContain("decide this video's design first");
   });
 });
+
+describe("the first message", () => {
+  it("shows recent designs to steer clear of, until this video has its own", async () => {
+    const { buildPrompt } = await import("./context.ts");
+    const recent = [{ name: "Pasta night", design: Design.parse(cooking) }];
+    const doc = emptyProject("Soup") as ProjectDoc;
+    const fresh = buildPrompt(doc, "Edit it", undefined, [], [], [], recent);
+    expect(fresh).toContain("<recent_designs>");
+    expect(fresh).toContain("- Pasta night: Inter Tight / IBM Plex Sans, accent #e8743b");
+    const designed = buildPrompt(
+      { ...doc, design: Design.parse(cooking) },
+      "Edit it",
+      undefined,
+      [],
+      [],
+      [],
+      recent,
+    );
+    expect(designed).not.toContain("<recent_designs>");
+  });
+});

@@ -6,7 +6,7 @@
 
 import type { MotionReport } from "@vedit/agent";
 import { runChecks } from "@vedit/checks";
-import { type ProjectDoc, timelineOf } from "@vedit/project";
+import { type Design, lintGraphic, type ProjectDoc, STARTER_GRAPHICS, timelineOf } from "@vedit/project";
 
 export interface EditScore {
   /** 0..100: 40 for the checks passing, 40 for clean motion, 20 for the basics of a finished short. */
@@ -30,6 +30,10 @@ export interface EditScore {
     readonly music: boolean;
     readonly cover: boolean;
   };
+  /** The graphics it placed: craft notes on them (graphic-lint), and how many are starters used as they are. */
+  readonly craft: { readonly notes: number; readonly starters: number };
+  /** The video's design, to compare across cases: every video should look like itself. */
+  readonly design: Design | null;
 }
 
 /** How much each kind of motion issue costs the score. */
@@ -66,6 +70,8 @@ export function scoreEdit(doc: ProjectDoc, motion: MotionReport | null): EditSco
     !!doc.cover.text.trim(),
   ];
   const basicShare = basics.filter(Boolean).length / basics.length;
+  const used = new Set(doc.visuals.flatMap((v) => (v.content.kind === "graphic" ? [v.content.graphic] : [])));
+  const placed = doc.graphics.filter((g) => used.has(g.id));
   return {
     score: Math.round(40 * checkShare + 40 * motionShare + 20 * basicShare),
     checks: {
@@ -93,5 +99,10 @@ export function scoreEdit(doc: ProjectDoc, motion: MotionReport | null): EditSco
       music: !!doc.music.source,
       cover: !!doc.cover.text.trim(),
     },
+    craft: {
+      notes: placed.reduce((n, g) => n + lintGraphic(g.html).length, 0),
+      starters: placed.filter((g) => STARTER_GRAPHICS.some((s) => s.html === g.html)).length,
+    },
+    design: doc.design.idea || doc.design.display ? doc.design : null,
   };
 }

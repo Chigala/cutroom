@@ -144,6 +144,7 @@ import { InspirationStore } from "./inspirations.ts";
 import { jevEndpoint, logInstant } from "./instant.ts";
 import { copyKitFiles, getKit, listKits, rememberInKit, removeKit, saveKit, withKit } from "./kits.ts";
 import { Library } from "./library.ts";
+import { modelName } from "./model-name.ts";
 import { onWindowsDrive } from "./platform.ts";
 import {
   copyProject,
@@ -2028,6 +2029,8 @@ export class ProjectService {
       .catch(() => []);
 
     const before = store.doc;
+    const effort =
+      thorough && (settings.effort === "low" || settings.effort === "medium") ? "high" : settings.effort;
     void runAgent({
       doc: before,
       prompt: req.prompt,
@@ -2041,8 +2044,7 @@ export class ProjectService {
       harness: settings.harness,
       model: settings.model,
       // A first cut thinks at least hard; a higher setting the user chose (xhigh, max) stays.
-      effort:
-        thorough && (settings.effort === "low" || settings.effort === "medium") ? "high" : settings.effort,
+      effort,
       review: thorough ? "full" : "light",
       showThinking: settings.showThinking,
       // A first cut reads, cuts, designs, looks, checks, measures and makes a cover: it needs room.
@@ -2092,6 +2094,7 @@ export class ProjectService {
           elapsedMs: Date.now() - started,
           summary: result.summary,
           ...(result.next && { next: result.next }),
+          ran: `${modelName(settings.harness, settings.model)} · ${effort}`,
         });
         this.notify(store, agent, result.summary || "Done.");
       })

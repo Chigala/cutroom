@@ -110,6 +110,8 @@ export type AgentEvent =
       readonly summary: string;
       /** What the editor might ask for next, in their words: offered in the composer (Tab takes it). */
       readonly next?: string;
+      /** Which agent did it, and how hard it thought ("Opus 5.5 · high"). */
+      readonly ran?: string;
     }
   /**
    * The work so far ended without finishing (stopped, or an error): `kept` change groups are held, for
@@ -509,6 +511,8 @@ export type ChatRecord =
       readonly commitId: string | null;
       readonly elapsedMs: number | null;
       readonly error: string | null;
+      /** Which agent did it, and how hard it thought. */
+      readonly ran?: string;
     }
   | { readonly kind: "note"; readonly at: number; readonly commitId: string };
 

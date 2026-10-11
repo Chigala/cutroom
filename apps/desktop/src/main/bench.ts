@@ -12,6 +12,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentEvent } from "@vedit/bridge";
+import { sharedTraits } from "@vedit/project";
 import { app } from "electron";
 import { z } from "zod";
 import { type EditScore, scoreEdit } from "./bench-score.ts";
@@ -195,6 +196,26 @@ function report(
         `Project: ${r.dir}`,
       ].join("\n");
     });
+  // Every video should look like itself: what the cases' designs share, pair by pair.
+  const designed = results.filter((r) => r.score?.design);
+  const echoes = designed.flatMap((a, i) =>
+    designed.slice(i + 1).flatMap((b) => {
+      const shared = sharedTraits(a.score!.design!, b.score!.design!);
+      return shared.length >= 2 ? [`- ${a.name} and ${b.name} share ${shared.join(", ")}`] : [];
+    }),
+  );
+  const variety = [
+    "## Variety",
+    `${designed.length} of ${results.length} cases set a design.`,
+    ...results
+      .filter((r) => r.score)
+      .map(
+        (r) =>
+          `- ${r.name}: ${r.score!.design ? `"${r.score!.design.idea}" (${r.score!.design.display} / ${r.score!.design.text}, ${r.score!.design.palette[0] ?? "no accent"})` : "no design"}; ${r.score!.craft.notes} craft notes on its graphics, ${r.score!.craft.starters} starters used as they are`,
+      ),
+    echoes.length ? "Too alike:" : "No two cases look alike.",
+    ...echoes,
+  ];
   return [
     `# Benchmark ${stamp}`,
     previous ? `Compared with ${previous.stamp}.` : "First run.",
@@ -204,6 +225,8 @@ function report(
     ...rows,
     "",
     ...details,
+    "",
+    ...variety,
     "",
   ].join("\n");
 }

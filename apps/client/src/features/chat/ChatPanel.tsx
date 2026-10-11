@@ -490,7 +490,7 @@ function Work({ run }: { run: AgentRun }) {
         {running ? (
           <span className="animate-pulse">{run.activity ?? "Reading the project…"}</span>
         ) : (
-          <span>
+          <span title={run.ran}>
             Worked for {took(run.elapsedMs ?? 0)}
             {summary && ` · ${summary}`}
           </span>

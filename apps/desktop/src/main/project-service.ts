@@ -2037,7 +2037,10 @@ export class ProjectService {
       backend: settings.backend,
       harness: settings.harness,
       model: settings.model,
-      effort: thorough && settings.effort !== "max" ? "high" : settings.effort,
+      // A first cut thinks at least hard; a higher setting the user chose (xhigh, max) stays.
+      effort:
+        thorough && (settings.effort === "low" || settings.effort === "medium") ? "high" : settings.effort,
+      review: thorough ? "full" : "light",
       showThinking: settings.showThinking,
       // A first cut reads, cuts, designs, looks, checks, measures and makes a cover: it needs room.
       maxTurns: thorough ? 90 : 40,

@@ -162,9 +162,12 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
   let thinking = "";
   // How the turn ended: Codex saying so, Codex gone, or a stop it didn't answer in time.
   let finish!: (end: { status: string; error?: string }) => void;
-  const done = new Promise<{ status: string; error?: string }>((resolve) => {
-    finish = resolve;
-  });
+  // Each turn's end; a review that sends the agent back starts another turn, with its own.
+  const turnEnd = () =>
+    new Promise<{ status: string; error?: string }>((resolve) => {
+      finish = resolve;
+    });
+  let done = turnEnd();
   let forced: ReturnType<typeof setTimeout> | undefined;
   const stop = (why: "user" | "stalled" | "limit") => {
     stopped ??= why;
@@ -340,18 +343,21 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
       console.warn(`[codex] instructions loaded besides Cutroom's: ${thread.instructionSources.join(", ")}`);
 
     const effort = nearestEffort(run.effort, model);
-    const turn = await live.request<{ turn: { id: string } }>("turn/start", {
-      threadId,
-      input: [
-        { type: "text", text: run.prompt, text_elements: [] },
-        ...(run.images ?? []).map((i) => ({ type: "image", url: `data:${i.mediaType};base64,${i.data}` })),
-      ],
-      ...(model && { model: model.model }),
-      ...(effort && { effort }),
-      summary: run.thinking === "omitted" ? "none" : "detailed",
-    });
-    turnId = turn.turn.id;
-    if (stopped) stop(stopped);
+    const startTurn = async (input: unknown[]) => {
+      const turn = await live.request<{ turn: { id: string } }>("turn/start", {
+        threadId,
+        input,
+        ...(model && { model: model.model }),
+        ...(effort && { effort }),
+        summary: run.thinking === "omitted" ? "none" : "detailed",
+      });
+      turnId = turn.turn.id;
+      if (stopped) stop(stopped);
+    };
+    await startTurn([
+      { type: "text", text: run.prompt, text_elements: [] },
+      ...(run.images ?? []).map((i) => ({ type: "image", url: `data:${i.mediaType};base64,${i.data}` })),
+    ]);
     void live
       .request<{ rateLimits: Parameters<typeof codexLimits>[0] }>("account/rateLimits/read")
       .then((r) => {
@@ -360,7 +366,15 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
       })
       .catch(() => {});
 
-    const end = await done;
+    let end = await done;
+    // The editor's review when it wants to stop: what falls short goes back to it as one more turn.
+    while (!stopped && end.status === "completed" && run.review) {
+      const fix = await run.review();
+      if (!fix) break;
+      done = turnEnd();
+      await startTurn([{ type: "text", text: fix, text_elements: [] }]);
+      end = await done;
+    }
     reply = lastText;
     if (stopped === "user") throw new AgentError("Stopped");
     if (stopped === "stalled") throw new Stalled(reply);

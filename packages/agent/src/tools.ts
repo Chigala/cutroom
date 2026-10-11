@@ -39,6 +39,8 @@ import {
   inspirationMeta,
   inspirationOps,
   type KitInfo,
+  lintGraphic,
+  lintView,
   lookDefaults,
   looseOpSchemaFor,
   type MotionTrack,
@@ -915,9 +917,13 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
           ? { op: "update", coll: "graphics", id, patch: { html } }
           : { op: "insert", coll: "graphics", item: { id, html } },
       ]);
-      return result.isError
-        ? result
-        : { text: `Saved graphics/${id}.html. Place it with a visual to use it.` };
+      if (result.isError) return result;
+      const notes = lintView(id, lintGraphic(html));
+      return {
+        text: [`Saved graphics/${id}.html. Place it with a visual to use it.`, notes]
+          .filter(Boolean)
+          .join("\n\n"),
+      };
     },
   }),
   tool({

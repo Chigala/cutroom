@@ -110,6 +110,21 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
         cwd: tmpdir(),
         abortController: abort,
         env: claudeEnv(),
+        // The editor's review when it wants to stop: what falls short goes back to it, and it carries on.
+        ...(run.review && {
+          hooks: {
+            Stop: [
+              {
+                hooks: [
+                  async () => {
+                    const fix = await run.review?.();
+                    return fix ? { decision: "block" as const, reason: fix } : {};
+                  },
+                ],
+              },
+            ],
+          },
+        }),
       },
     });
     for await (const message of stream) {

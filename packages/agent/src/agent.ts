@@ -13,6 +13,7 @@ import { applyOps, type ChangeGroup, type Op, type ProjectDoc, type Source } fro
 import { runWithApi } from "./api.ts";
 import { buildPrompt, type Turn } from "./context.ts";
 import { HARNESSES } from "./harness.ts";
+import { finishReview } from "./review.ts";
 import { type AgentHost, refitMusic, type Scratch, snapCutsToBeat, type ToolContext } from "./tools.ts";
 import { type Backend, type Effort, Stalled, StepLimit } from "./types.ts";
 
@@ -36,6 +37,11 @@ export interface AgentOptions {
   readonly effort?: Effort;
   /** Model turns before it has to stop (40 by default; a first cut needs more). */
   readonly maxTurns?: number;
+  /**
+   * The editor's review before the agent may finish (review.ts): "full" measures the motion whenever
+   * something that moves changed (first cuts, big requests); "light" only when it wrote a graphic.
+   */
+  readonly review?: "full" | "light";
   /** Stream its thinking to onThinking (default), or leave it out. */
   readonly showThinking?: boolean;
   readonly signal?: AbortSignal;
@@ -105,6 +111,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       onThinking: (delta: string, block?: boolean) => opts.onThinking?.(delta, block),
       onActivity: (text: string) => opts.onActivity?.(text),
       onUsage: (usage: AgentUsage) => opts.onUsage?.(usage),
+      review: finishReview(opts.doc, ctx, opts.review ?? "full"),
     };
     const backend = opts.backend ?? defaultBackend();
     const harness = HARNESSES[opts.harness ?? "claude"];

@@ -86,6 +86,11 @@ export interface BackendRun {
   onActivity(text: string): void;
   /** Context and plan-limit figures, as Claude reports them. */
   onUsage?(usage: AgentUsage): void;
+  /**
+   * Asked each time the agent wants to stop (review.ts): what it should fix first, sent back to it in the
+   * same conversation, or null to let it finish.
+   */
+  review?(): Promise<string | null>;
 }
 
 /** What each tool is doing, as a status line while it runs. */

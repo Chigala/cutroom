@@ -263,8 +263,12 @@ export interface Scratch {
   planWanted?: boolean;
   /** The last look: what was asked and the project it saw, so the same look at the same project is skipped. */
   lastLook?: { key: string; doc: ProjectDoc };
+  /** The look being taken now, remembered as lastLook once its frames come back. */
+  lookTry?: { key: string; doc: ProjectDoc };
   /** The run of identical tool calls just made (stuck detection in runTool). */
   streak?: { key: string; count: number; failing: number; reminded: boolean };
+  /** The request has returned: background work no longer lands in this copy. */
+  closed?: boolean;
   /** Graphics being designed in the background (make_graphics), by id: what each came to, once done. */
   pending?: Map<string, Promise<string>>;
   /** The guides read this request (guide), so a tool that needs one asks only once. */
@@ -649,6 +653,11 @@ const STREAK_STOP = 8;
  */
 function afterCall(name: string, key: string, result: ToolResult, ctx: ToolContext): ToolResult {
   const notes: string[] = [];
+  if (name === "look") {
+    if (!result.isError && result.images?.length && ctx.scratch.lookTry)
+      ctx.scratch.lastLook = ctx.scratch.lookTry;
+    ctx.scratch.lookTry = undefined;
+  }
   const failed = Boolean(result.isError);
   const prev = ctx.scratch.streak;
   const streak =
@@ -656,8 +665,8 @@ function afterCall(name: string, key: string, result: ToolResult, ctx: ToolConte
       ? { ...prev, count: prev.count + 1, failing: failed ? prev.failing + 1 : 0 }
       : { key, count: 1, failing: failed ? 1 : 0, reminded: false };
   ctx.scratch.streak = streak;
-  if (streak.failing >= STREAK_STOP) {
-    ctx.halt?.(`it called ${name} the same way ${streak.failing} times and it kept failing`);
+  if (streak.failing >= STREAK_STOP && ctx.halt) {
+    ctx.halt(`it called ${name} the same way ${streak.failing} times and it kept failing`);
     notes.push(`Stopped: ${name} failed the same way ${streak.failing} times.`);
   } else if (!streak.reminded && (streak.count >= STREAK_NUDGE || streak.failing >= STREAK_NUDGE)) {
     streak.reminded = true;
@@ -1184,6 +1193,15 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
           text: "Decide this video's design first (design): every graphic is made in it.",
           isError: true,
         };
+      // Each graphic's agent works on the project as it is now: the design's faces must be in it already.
+      const doc = ctx.scratch.doc;
+      const families = new Set([...BUNDLED_FONTS.map((f) => f.family), ...doc.fonts.map((f) => f.family)]);
+      const missing = [doc.design.display, doc.design.text].filter((f) => f && !families.has(f));
+      if (missing.length)
+        return {
+          text: `Add the design's faces first (add_font: ${missing.join(", ")}), so the graphics are made and sized in them. Then make_graphics.`,
+          isError: true,
+        };
       ctx.scratch.pending ??= new Map();
       const pending = ctx.scratch.pending;
       const make = ctx.graphicMaker;
@@ -1193,14 +1211,21 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
           g.id,
           make(g.id, g.brief).then(
             (html) => {
+              if (ctx.scratch.closed) return `${g.id}: finished after the request ended.`;
               const problem = validateGraphic(html);
               if (problem) return `${g.id}: came back unusable (${problem}); write it with write_graphic.`;
               const exists = ctx.scratch.doc.graphics.some((x) => x.id === g.id);
-              const saved = commit(ctx, `Graphic ${g.id}`, [
-                exists
-                  ? { op: "update", coll: "graphics", id: g.id, patch: { html } }
-                  : { op: "insert", coll: "graphics", item: { id: g.id, html } },
-              ]);
+              // Not in undo's list: undo takes back the agent's own last change, not one that landed meanwhile.
+              const saved = commit(
+                ctx,
+                `Graphic ${g.id}`,
+                [
+                  exists
+                    ? { op: "update", coll: "graphics", id: g.id, patch: { html } }
+                    : { op: "insert", coll: "graphics", item: { id: g.id, html } },
+                ],
+                false,
+              );
               if (saved.isError) return `${g.id}: not saved (${saved.text}).`;
               const { meta } = parseGraphic(html);
               const params = Object.entries(meta.params)
@@ -1582,7 +1607,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
         return {
           text: "Nothing has changed since your last look at exactly this, so the frames are the same as above. Change something first, or look at other times.",
         };
-      ctx.scratch.lastLook = { key, doc: ctx.scratch.doc };
+      // Remembered only once frames come back (afterCall): a failed render can be tried again.
+      ctx.scratch.lookTry = { key, doc: ctx.scratch.doc };
       ctx.scratch.looks = (ctx.scratch.looks ?? 0) + 1;
       if (!times.length && !cover && (around === undefined || source || graphic))
         return {
@@ -2434,9 +2460,11 @@ measure: true returns what the filters report instead: signalstats with metadata
       // The store picks the files up from fonts/ by name; this request's copy knows them now, so they
       // render in what it looks at before the request ends.
       const added = files.map((f) => fontFromFile(f)).filter((f) => f !== null);
+      // The copy as it is now: something may have landed in it while the font downloaded.
+      const now = ctx.scratch.doc;
       ctx.scratch.doc = {
-        ...doc,
-        fonts: [...doc.fonts.filter((f) => !added.some((a) => a.id === f.id)), ...added],
+        ...now,
+        fonts: [...now.fonts.filter((f) => !added.some((a) => a.id === f.id)), ...added],
       };
       const name = added[0]?.family ?? family;
       ctx.step(`Added the font ${name}`);
@@ -2607,7 +2635,14 @@ export async function runTool(name: string, input: unknown, ctx: ToolContext): P
   const t = TOOLS.find((x) => x.name === name);
   if (!t) return { text: `Unknown tool ${name}`, isError: true };
   const parsed = t.input.safeParse(input);
-  if (!parsed.success) return { text: `Invalid input: ${z.prettifyError(parsed.error)}`, isError: true };
+  // The same bad input again and again is the commonest loop: it counts toward stuck detection too.
+  if (!parsed.success)
+    return afterCall(
+      name,
+      JSON.stringify(input),
+      { text: `Invalid input: ${z.prettifyError(parsed.error)}`, isError: true },
+      ctx,
+    );
   const label = activityFor(name, parsed.data as Record<string, unknown>);
   ctx.activity?.(label);
   const started = Date.now();

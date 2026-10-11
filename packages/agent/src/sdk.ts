@@ -26,6 +26,7 @@ import {
   StepLimit,
   Stuck,
   toolActivity,
+  UsageLimit,
   Watchdog,
 } from "./types.ts";
 
@@ -202,7 +203,8 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
           if (window) run.onUsage?.({ limits: window });
           if (message.rate_limit_info.status === "rejected") {
             const at = message.rate_limit_info.resetsAt;
-            throw new AgentError(
+            throw new UsageLimit(
+              summary,
               `You've hit your Claude usage limit${at ? `; it resets at ${new Date(at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}.`,
             );
           }
@@ -228,6 +230,7 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
         }
       }
     }
+    if (stuck) throw new Stuck(summary, stuck);
     if (watchdog.stalled) throw new Stalled(summary);
     return summary.trim();
   } catch (err) {

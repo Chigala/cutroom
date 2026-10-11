@@ -90,6 +90,48 @@ describe("graphics made in parallel", () => {
     expect(scratch.doc.graphics.some((g) => g.id === "dim")).toBe(true);
   });
 
+  it("wait for the design's faces to be in the project, so each is made in them", async () => {
+    const { ctx, scratch } = setup(async (id) => graphic(id));
+    scratch.doc = { ...scratch.doc, design: { ...design, display: "Fraunces" } };
+    const out = await runTool(
+      "make_graphics",
+      { graphics: [{ id: "dim", brief: "A dimension line across the room" }] },
+      ctx,
+    );
+    expect(out.isError).toBe(true);
+    expect(out.text).toContain("add_font: Fraunces");
+  });
+
+  it("don't use up a round of the review by being waited for", async () => {
+    const { ctx, scratch } = setup(async (id) => graphic(id));
+    const review = finishReview(scratch.doc, ctx);
+    await runTool(
+      "make_graphics",
+      { graphics: [{ id: "dim", brief: "A dimension line across the room" }] },
+      ctx,
+    );
+    expect(await review()).toContain("the graphics you asked for are ready");
+    // Placed with a linear entrance that the checks catch: still two rounds left to send it back.
+    scratch.doc = {
+      ...scratch.doc,
+      graphics: [{ id: "dim", html: graphic("dim").replace("var(--ease) both", "linear both") }],
+      scenes: [{ id: "a", source: "s", in: 0, out: 3, note: "", volume: 1 }],
+      sources: [{ id: "s", kind: "solid", label: "s", color: "#000000", duration: 0 }],
+      visuals: [
+        {
+          id: "v",
+          anchor: { scene: "a", at: 0 },
+          duration: 2,
+          layout: "overlay",
+          content: { kind: "graphic", graphic: "dim", params: {} },
+        },
+      ],
+    } as unknown as ProjectDoc;
+    expect(await review()).toContain("linear timing");
+    expect(await review()).toContain("linear timing");
+    expect(await review()).toBeNull();
+  });
+
   it("brief each agent with the design and the graphics guide", () => {
     const prompt = graphicPrompt(
       { ...(emptyProject("Plans") as ProjectDoc), design },
@@ -99,6 +141,8 @@ describe("graphics made in parallel", () => {
     expect(prompt).toContain('"idea": "An architect\'s drawing set come to life"');
     expect(prompt).toContain("## The kit");
     expect(prompt).toContain('with the id "dim"');
+    expect(prompt).toContain("<style_md>");
+    expect(prompt).toContain("This is a single job: no plan, no checks");
   });
 });
 

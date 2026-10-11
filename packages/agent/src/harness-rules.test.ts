@@ -102,3 +102,26 @@ describe("looking again", () => {
     expect(stills()).toBe(3);
   });
 });
+
+describe("a look that failed", () => {
+  it("can be tried again: only frames that came back count as seen", async () => {
+    const { ctx, scratch } = setup();
+    scratch.doc = {
+      ...scratch.doc,
+      sources: [{ id: "s", kind: "solid", label: "s", color: "#000000", duration: 0 }],
+      scenes: [{ id: "a", source: "s", in: 0, out: 3, note: "", volume: 1 }],
+    } as unknown as ProjectDoc;
+    let fail = true;
+    let renders = 0;
+    ctx.host.stills = async (_doc, times) => {
+      renders++;
+      if (fail) throw new Error("the browser froze");
+      return { images: times.map(() => Buffer.from([0xff, 0xd8, 0xff])), errors: [] };
+    };
+    await runTool("look", { times: [1] }, ctx);
+    fail = false;
+    const retry = await runTool("look", { times: [1] }, ctx);
+    expect(retry.text).not.toContain("Nothing has changed");
+    expect(renders).toBe(2);
+  });
+});

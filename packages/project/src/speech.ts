@@ -725,7 +725,8 @@ export function cleanCutOps(
     const a = edges.get(prev.id) ?? prev;
     const b = edges.get(scene.id) ?? scene;
     // Only shots that run on from each other: a later shot that goes back in the take is a deliberate repeat.
-    if (scene.in < prev.in || b.in >= a.out - 0.001) continue;
+    // ...and only a sliver of overlap: a longer one is a deliberate repeat.
+    if (scene.in < prev.in || b.in >= a.out - 0.001 || a.out - b.in > 0.25) continue;
     const meet = round(a.out);
     if (b.out - meet < 0.2) continue;
     edges.set(scene.id, { in: meet, out: b.out });

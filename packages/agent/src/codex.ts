@@ -22,6 +22,7 @@ import {
   StepLimit,
   Stuck,
   toolActivity,
+  UsageLimit,
   Watchdog,
 } from "./types.ts";
 
@@ -393,7 +394,11 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
     if (stopped === "user") throw new AgentError("Stopped");
     if (stopped === "stalled") throw new Stalled(reply);
     if (stopped === "limit") throw stuck ? new Stuck(reply, stuck) : new StepLimit(reply);
-    if (end.status === "failed") throw new AgentError(friendly(end.error ?? "Codex stopped with an error."));
+    if (end.status === "failed") {
+      const why = friendly(end.error ?? "Codex stopped with an error.");
+      // Out of plan mid-request: keep what was done (runAgent), like running out of steps.
+      throw /Codex limit/.test(why) ? new UsageLimit(reply, why) : new AgentError(why);
+    }
     return reply.trim();
   } catch (err) {
     if (run.signal?.aborted || stopped === "user") throw new AgentError("Stopped");

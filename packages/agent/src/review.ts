@@ -47,7 +47,7 @@ export function finishReview(
       ctx.activity?.("Waiting for the graphics");
       const lines = await Promise.all(pending.values());
       pending.clear();
-      rounds++;
+      // Placing them isn't a round of fixes: the checks still get their two.
       return [
         "Before you finish: the graphics you asked for are ready. Place the ones the video needs (or say why not), then finish as usual.",
         ...lines.map((l) => `- ${l}`),
@@ -105,8 +105,24 @@ export function finishReview(
     if (depth === "full" && recut && ctx.host.measureJoins) {
       try {
         ctx.activity?.("Listening to the cuts");
+        // Only the cuts this request made or moved: the user's own cuts are theirs.
+        const order = doc.scenes;
+        const changed = new Set(
+          order
+            .filter((sc) => {
+              const was = before.scenes.find((b) => b.id === sc.id);
+              return !was || was.in !== sc.in || was.out !== sc.out || was.source !== sc.source;
+            })
+            .map((sc) => sc.id),
+        );
+        const touched = (scene: string) => {
+          const i = order.findIndex((sc) => sc.id === scene);
+          return (
+            changed.has(scene) || (i > 0 && changed.has(order[i - 1]!.id)) || before.scenes[i]?.id !== scene
+          );
+        };
         for (const j of await ctx.host.measureJoins(doc))
-          if (j.problems.length)
+          if (j.problems.length && touched(j.scene))
             found.push(
               `${j.time.toFixed(2)}s cut into ${j.scene} (pause ${j.pause}s): ${j.problems.join("; ")}`,
             );

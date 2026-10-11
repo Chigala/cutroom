@@ -16,7 +16,7 @@ import { GUIDES } from "./guides.ts";
 import { HARNESSES } from "./harness.ts";
 import { finishReview } from "./review.ts";
 import { type AgentHost, refitMusic, type Scratch, snapCutsToBeat, type ToolContext } from "./tools.ts";
-import { type Backend, type Effort, Stalled, StepLimit, Stuck } from "./types.ts";
+import { type Backend, type Effort, Stalled, StepLimit, Stuck, UsageLimit } from "./types.ts";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
@@ -79,6 +79,7 @@ export function defaultBackend(): Backend {
 }
 
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
+  let endGraphics = () => {};
   // A first cut or big request is planned first (update_plan): it keeps a long run on track and stops it
   // re-checking what's done.
   const scratch: Scratch = { doc: opts.doc, ops: [], groups: [], planWanted: opts.review !== "light" };
@@ -130,27 +131,43 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     // Graphics designed in parallel (make_graphics): each by an agent of its own on the same sign-in, a
     // few at a time, on a copy of the project, so nothing but the finished graphic comes back.
     const slots = semaphore(GRAPHIC_AGENTS);
+    // Stop, or the request ending any way at all, stops the graphics' agents too: queued ones never start.
+    const graphicsStop = new AbortController();
+    const stopGraphics = () => graphicsStop.abort();
+    // An abort event never fires for a signal that's already aborted: look first.
+    if (opts.signal?.aborted) stopGraphics();
+    else opts.signal?.addEventListener("abort", stopGraphics, { once: true });
+    endGraphics = stopGraphics;
     if (backend !== "api")
       ctx.graphicMaker = (id, brief) =>
         slots(async () => {
+          if (graphicsStop.signal.aborted) throw new Error("the request ended first");
           const sub: Scratch = { doc: scratch.doc, ops: [], groups: [], guides: new Set(["graphics"]) };
-          await harness.run(
-            {
-              ...run,
-              prompt: graphicPrompt(scratch.doc, id, brief),
-              images: [],
-              maxTurns: 16,
-              thinking: "omitted",
-              onText: () => {},
-              onThinking: () => {},
-              onActivity: () => {},
-              review: undefined,
-              onUsage: undefined,
-            },
-            { scratch: sub, host: opts.host, step: () => {} },
-          );
+          try {
+            await harness.run(
+              {
+                ...run,
+                prompt: graphicPrompt(scratch.doc, id, brief),
+                // What the user attached (a logo, a reference) is theirs to see too.
+                images: run.images ?? [],
+                maxTurns: 20,
+                thinking: "omitted",
+                signal: graphicsStop.signal,
+                onText: () => {},
+                onThinking: () => {},
+                onActivity: () => {},
+                review: undefined,
+                onUsage: undefined,
+              },
+              { scratch: sub, host: opts.host, step: () => {} },
+            );
+          } catch (err) {
+            // Out of turns, stalled or stuck after it wrote the graphic: the graphic is still good.
+            if (!(err instanceof StepLimit)) throw err;
+          }
           const made = sub.doc.graphics.find((g) => g.id === id);
           if (!made) throw new Error("its agent finished without writing it");
+          if (graphicsStop.signal.aborted) throw new Error("the request ended first");
           opts.onStep?.(`Designed ${id}`, "done");
           return made.html;
         });
@@ -187,17 +204,20 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
         if (!(err instanceof StepLimit) || !scratch.ops.length) throw err;
         const stalled = err instanceof Stalled;
         const stuck = err instanceof Stuck ? err.why : "";
+        const limit = err instanceof UsageLimit ? err.message : "";
         ctx.step(
-          stuck
-            ? "Stopped repeating a failing step"
-            : stalled
-              ? `${harness.name} stopped responding`
-              : "Ran out of steps before finishing",
+          limit
+            ? "Hit the plan's usage limit"
+            : stuck
+              ? "Stopped repeating a failing step"
+              : stalled
+                ? `${harness.name} stopped responding`
+                : "Ran out of steps before finishing",
           "warn",
         );
         const summary = [
           err.partial,
-          `${stuck ? `I stopped because ${stuck}` : stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
+          `${limit ? `${limit} I stopped there` : stuck ? `I stopped because ${stuck}` : stalled ? `${harness.name} stopped responding partway through` : "I ran out of steps before I could finish"}, so I kept everything I'd done. Say "carry on" and I'll pick up where I stopped (checks, motion and the cover may still need a pass).`,
         ]
           .filter(Boolean)
           .join("\n\n");
@@ -207,6 +227,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       }
     }
   } finally {
+    endGraphics();
+    // Nothing lands in this request's copy once it has returned.
+    scratch.closed = true;
     unsubscribe?.();
   }
 }
@@ -222,8 +245,11 @@ export function splitNext(reply: string): { summary: string; next?: string } {
   return { summary: reply.trimEnd().slice(0, m.index).trimEnd(), ...(next && { next: next.slice(0, 200) }) };
 }
 
-/** How many graphics are designed at once (make_graphics): each is an agent on the user's plan. */
-const GRAPHIC_AGENTS = 3;
+/**
+ * How many graphics are designed at once (make_graphics): each is an agent on the user's plan, and its
+ * looks render beside the editor's own preview, so two, not more.
+ */
+const GRAPHIC_AGENTS = 2;
 
 /** Runs at most `n` of the jobs given to it at once, the rest as each finishes. */
 function semaphore(n: number) {
@@ -243,12 +269,18 @@ function semaphore(n: number) {
 
 /** What a graphic's own agent is asked: one graphic, in the video's design, written, looked at and refined. */
 export function graphicPrompt(doc: ProjectDoc, id: string, brief: string): string {
+  const said = doc.transcripts
+    .flatMap((t) => t.words.map((w) => w.text))
+    .join(" ")
+    .slice(0, 6000);
   return [
+    `<style_md>\n${doc.style.trim() || "(empty)"}\n</style_md>`,
+    ...(said ? [`<what_is_said>\n${said}\n</what_is_said>`] : []),
     `<design>\n${JSON.stringify(doc.design, null, 2)}\n</design>`,
     `<graphics_guide>\n${GUIDES.graphics}\n</graphics_guide>`,
     `The video is ${doc.meta.format.width}x${doc.meta.format.height}. Write one motion graphic for it, with the id "${id}", in its design above and built from the kit:`,
     brief,
-    `Write it with write_graphic, then look {graphic: "${id}", params, layout, times} at 5-6 times across it and refine it with edit_graphic until it's at the bar: two rounds at most. Change nothing else in the project and place nothing. Reply with one line: what it shows and its params.`,
+    `This is a single job: no plan, no checks, no other tools. Write it with write_graphic, then look {graphic: "${id}", params, layout, times} at 5-6 times across it and refine it with edit_graphic until it's at the bar: two rounds at most. Change nothing else in the project and place nothing. Reply with one line: what it shows and its params.`,
   ].join("\n\n");
 }
 

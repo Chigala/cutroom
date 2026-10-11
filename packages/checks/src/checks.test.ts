@@ -297,8 +297,24 @@ describe("cut edges", () => {
     expect(r.detail).toContain("stops 0.05s after the last word");
     const fixed = applyOps(doc, r.fix!.ops).doc;
     expect(byId(fixed)["cut-edges"]!.status).toBe("pass");
-    expect(fixed.scenes[1]!.in).toBe(1.66);
+    // The first shot gives up the sliver, so nothing anchored in the second moves.
+    expect(fixed.scenes[0]!.out).toBe(1.62);
+    expect(fixed.scenes[1]!.in).toBe(1.62);
     expect(fixed.scenes[1]!.out).toBeCloseTo(4.9);
+  });
+
+  it("leave an ending alone when the speaker runs straight on in the take", () => {
+    const doc = take([{ id: "a", in: 1.7, out: 4.55 }]);
+    const runOn = {
+      ...doc,
+      transcripts: [
+        {
+          ...doc.transcripts[0]!,
+          words: [...doc.transcripts[0]!.words, { text: "And", start: 4.6, end: 4.9 }],
+        },
+      ],
+    };
+    expect(byId(runOn)["cut-edges"]!.status).toBe("pass");
   });
 
   it("let a deliberate repeat from earlier in the take, and an ending with room, through", () => {

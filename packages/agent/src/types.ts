@@ -31,6 +31,14 @@ export class Stuck extends StepLimit {
   }
 }
 
+/** The plan's usage limit was reached mid-request: what was done is kept, like StepLimit. */
+export class UsageLimit extends StepLimit {
+  override name = "UsageLimit";
+  constructor(partial: string, message: string) {
+    super(partial, message);
+  }
+}
+
 /** Claude went silent mid-request (a stalled connection). What it did so far is kept, like StepLimit. */
 export class Stalled extends StepLimit {
   override name = "Stalled";

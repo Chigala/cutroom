@@ -50,6 +50,9 @@ interface Rule {
 
 const pass = { status: "pass" } as const;
 
+/** The longest overlap between two shots of one take that's a slip, not a deliberate repeat. */
+const MAX_SLIVER = 0.25;
+
 /** Seconds a video holds after its last word, so the line lands instead of being cut off. */
 const ENDING_TAIL = 0.4;
 
@@ -531,32 +534,39 @@ const rules: Rule[] = [
       const problems: string[] = [];
       const ops: Op[] = [];
       const scenes: string[] = [];
-      // A shot that starts before the one before it ended, in the same take, plays that stretch twice:
-      // a stutter in picture and sound.
+      // A shot that starts a sliver before the one before it ended, in the same take, plays that sliver
+      // twice: a stutter in picture and sound. A longer overlap is a deliberate repeat, and stays.
       for (let i = 1; i < tl.scenes.length; i++) {
         const prev = tl.scenes[i - 1]!.scene;
         const next = tl.scenes[i]!.scene;
         const replay = prev.out - next.in;
-        if (prev.source !== next.source || replay < 0.02 || next.in < prev.in) continue;
+        if (prev.source !== next.source || replay < 0.02 || replay > MAX_SLIVER || next.in < prev.in)
+          continue;
         problems.push(`${next.id} replays ${replay.toFixed(2)}s of ${prev.id}`);
         scenes.push(next.id);
-        ops.push({ op: "update", coll: "scenes", id: next.id, patch: { in: round(prev.out) } });
+        // The first shot ends where the next begins: nothing anchored in either moves.
+        ops.push({ op: "update", coll: "scenes", id: prev.id, patch: { out: round(next.in) } });
       }
       // The video stops as the last word does: let it land.
       const last = tl.scenes.at(-1)?.scene;
       const words = last && doc.transcripts.find((t) => t.id === last.source)?.words;
       const said = words?.filter((w) => w.start < last!.out && w.end > last!.in).at(-1);
       const length = doc.sources.find((x) => x.id === last?.source)?.duration ?? 0;
+      // Where the speaker goes on in the take: the ending can't reach into the next word.
+      const after = words?.find((w) => said && w.start >= said.end);
+      const room = Math.min(length, after ? after.start - 0.05 : length);
       if (last && said) {
         const tail = (last.out - said.end) / (last.speed ?? 1);
-        if (tail < ENDING_TAIL - 0.15 && length > last.out + 0.02) {
+        // Only when there's a pause after the line to hold: a speaker who runs straight on is cut on
+        // the breath, which is right.
+        if (tail < ENDING_TAIL - 0.15 && room > last.out + 0.1) {
           problems.push(`the video stops ${Math.max(0, tail).toFixed(2)}s after the last word`);
           scenes.push(last.id);
           ops.push({
             op: "update",
             coll: "scenes",
             id: last.id,
-            patch: { out: round(Math.min(length, said.end + ENDING_TAIL * (last.speed ?? 1))) },
+            patch: { out: round(Math.min(room, said.end + ENDING_TAIL * (last.speed ?? 1))) },
           });
         }
       }

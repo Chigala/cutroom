@@ -110,6 +110,8 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   apply_ops: "Making changes",
   fields: "Checking the fields",
   read_graphic: "Reading a graphic",
+  guide: "Reading the guide",
+  design: "Deciding the design",
   write_graphic: "Designing a graphic",
   read_caption_look: "Reading the caption look",
   write_caption_look: "Designing the captions",

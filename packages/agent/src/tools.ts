@@ -82,6 +82,7 @@ import {
 } from "@vedit/project";
 import { z } from "zod";
 import { compactFields, EDITABLE, fieldsOf, unknownFields } from "./fields.ts";
+import { GUIDE_TOPICS, GUIDES, type GuideTopic } from "./guides.ts";
 import { runScript } from "./script.ts";
 import { toolActivity } from "./types.ts";
 import { checkStep, checksView, projectView, searchFootage, shotsView, transcriptView } from "./view.ts";
@@ -255,6 +256,8 @@ export interface Scratch {
   /** References studied this request (inspiration measure), by clip. */
   studied?: Map<string, ReferenceStudy>;
   revisions?: Map<string, { count: number; looks: number }>;
+  /** The guides read this request (guide), so a tool that needs one asks only once. */
+  guides?: Set<GuideTopic>;
   /** This request's changes that undo can take back, newest last: each one's label and the ops that undo it. */
   undoable?: { label: string; inverse: Op[] }[];
 }
@@ -608,7 +611,26 @@ const Label = z
   .max(80)
   .describe('Short human label for this change, e.g. "+3 zooms" or "Cut the retakes"');
 
+/** A tool whose job needs a guide asks for it first, once a request: the refusal says which. */
+function needsGuide(ctx: ToolContext, topic: GuideTopic): ToolResult | null {
+  if (ctx.scratch.guides?.has(topic)) return null;
+  return {
+    text: `Read the ${topic} guide first (guide {"topic": "${topic}"}): it has the craft this needs. Then do this again.`,
+    isError: true,
+  };
+}
+
 export const TOOLS: readonly AgentTool[] = [
+  tool({
+    name: "guide",
+    description: "The craft for a kind of job (the topics are in the system prompt). Read it before the job.",
+    input: z.object({ topic: z.enum(GUIDE_TOPICS) }),
+    async run({ topic }, ctx) {
+      ctx.scratch.guides ??= new Set();
+      ctx.scratch.guides.add(topic);
+      return { text: GUIDES[topic] };
+    },
+  }),
   tool({
     name: "get_transcript",
     description:
@@ -963,6 +985,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       html: z.string().min(20).max(60_000),
     }),
     async run({ label, id, html }, ctx) {
+      const unread = needsGuide(ctx, "graphics");
+      if (unread) return unread;
       const problem = validateGraphic(html);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const exists = ctx.scratch.doc.graphics.some((g) => g.id === id);
@@ -1012,6 +1036,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       use: z.boolean().default(false).describe("Switch the captions to this look"),
     }),
     async run({ label, id, css, use }, ctx) {
+      const unread = needsGuide(ctx, "looks");
+      if (unread) return unread;
       const problem = validateCaptionLook(css);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const exists = ctx.scratch.doc.captionLooks.some((l) => l.id === id);
@@ -1108,6 +1134,10 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       use: z.boolean().optional().describe("write"),
     }),
     async run({ action, id, keepLook, source, md, use }, ctx) {
+      if (action === "measure" || action === "write") {
+        const unread = needsGuide(ctx, "inspirations");
+        if (unread) return unread;
+      }
       const doc = ctx.scratch.doc;
       const store = ctx.host.inspirations;
       const keep = keepLook ?? Boolean(doc.meta.kit);
@@ -1265,6 +1295,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       use: z.boolean().default(false).describe("For a grade: switch the video to it"),
     }),
     async run({ label, kind, id, css, use }, ctx) {
+      const unread = needsGuide(ctx, "looks");
+      if (unread) return unread;
       const problem = validateStyle(kind, css);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const lut = kind === "grade" ? gradeColorOf(css)?.lut : undefined;
@@ -1647,6 +1679,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       "Find a royalty-free instrumental for a mood (upbeat, tech, lofi, chill, hiphop, afrobeats, tense, cinematic, emotional, corporate), add it to the project with its beat map, and set it as the music. Use only when the user wants music and has none of their own.",
     input: z.object({ label: Label, mood: z.string().min(2).max(40) }),
     async run({ label, mood }, ctx) {
+      const unread = needsGuide(ctx, "sound");
+      if (unread) return unread;
       if (!ctx.host.findMusic) return { text: "Music search is not available here.", isError: true };
       const found = await ctx.host.findMusic(mood, ctx.scratch.doc);
       if (!found) return { text: `No usable track found for "${mood}". Try another mood.`, isError: true };
@@ -2050,6 +2084,8 @@ measure: true returns what the filters report instead: signalstats with metadata
       'Download a find_meme candidate into the project as a clip (an image for a static meme), credited to KLIPY. Returns its source id: place it as a visual with content {"kind": "media", "source": id, "box": {x, y, width}, "style": "card" or "sticker", "rotate"}, short (1-2.5s), right on the beat it reacts to.',
     input: z.object({ label: Label, id: z.string().min(3).max(60) }),
     async run({ label, id }, ctx) {
+      const unread = needsGuide(ctx, "sound");
+      if (unread) return unread;
       const c = ctx.scratch.memes?.get(id);
       if (!c)
         return { text: `No candidate "${id}" from find_meme in this request. Search first.`, isError: true };
@@ -2213,6 +2249,8 @@ measure: true returns what the filters report instead: signalstats with metadata
       "Bring a find_sound candidate into the project as an audio clip (licence and credit recorded; credits.txt lists it at export). Returns its source id and where it hits hardest: place it as a sound effect (sfx with source) with offset so that hit lands on the moment, and duration to its tail. listen to it if the title leaves doubt.",
     input: z.object({ label: Label, id: z.string().min(3).max(40) }),
     async run({ label, id }, ctx) {
+      const unread = needsGuide(ctx, "sound");
+      if (unread) return unread;
       const c = ctx.scratch.sounds?.get(id);
       if (!c)
         return { text: `No sound "${id}" from find_sound in this request. Search first.`, isError: true };

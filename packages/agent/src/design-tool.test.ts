@@ -1,5 +1,6 @@
 import { Design, emptyProject, type PastDesign, type ProjectDoc } from "@vedit/project";
 import { describe, expect, it } from "vitest";
+import { GUIDE_TOPICS } from "./guides.ts";
 import { runTool, type Scratch, type ToolContext } from "./tools.ts";
 
 const cooking = {
@@ -12,7 +13,12 @@ const cooking = {
 };
 
 function ctx(recent: PastDesign[] = []) {
-  const scratch: Scratch = { doc: emptyProject("Soup") as ProjectDoc, ops: [], groups: [] };
+  const scratch: Scratch = {
+    doc: emptyProject("Soup") as ProjectDoc,
+    ops: [],
+    groups: [],
+    guides: new Set(GUIDE_TOPICS),
+  };
   const c: ToolContext = {
     scratch,
     host: { frame: async () => Buffer.from([]), recentDesigns: async () => recent },
@@ -62,5 +68,20 @@ describe("the design tool", () => {
     expect(
       (await runTool("write_graphic", { label: "Tag", id: "tag", html: GRAPHIC }, c)).isError,
     ).toBeFalsy();
+  });
+});
+
+describe("guides", () => {
+  it("are asked for before the jobs that need them, once a request", async () => {
+    const scratch: Scratch = { doc: emptyProject("Soup") as ProjectDoc, ops: [], groups: [] };
+    const c: ToolContext = { scratch, host: { frame: async () => Buffer.from([]) }, step: () => {} };
+    const first = await runTool("write_graphic", { label: "Tag", id: "tag", html: GRAPHIC }, c);
+    expect(first.isError).toBe(true);
+    expect(first.text).toContain('guide {"topic": "graphics"}');
+    const guide = await runTool("guide", { topic: "graphics" }, c);
+    expect(guide.text).toContain("## The kit");
+    // Read: the job goes on to its own checks (here, the design it needs first).
+    const again = await runTool("write_graphic", { label: "Tag", id: "tag", html: GRAPHIC }, c);
+    expect(again.text).toContain("decide this video's design first");
   });
 });

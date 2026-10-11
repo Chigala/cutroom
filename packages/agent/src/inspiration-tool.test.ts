@@ -1,11 +1,13 @@
 import { emptyProject, type InspirationPack, inspirationInfo, type ProjectDoc } from "@vedit/project";
 import { describe, expect, it } from "vitest";
 import { buildPrompt } from "./context.ts";
+import { GUIDE_TOPICS } from "./guides.ts";
 import { type AgentHost, runTool, type Scratch, type ToolContext } from "./tools.ts";
 
 function ctx(doc: ProjectDoc, inspirations?: AgentHost["inspirations"]) {
   const steps: string[] = [];
-  const scratch: Scratch = { doc, ops: [], groups: [] };
+  // The craft guides read, as a request does before these jobs.
+  const scratch: Scratch = { doc, ops: [], groups: [], guides: new Set(GUIDE_TOPICS) };
   const c: ToolContext = {
     scratch,
     host: { frame: async () => Buffer.from([0xff, 0xd8, 0xff]), ...(inspirations && { inspirations }) },

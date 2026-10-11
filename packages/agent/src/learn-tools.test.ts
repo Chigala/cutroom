@@ -7,6 +7,7 @@ import {
   STARTER_INSPIRATIONS,
 } from "@vedit/project";
 import { describe, expect, it } from "vitest";
+import { GUIDE_TOPICS } from "./guides.ts";
 import { type AgentHost, runTool, type Scratch, type ToolContext } from "./tools.ts";
 
 /** A small solid JPEG, as a frame or a still. */
@@ -79,7 +80,8 @@ function ctx(doc: ProjectDoc, host: Partial<AgentHost> = {}) {
   const frames: { source: string; t: number; width?: number }[] = [];
   const rendered: ProjectDoc[] = [];
   const reads: number[] = [];
-  const scratch: Scratch = { doc, ops: [], groups: [] };
+  // The craft guides read, as a request does before these jobs.
+  const scratch: Scratch = { doc, ops: [], groups: [], guides: new Set(GUIDE_TOPICS) };
   const c: ToolContext = {
     scratch,
     host: {

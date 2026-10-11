@@ -41,6 +41,18 @@ export function finishReview(
   );
   let rounds = 0;
   return async () => {
+    // Graphics still being designed in the background land before it finishes: placed, or said why not.
+    const pending = ctx.scratch.pending;
+    if (pending?.size) {
+      ctx.activity?.("Waiting for the graphics");
+      const lines = await Promise.all(pending.values());
+      pending.clear();
+      rounds++;
+      return [
+        "Before you finish: the graphics you asked for are ready. Place the ones the video needs (or say why not), then finish as usual.",
+        ...lines.map((l) => `- ${l}`),
+      ].join("\n");
+    }
     if (rounds >= MAX_ROUNDS || !ctx.scratch.ops.length || !ctx.scratch.doc.scenes.length) return null;
     ctx.activity?.("Checking the edit");
     // What the end of a request does by itself (music refitted, cuts onto the beat) first, so what's

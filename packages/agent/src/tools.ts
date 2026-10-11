@@ -54,6 +54,7 @@ import {
   ProcessRecipe,
   type ProjectDoc,
   packFromProject,
+  parseGraphic,
   parseWordRef,
   type ReferenceStudy,
   rangesFromKeeps,
@@ -256,6 +257,8 @@ export interface Scratch {
   /** References studied this request (inspiration measure), by clip. */
   studied?: Map<string, ReferenceStudy>;
   revisions?: Map<string, { count: number; looks: number }>;
+  /** Graphics being designed in the background (make_graphics), by id: what each came to, once done. */
+  pending?: Map<string, Promise<string>>;
   /** The guides read this request (guide), so a tool that needs one asks only once. */
   guides?: Set<GuideTopic>;
   /** This request's changes that undo can take back, newest last: each one's label and the ops that undo it. */
@@ -276,6 +279,11 @@ export interface ToolContext {
   tool?(call: ToolCall): void;
   /** Indexing reaches the scratch copy as it lands (runAgent), so a clip being indexed is worth waiting for. */
   readonly followsIndexing?: boolean;
+  /**
+   * Designs one graphic with an agent of its own (runAgent), from a brief in the video's design: its
+   * HTML once written, looked at and refined. make_graphics runs several at once.
+   */
+  graphicMaker?(id: string, brief: string): Promise<string>;
 }
 
 /** How long a tool waits for a clip that's still being indexed (an attachment, usually under a minute). */
@@ -1027,6 +1035,111 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
           .filter(Boolean)
           .join("\n\n"),
       };
+    },
+  }),
+  tool({
+    name: "edit_graphic",
+    description:
+      "Change part of a graphic: each edit replaces one exact piece of its HTML (find must match once). Quicker than rewriting it with write_graphic.",
+    input: z.object({
+      label: Label,
+      id: z.string(),
+      edits: z
+        .array(z.object({ find: z.string().min(1), replace: z.string() }))
+        .min(1)
+        .max(20),
+    }),
+    async run({ label, id, edits }, ctx) {
+      const unread = needsGuide(ctx, "graphics");
+      if (unread) return unread;
+      const g = ctx.scratch.doc.graphics.find((x) => x.id === id);
+      if (!g) return { text: `No graphic "${id}".`, isError: true };
+      let html = g.html;
+      for (const [i, e] of edits.entries()) {
+        const n = html.split(e.find).length - 1;
+        if (n !== 1)
+          return {
+            text: `Not saved: edit ${i + 1}'s find ${n ? `matches ${n} places: include more around it` : "isn't in the graphic: read_graphic for its current text"}.`,
+            isError: true,
+          };
+        html = html.replace(e.find, () => e.replace);
+      }
+      const problem = validateGraphic(html);
+      if (problem) return { text: `Not saved: ${problem}`, isError: true };
+      ctx.scratch.graphicErrors?.delete(id);
+      const result = commit(ctx, label, [{ op: "update", coll: "graphics", id, patch: { html } }]);
+      if (result.isError) return result;
+      const notes = lintView(id, lintGraphic(html));
+      return { text: [`Saved graphics/${id}.html.`, notes].filter(Boolean).join("\n\n") };
+    },
+  }),
+  tool({
+    name: "make_graphics",
+    description:
+      "Design the video's set of graphics at once, in the background, each by an agent of its own in this video's design. Give each an id and a brief: what it shows, its params, layout, how it moves. Carry on with the cut and captions meanwhile; graphics_ready brings them in.",
+    input: z.object({
+      graphics: z
+        .array(
+          z.object({
+            id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, "lower-case letters, digits and dashes"),
+            brief: z.string().min(20).max(1500),
+          }),
+        )
+        .min(1)
+        .max(8),
+    }),
+    async run({ graphics }, ctx) {
+      if (!ctx.graphicMaker)
+        return { text: "Not available here: write them with write_graphic.", isError: true };
+      if (!ctx.scratch.doc.design.idea)
+        return {
+          text: "Decide this video's design first (design): every graphic is made in it.",
+          isError: true,
+        };
+      ctx.scratch.pending ??= new Map();
+      const pending = ctx.scratch.pending;
+      const make = ctx.graphicMaker;
+      const started = graphics.filter((g) => !pending.has(g.id));
+      for (const g of started)
+        pending.set(
+          g.id,
+          make(g.id, g.brief).then(
+            (html) => {
+              const problem = validateGraphic(html);
+              if (problem) return `${g.id}: came back unusable (${problem}); write it with write_graphic.`;
+              const exists = ctx.scratch.doc.graphics.some((x) => x.id === g.id);
+              const saved = commit(ctx, `Graphic ${g.id}`, [
+                exists
+                  ? { op: "update", coll: "graphics", id: g.id, patch: { html } }
+                  : { op: "insert", coll: "graphics", item: { id: g.id, html } },
+              ]);
+              if (saved.isError) return `${g.id}: not saved (${saved.text}).`;
+              const { meta } = parseGraphic(html);
+              const params = Object.entries(meta.params)
+                .map(([k, p]) => `${k} (${p.type})`)
+                .join(", ");
+              const notes = lintGraphic(html).map((l) => l.message);
+              return `${g.id}: ${meta.name}, ${meta.duration}s${params ? `; params ${params}` : ""}${notes.length ? `; craft notes: ${notes.join(" ")}` : ""}`;
+            },
+            (err: unknown) => `${g.id}: not made (${(err as Error).message}); write it with write_graphic.`,
+          ),
+        );
+      return {
+        text: `Designing ${started.map((g) => g.id).join(", ")} in the background. Go on with the cut, the opening and the captions; call graphics_ready before you place any of them.`,
+      };
+    },
+  }),
+  tool({
+    name: "graphics_ready",
+    description: "Wait for the graphics make_graphics is designing, and get each one's params to place it.",
+    input: z.object({}),
+    async run(_input, ctx) {
+      const pending = ctx.scratch.pending;
+      if (!pending?.size) return { text: "No graphics are being designed." };
+      ctx.activity?.(`Waiting for ${pending.size} graphic${pending.size === 1 ? "" : "s"}…`);
+      const lines = await Promise.all(pending.values());
+      pending.clear();
+      return { text: `${lines.join("\n")}\nPlace them with visuals, then look at them in context.` };
     },
   }),
   tool({
@@ -2391,6 +2504,8 @@ const TOOL_CEILING: Record<string, number> = {
   capture_page: 3 * 60_000,
   inspect_motion: 10 * 60_000,
   inspect_joins: 3 * 60_000,
+  // Several agents designing graphics at once, each writing, looking and refining.
+  graphics_ready: 20 * 60_000,
 };
 
 export async function runTool(name: string, input: unknown, ctx: ToolContext): Promise<ToolResult> {

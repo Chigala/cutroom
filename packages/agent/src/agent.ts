@@ -12,6 +12,7 @@ import type { AgentContext, AgentUsage, HarnessId, ToolCall } from "@vedit/bridg
 import { applyOps, type ChangeGroup, type Op, type ProjectDoc, type Source } from "@vedit/project";
 import { runWithApi } from "./api.ts";
 import { buildPrompt, type Turn } from "./context.ts";
+import { GUIDES } from "./guides.ts";
 import { HARNESSES } from "./harness.ts";
 import { finishReview } from "./review.ts";
 import { type AgentHost, refitMusic, type Scratch, snapCutsToBeat, type ToolContext } from "./tools.ts";
@@ -124,6 +125,33 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     };
     const backend = opts.backend ?? defaultBackend();
     const harness = HARNESSES[opts.harness ?? "claude"];
+    // Graphics designed in parallel (make_graphics): each by an agent of its own on the same sign-in, a
+    // few at a time, on a copy of the project, so nothing but the finished graphic comes back.
+    const slots = semaphore(GRAPHIC_AGENTS);
+    if (backend !== "api")
+      ctx.graphicMaker = (id, brief) =>
+        slots(async () => {
+          const sub: Scratch = { doc: scratch.doc, ops: [], groups: [], guides: new Set(["graphics"]) };
+          await harness.run(
+            {
+              ...run,
+              prompt: graphicPrompt(scratch.doc, id, brief),
+              images: [],
+              maxTurns: 16,
+              thinking: "omitted",
+              onText: () => {},
+              onThinking: () => {},
+              onActivity: () => {},
+              review: undefined,
+              onUsage: undefined,
+            },
+            { scratch: sub, host: opts.host, step: () => {} },
+          );
+          const made = sub.doc.graphics.find((g) => g.id === id);
+          if (!made) throw new Error("its agent finished without writing it");
+          opts.onStep?.(`Designed ${id}`, "done");
+          return made.html;
+        });
     for (let resumed = 0; ; resumed++) {
       try {
         const reply = backend === "api" ? await runWithApi(run, ctx) : await harness.run(run, ctx);
@@ -185,6 +213,36 @@ export function splitNext(reply: string): { summary: string; next?: string } {
   if (!m) return { summary: reply };
   const next = m[1]!.replace(/^["“'*_]+|["”'*_]+$/g, "").trim();
   return { summary: reply.trimEnd().slice(0, m.index).trimEnd(), ...(next && { next: next.slice(0, 200) }) };
+}
+
+/** How many graphics are designed at once (make_graphics): each is an agent on the user's plan. */
+const GRAPHIC_AGENTS = 3;
+
+/** Runs at most `n` of the jobs given to it at once, the rest as each finishes. */
+function semaphore(n: number) {
+  let busy = 0;
+  const queue: (() => void)[] = [];
+  return async <T>(job: () => Promise<T>): Promise<T> => {
+    if (busy >= n) await new Promise<void>((go) => queue.push(go));
+    busy++;
+    try {
+      return await job();
+    } finally {
+      busy--;
+      queue.shift()?.();
+    }
+  };
+}
+
+/** What a graphic's own agent is asked: one graphic, in the video's design, written, looked at and refined. */
+export function graphicPrompt(doc: ProjectDoc, id: string, brief: string): string {
+  return [
+    `<design>\n${JSON.stringify(doc.design, null, 2)}\n</design>`,
+    `<graphics_guide>\n${GUIDES.graphics}\n</graphics_guide>`,
+    `The video is ${doc.meta.format.width}x${doc.meta.format.height}. Write one motion graphic for it, with the id "${id}", in its design above and built from the kit:`,
+    brief,
+    `Write it with write_graphic, then look {graphic: "${id}", params, layout, times} at 5-6 times across it and refine it with edit_graphic until it's at the bar: two rounds at most. Change nothing else in the project and place nothing. Reply with one line: what it shows and its params.`,
+  ].join("\n\n");
 }
 
 /** How many times a stalled request picks up again by itself. */

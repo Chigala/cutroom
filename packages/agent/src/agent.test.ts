@@ -62,8 +62,9 @@ describe("agent tools", () => {
     // Sent with every request, so it's held down: apply_ops lists the fields by name, and the fields tool
     // has the rest when it's needed.
     // 50,000 until run_script, watch and compare (about 2.8k between them); 53,000 with design and guide,
-    // when the system prompt moved 45k of craft into the guides. Trim before raising it again.
-    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(53_000);
+    // when the system prompt moved 45k of craft into the guides; 54,000 with edit_graphic, make_graphics
+    // and graphics_ready, which save far more in rewritten graphics. Trim before raising it again.
+    expect(JSON.stringify(API_TOOLS).length).toBeLessThan(54_000);
   });
 
   it("looks at a graphic on its own without touching the timeline", async () => {

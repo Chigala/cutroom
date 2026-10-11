@@ -33,10 +33,11 @@ import { glide, swap } from "../../lib/motion.ts";
 import { checkAccount, useAccount } from "../../state/account.ts";
 import { claudeModels, useClaude } from "../../state/claude.ts";
 import { useCodex } from "../../state/codex.ts";
+import { showPanel } from "../../state/layout.ts";
 import { followLibrary, useLibrary } from "../../state/library.ts";
 import { saveSettings } from "../../state/settings.ts";
 import { toast } from "../../state/toast.ts";
-import { setSideOpen, setUi, useUi } from "../../state/ui.ts";
+import { setUi, useUi } from "../../state/ui.ts";
 import { checkNow, useUpdate } from "../../state/update.ts";
 import { EFFORTS, RECOMMENDED } from "../chat/EffortSlider.tsx";
 import { PresetGrid, StyleText, useStyleDraft } from "../onboarding/StylePicker.tsx";
@@ -179,7 +180,7 @@ export function SettingsDialog() {
     <Sheet onClose={close}>
       <nav
         aria-label="Settings sections"
-        className="flex w-[232px] shrink-0 flex-col gap-5 bg-sunken/50 px-3 pt-5 pb-3"
+        className="flex w-[232px] shrink-0 flex-col gap-5 overflow-y-auto bg-sunken/50 px-3 pt-5 pb-3 max-xl:w-[200px]"
       >
         <span className="px-2.5 text-[13px] font-semibold text-fg">Settings</span>
         {GROUPS.map((g) => (
@@ -223,7 +224,7 @@ export function SettingsDialog() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={swap}
-          className="mx-auto max-w-[680px] px-10 pt-12 pb-16"
+          className="mx-auto max-w-[680px] px-10 pt-12 pb-16 max-xl:px-8"
         >
           {section === "account" && (
             <Page title="Account" intro="Your Cutroom account, for updates and anything you buy.">
@@ -854,7 +855,7 @@ function LibraryRow() {
           variant="ghost"
           onClick={() => {
             setUi({ dialog: null, sideTab: "library", selection: null });
-            setSideOpen(true);
+            showPanel("side");
           }}
         >
           Open the tab

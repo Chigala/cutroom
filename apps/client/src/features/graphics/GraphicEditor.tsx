@@ -118,16 +118,16 @@ export function GraphicEditor() {
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg animate-fade-in">
-      <header className="drag-region flex h-[52px] shrink-0 items-center justify-between border-b border-line pr-5 pl-[84px]">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="font-semibold">Graphics</span>
+      <header className="drag-region flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-line pr-5 pl-[84px]">
+        <div className="flex min-w-0 items-center gap-3 text-sm">
+          <span className="shrink-0 font-semibold">Graphics</span>
           <span className="text-faint">/</span>
-          <span className="font-mono text-[13px] text-fg-3">graphics/{id}.html</span>
+          <span className="truncate font-mono text-[13px] text-fg-3">graphics/{id}.html</span>
           {dirty && (
             <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">unsaved</span>
           )}
         </div>
-        <div className="no-drag flex gap-2">
+        <div className="no-drag flex shrink-0 gap-2">
           <Button onClick={close}>
             <ArrowLeftIcon size={14} /> Back to editor
           </Button>
@@ -138,7 +138,7 @@ export function GraphicEditor() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-[220px] shrink-0 flex-col gap-1 border-r border-line bg-panel p-3">
+        <nav className="flex w-[220px] shrink-0 flex-col max-xl:w-[176px] gap-1 border-r border-line bg-panel p-3">
           <div className="mb-1 flex items-center justify-between px-1">
             <span className="font-mono text-[11px] tracking-wide text-muted uppercase">graphics/</span>
             <button
@@ -206,7 +206,7 @@ export function GraphicEditor() {
           </div>
         </section>
 
-        <aside className="flex w-[380px] shrink-0 flex-col gap-3 overflow-y-auto bg-panel p-4">
+        <aside className="flex w-[380px] shrink-0 flex-col max-xl:w-[320px] gap-3 overflow-y-auto bg-panel p-4">
           <Segmented
             value={layout}
             options={[

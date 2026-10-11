@@ -28,6 +28,7 @@ import { motion } from "motion/react";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Collapse } from "../../components/Collapse.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
+import { Splitter } from "../../components/Splitter.tsx";
 import { ChangeChip } from "../../components/ui.tsx";
 import { type Attachment, pending, upload } from "../../lib/attach.ts";
 import { took } from "../../lib/duration.ts";
@@ -53,12 +54,21 @@ import {
   useSuggestion,
 } from "../../state/chat.ts";
 import { useJobs } from "../../state/jobs.ts";
+import { layoutNow, PREVIEW_MIN, useLayout } from "../../state/layout.ts";
 import { offerToKeep } from "../../state/library.ts";
 import { currentTime } from "../../state/playback.ts";
 import { isReverted, receive, revert, useDoc, useProject } from "../../state/project.ts";
 import { setRange, useTimeline } from "../../state/timeline.ts";
 import { toast } from "../../state/toast.ts";
-import { composerRef, select, selectionContext, setUi, useUi } from "../../state/ui.ts";
+import {
+  CHAT_WIDTH,
+  composerRef,
+  select,
+  selectionContext,
+  setChatWidth,
+  setUi,
+  useUi,
+} from "../../state/ui.ts";
 import { ThinkingPicker } from "./ThinkingPicker.tsx";
 import { UsageMeter } from "./UsageMeter.tsx";
 
@@ -67,6 +77,7 @@ export function ChatPanel() {
   const dir = useProject((s) => s.dir);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const width = useLayout().chat;
   // Messages that arrive rise in; the history already there when a project opens just appears.
   const settled = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a project switch starts the history afresh
@@ -85,7 +96,25 @@ export function ChatPanel() {
   });
 
   return (
-    <aside className="flex min-h-0 w-[380px] shrink-0 flex-col border-r border-line bg-panel">
+    <aside
+      style={{ width }}
+      className="relative flex min-h-0 shrink-0 flex-col border-r border-line bg-panel"
+    >
+      <Splitter
+        edge="right"
+        label="Resize the chat"
+        value={width}
+        initial={CHAT_WIDTH.initial}
+        // Never so wide the preview loses its room.
+        limits={() => {
+          const now = layoutNow();
+          return {
+            min: CHAT_WIDTH.min,
+            max: Math.min(CHAT_WIDTH.max, now.chat + now.preview - PREVIEW_MIN.width),
+          };
+        }}
+        onChange={setChatWidth}
+      />
       <div
         ref={scroller}
         onScroll={(e) => {

@@ -12,9 +12,10 @@ import { host } from "../../lib/host.ts";
 import { isMac } from "../../lib/keys.ts";
 import { followDownloads, size, useDownloads } from "../../state/downloads.ts";
 import { useJobs } from "../../state/jobs.ts";
+import { togglePanel, useShown } from "../../state/layout.ts";
 import { edit, redo, undo, useDoc, useProject } from "../../state/project.ts";
 import { toast } from "../../state/toast.ts";
-import { setUi, toggleRail, toggleSide, useUi } from "../../state/ui.ts";
+import { setUi, useUi } from "../../state/ui.ts";
 import { useUpdate } from "../../state/update.ts";
 
 /** The title bar: the rail's switch, the project's name, what's running, undo and redo, and Export. */
@@ -22,8 +23,8 @@ export function Header() {
   const canUndo = useProject((s) => s.undoStack.length > 0);
   const canRedo = useProject((s) => s.redoStack.length > 0);
   const exporting = useJobs((s) => (s.export?.status === "running" ? s.export.fraction : null));
-  const railOpen = useUi((s) => s.railOpen);
-  const sideOpen = useUi((s) => s.sideOpen);
+  const railOpen = useShown("rail");
+  const sideOpen = useShown("side");
   const mod = isMac ? "⌘" : "Ctrl+";
 
   return (
@@ -34,21 +35,24 @@ export function Header() {
     >
       <IconButton
         label={`${railOpen ? "Hide" : "Show"} project names (${mod}B)`}
-        onClick={toggleRail}
-        className="no-drag"
+        onClick={() => togglePanel("rail")}
+        data-peek="rail"
+        className="no-drag shrink-0"
       >
         <SidebarSimpleIcon size={17} />
       </IconButton>
       <ProjectTitle />
-      <div className="flex min-w-0 items-center gap-2 font-mono text-xs text-muted tabular">
+      {/* A narrow window cuts these short before anything else (their tooltips say it all). */}
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden font-mono text-xs text-muted tabular">
         <IndexingPill />
         <DownloadsPill />
       </div>
-      <div className="no-drag ml-auto flex items-center gap-1.5">
+      <div className="no-drag ml-auto flex shrink-0 items-center gap-1.5">
         <UpdatePill />
         <IconButton
           label={`${sideOpen ? "Hide" : "Show"} the side panel (${isMac ? "⇧⌘" : "Ctrl+Shift+"}B)`}
-          onClick={toggleSide}
+          onClick={() => togglePanel("side")}
+          data-peek="side"
           className={sideOpen ? undefined : "text-faint"}
         >
           <SidebarSimpleIcon size={17} mirrored />
@@ -82,9 +86,9 @@ function DownloadsPill() {
   return (
     <span
       title={list.map((d) => `${d.label}: ${Math.round(d.fraction * 100)}% of ${size(d.bytes)}`).join("\n")}
-      className="flex items-center gap-1.5 rounded-full bg-button px-2.5 py-1 text-fg-2 animate-fade-in"
+      className="flex min-w-0 items-center gap-1.5 truncate rounded-full bg-button px-2.5 py-1 whitespace-nowrap text-fg-2 animate-fade-in"
     >
-      <DownloadSimpleIcon size={12} className="text-muted" />
+      <DownloadSimpleIcon size={12} className="shrink-0 text-muted" />
       Downloading {labels.length === 1 ? labels[0]!.toLowerCase() : `${labels.length} things`} ·{" "}
       {Math.round(fraction * 100)}%
     </span>
@@ -144,8 +148,11 @@ function IndexingPill() {
     active.find((j) => j.stage === "setup")?.label ??
     (labels.size === 1 ? active[0]!.label : `Indexing ${active.length} clips`);
   return (
-    <span className="flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-accent animate-fade-in">
-      <CircleNotchIcon size={12} className="animate-spin" />
+    <span
+      title={label}
+      className="flex min-w-0 items-center gap-1.5 truncate rounded-full bg-accent/10 px-2.5 py-1 whitespace-nowrap text-accent animate-fade-in"
+    >
+      <CircleNotchIcon size={12} className="shrink-0 animate-spin" />
       {label} · {Math.round(avg * 100)}%
     </span>
   );
@@ -178,7 +185,7 @@ function ProjectTitle() {
         if (e.key === "Enter") rename(e.currentTarget.value);
         if (e.key === "Escape") setUi({ renaming: false });
       }}
-      className="no-drag w-[320px] rounded-lg border border-edge bg-sunken px-2 py-1 text-[14px] font-semibold text-fg outline-none"
+      className="no-drag w-[320px] min-w-0 shrink rounded-lg border border-edge bg-sunken px-2 py-1 text-[14px] font-semibold text-fg outline-none"
     />
   ) : (
     <button
@@ -193,7 +200,7 @@ function ProjectTitle() {
       }}
       aria-label={`${name}, press Enter to rename`}
       title={`${dir ?? ""}\nDouble-click to rename`}
-      className="no-drag max-w-[360px] truncate rounded-lg px-2 py-1 text-[14px] font-semibold text-fg hover:bg-button"
+      className="no-drag max-w-[360px] min-w-0 shrink truncate rounded-lg px-2 py-1 text-[14px] font-semibold text-fg hover:bg-button"
     >
       {name}
     </button>

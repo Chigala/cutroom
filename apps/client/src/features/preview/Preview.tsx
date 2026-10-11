@@ -27,6 +27,7 @@ import { MEDIA_BASE } from "../../lib/host.ts";
 import { mod } from "../../lib/keys.ts";
 import { AUDIO_TAGS } from "../../lib/player.ts";
 import { send } from "../../state/chat.ts";
+import { useLayout } from "../../state/layout.ts";
 import {
   attachPlayer,
   currentTime,
@@ -61,7 +62,7 @@ export function Preview() {
 function PreviewBody() {
   const hasScenes = useDoc((d) => d.scenes.length > 0);
   // Hidden comments give their room to the video (a 16:9 frame grows into it).
-  const comments = useUi((s) => s.commentsOpen);
+  const comments = useLayout().comments;
   return (
     <main
       className={clsx(
@@ -124,7 +125,7 @@ function StageBar() {
   const stage = useUi((s) => s.stage);
   const stageShape = useUi((s) => s.stageShape);
   const own = useDoc((d) => shapeOf(d.meta.format));
-  const comments = useUi((s) => s.commentsOpen);
+  const comments = useLayout().comments;
   const chip = (on: boolean) =>
     clsx("rounded-md px-2 py-0.5 text-[11px]", on ? "bg-button text-fg" : "text-muted hover:text-fg");
   return (

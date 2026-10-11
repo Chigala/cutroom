@@ -1,8 +1,11 @@
+import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Splitter } from "../../components/Splitter.tsx";
 import { Segmented } from "../../components/ui.tsx";
 import { swap } from "../../lib/motion.ts";
-import { setUi, useUi } from "../../state/ui.ts";
+import { layoutNow, PREVIEW_MIN, useLayout, usePeekDismiss } from "../../state/layout.ts";
+import { SIDE_WIDTH, setSideWidth, setUi, useUi } from "../../state/ui.ts";
 import { Checks } from "./Checks.tsx";
 import { ExportSettings } from "./ExportSettings.tsx";
 import { Files } from "./Files.tsx";
@@ -21,10 +24,39 @@ const TABS = [
 
 export function SidePanel() {
   const tab = useUi((s) => s.sideTab);
-  const open = useUi((s) => s.sideOpen);
-  if (!open) return null;
+  const docked = useLayout().side.width;
+  const width = useUi((s) => s.sideWidth);
+  // Hidden for room, its button shows it over the preview for a moment instead.
+  const peeking = useUi((s) => s.peek === "side") && !docked;
+  const aside = useRef<HTMLElement>(null);
+  usePeekDismiss("side", aside, peeking);
+  if (!docked && !peeking) return null;
   return (
-    <aside className="flex min-h-0 w-[320px] shrink-0 flex-col gap-3.5 border-l border-line bg-panel p-4">
+    <aside
+      ref={aside}
+      style={{ width: docked || width }}
+      className={clsx(
+        "flex min-h-0 shrink-0 flex-col gap-3.5 border-l border-line bg-panel p-4",
+        peeking ? "absolute inset-y-0 right-0 z-30 shadow-2xl" : "relative",
+      )}
+    >
+      {!peeking && (
+        <Splitter
+          edge="left"
+          label="Resize the side panel"
+          value={docked}
+          initial={SIDE_WIDTH.initial}
+          // Never so wide the preview loses its room.
+          limits={() => {
+            const now = layoutNow();
+            return {
+              min: SIDE_WIDTH.min,
+              max: Math.min(SIDE_WIDTH.max, now.side.width + now.preview - PREVIEW_MIN.width),
+            };
+          }}
+          onChange={setSideWidth}
+        />
+      )}
       <Segmented value={tab} options={TABS} onChange={(sideTab) => setUi({ sideTab })} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div

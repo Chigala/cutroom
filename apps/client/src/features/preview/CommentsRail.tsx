@@ -1,11 +1,13 @@
 import { ChatCircleTextIcon, SidebarSimpleIcon, XIcon } from "@phosphor-icons/react";
 import { formatTime, resolveAnchor, timelineOf } from "@vedit/project";
 import { clsx } from "clsx";
+import { useRef } from "react";
 import { SectionLabel } from "../../components/ui.tsx";
 import { send, useChat } from "../../state/chat.ts";
+import { COMMENTS_ROOM, layoutNow, useLayout, usePeekDismiss } from "../../state/layout.ts";
 import { seekTime } from "../../state/playback.ts";
 import { edit, useDoc } from "../../state/project.ts";
-import { setCommentsOpen, useUi } from "../../state/ui.ts";
+import { setCommentsOpen, setUi, useUi } from "../../state/ui.ts";
 
 /**
  * Notes pinned to moments. Leave a few, then hand them all to the agent at once. Hidden, they're a chip
@@ -15,14 +17,21 @@ export function CommentsRail() {
   const comments = useDoc((d) => d.comments);
   const tl = useDoc(timelineOf);
   const busy = useChat((s) => s.activeRun !== null);
-  const shown = useUi((s) => s.commentsOpen);
+  const docked = useLayout().comments;
+  // Hidden for room (a narrow preview), the chip shows them over the stage for a moment instead.
+  const peeking = useUi((s) => s.peek === "comments") && !docked;
+  const rail = useRef<HTMLDivElement>(null);
+  usePeekDismiss("comments", rail, peeking);
   const open = comments.filter((c) => c.status !== "resolved");
 
-  if (!shown)
+  if (!docked && !peeking)
     return (
       <button
         type="button"
-        onClick={() => setCommentsOpen(true)}
+        data-peek="comments"
+        onClick={() =>
+          layoutNow().preview >= COMMENTS_ROOM ? setCommentsOpen(true) : setUi({ peek: "comments" })
+        }
         title="Show comments"
         className="absolute top-6 right-[22px] flex items-center gap-1.5 rounded-lg px-2 py-1 font-mono text-[11px] tracking-[0.06em] text-muted uppercase hover:bg-button hover:text-fg"
       >
@@ -32,7 +41,13 @@ export function CommentsRail() {
     );
 
   return (
-    <div className="absolute top-6 right-[22px] bottom-6 flex w-[214px] flex-col gap-2.5">
+    <div
+      ref={rail}
+      className={clsx(
+        "absolute top-6 right-[22px] bottom-6 flex w-[214px] flex-col gap-2.5",
+        peeking && "z-30 -m-3 box-content rounded-xl border border-line-strong bg-panel p-3 shadow-2xl",
+      )}
+    >
       <SectionLabel
         right={
           <span className="flex items-center gap-1.5">
@@ -41,7 +56,7 @@ export function CommentsRail() {
               type="button"
               aria-label="Hide comments"
               title="Hide comments"
-              onClick={() => setCommentsOpen(false)}
+              onClick={() => (peeking ? setUi({ peek: null }) : setCommentsOpen(false))}
               className="-my-1 rounded-md p-1 text-faint hover:bg-button hover:text-fg"
             >
               <SidebarSimpleIcon size={14} mirrored />

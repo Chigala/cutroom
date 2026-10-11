@@ -75,7 +75,11 @@ describe("Claude working in the background", () => {
     expect(agentEvents.find((e) => e.runId === runId && e.type === "done")).toBeTruthy();
     expect(commits).toEqual([]);
     expect(service.currentDoc()?.look.vignette).not.toBe(true);
-    expect(JSON.parse(readFileSync(path.join(a, "look.json"), "utf8")).vignette).toBe(true);
+    // On disk once the project is let go: after its media work (cutouts and the like) is made and recorded.
+    await vi.waitFor(
+      () => expect(JSON.parse(readFileSync(path.join(a, "look.json"), "utf8")).vignette).toBe(true),
+      { timeout: 3000 },
+    );
     expect(service.activeRuns()).toEqual([]);
 
     // Back in A: the change is there, in its history too.
@@ -97,7 +101,11 @@ describe("Claude working in the background", () => {
     expect(service.activeRuns().map((r) => r.dir)).toEqual([c]);
     agent.finish.shift()!(vignette);
     await flush();
-    expect(JSON.parse(readFileSync(path.join(c, "look.json"), "utf8")).vignette).toBe(true);
+    // On disk once the project is let go: after its media work (cutouts and the like) is made and recorded.
+    await vi.waitFor(
+      () => expect(JSON.parse(readFileSync(path.join(c, "look.json"), "utf8")).vignette).toBe(true),
+      { timeout: 3000 },
+    );
     expect(service.currentDoc()?.meta.name).toBe("D");
     await service.close();
   });

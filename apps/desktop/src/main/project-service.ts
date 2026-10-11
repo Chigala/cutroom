@@ -467,7 +467,8 @@ export class ProjectService {
   /** Whether Claude has a request running in this project. */
   private busy(dir: string): boolean {
     for (const a of this.asked.values()) if (a.dir === dir) return true;
-    return false;
+    // Media work waiting for edits to settle, or running: the project stays open for it.
+    return this.making.has(dir) || this.cutoutTimers.has(dir);
   }
 
   /** Background projects being closed (saved), by folder: reopening one waits for its files. */
@@ -522,6 +523,8 @@ export class ProjectService {
             void this.queueThumb(() => makeThumbnail(dir, store.doc))
               .then((made) => made && this.emit("thumbnail", { dir }))
               .catch(() => undefined);
+          // Its cutouts, steadied shots and separations are made now, not the next time it's opened.
+          if (store) this.scheduleCutouts(store);
           return;
         }
         this.emit("commit", { commit, head: commit.id });
@@ -589,6 +592,9 @@ export class ProjectService {
       const [latest] = (await videosIn(target)).sort((a, b) => b.changedAt - a.changedAt);
       return latest ? this.switchTo(await this.openStore(latest.dir)) : null;
     }
+    // The project already on screen: nothing to switch, and nothing to start again (indexing, cutouts,
+    // checks all carry on as they are).
+    if (this.store && samePath(this.store.dir, target)) return this.snapshot();
     return this.switchTo(await this.openStore(target));
   }
 
@@ -1883,76 +1889,100 @@ export class ProjectService {
     };
   }
 
-  private cutoutTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Per project: edits settle before its media work starts. */
+  private cutoutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Projects whose media work is running: a background one stays open until it's recorded. */
+  private making = new Set<string>();
   private cutoutRun: Promise<void> = Promise.resolve();
 
   /**
    * After edits settle: make any cutout the project now needs (a background change, something behind
    * the subject), then any steadied or slowed shot's footage, one job at a time, and record them so they
-   * switch on.
+   * switch on. For the project the edit was in, on screen or working in the background, so it's done
+   * (and recorded) now rather than the next time that project is opened.
    */
-  private scheduleCutouts(): void {
-    clearTimeout(this.cutoutTimer);
-    this.cutoutTimer = setTimeout(() => {
-      this.cutoutRun = this.cutoutRun.then(async () => {
-        const store = this.store;
-        if (!store) return;
-        try {
-          const ops = await makeNeededCutouts(store.dir, store.doc, {
-            onProgress: (source, fraction) =>
-              this.emit("index", { source, stage: "analyze", fraction, label: "Cutting out the person" }),
-          });
-          for (const id of new Set(store.doc.scenes.map((s) => s.source)))
-            if (ops.some((o) => o.op === "update" && o.id === id))
-              this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
-          if (ops.length && this.store === store)
-            store.commitAndBroadcast({ author: "index", message: "Cut out the person", ops });
-        } catch (err) {
-          console.error("[cutout] failed:", err);
-          this.emit("error", { message: `Couldn't cut out the person: ${(err as Error).message}` });
-        }
-        // Then steadied and slowed shots (after the cutouts' record, so each sees the other's).
-        if (this.store !== store) return;
-        try {
-          const touched = new Set<string>();
-          const ops = await makeNeededFootage(store.dir, store.doc, {
-            onProgress: (source, fraction, label) => {
-              touched.add(source);
-              this.emit("index", { source, stage: "analyze", fraction, label });
-            },
-          });
-          for (const id of touched)
-            this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
-          if (ops.length && this.store === store)
-            store.commitAndBroadcast({ author: "index", message: "Steadied and smoothed shots", ops });
-        } catch (err) {
-          console.error("[footage] failed:", err);
-          this.emit("error", { message: `Couldn't steady or smooth a shot: ${(err as Error).message}` });
-        }
-        if (this.store !== store) return;
-        const separating = new Set<string>();
-        try {
-          const ops = await makeNeededStems(store.dir, store.doc, {
-            onProgress: (source, fraction) => {
-              separating.add(source);
-              this.emit("index", { source, stage: "analyze", fraction, label: "Taking out the music" });
-            },
-          });
-          this.stemsError = "";
-          if (ops.length && this.store === store)
-            store.commitAndBroadcast({ author: "index", message: "Took the music out of a clip", ops });
-        } catch (err) {
-          const message = `Couldn't take the music out of a clip: ${(err as Error).message}`;
-          console.error("[stems] failed:", err);
-          // Said once: the next edit would try again, and fail the same way.
-          if (message !== this.stemsError) this.emit("error", { message });
-          this.stemsError = message;
-        } finally {
-          for (const id of separating)
-            this.emit("index", { source: id, stage: "ready", fraction: 1, label: "Ready" });
-        }
-      });
-    }, 800);
+  private scheduleCutouts(target: ProjectStore | null = this.store): void {
+    if (!target) return;
+    const store = target;
+    clearTimeout(this.cutoutTimers.get(store.dir));
+    this.cutoutTimers.set(
+      store.dir,
+      setTimeout(() => {
+        this.cutoutTimers.delete(store.dir);
+        // Held open from now: the work may wait behind another project's in the queue.
+        this.making.add(store.dir);
+        this.cutoutRun = this.cutoutRun.then(() => this.makeMedia(store));
+      }, 800),
+    );
+  }
+
+  /** The cutouts, steadied shots and music separations a project needs, made and recorded. */
+  private async makeMedia(store: ProjectStore): Promise<void> {
+    // Still open: on screen, or working in the background.
+    const live = () => this.store === store || this.background.get(store.dir) === store;
+    // Progress shows for the project on screen only (a background one's clip ids aren't the window's).
+    const emitIndex = (event: Parameters<typeof this.emit<"index">>[1]) => {
+      if (this.store === store) this.emit("index", event);
+    };
+    try {
+      if (!live()) return;
+      try {
+        const ops = await makeNeededCutouts(store.dir, store.doc, {
+          onProgress: (source, fraction) =>
+            emitIndex({ source, stage: "analyze", fraction, label: "Cutting out the person" }),
+        });
+        for (const id of new Set(store.doc.scenes.map((s) => s.source)))
+          if (ops.some((o) => o.op === "update" && o.id === id))
+            emitIndex({ source: id, stage: "ready", fraction: 1, label: "Ready" });
+        if (ops.length && live())
+          store.commitAndBroadcast({ author: "index", message: "Cut out the person", ops });
+      } catch (err) {
+        console.error("[cutout] failed:", err);
+        this.emit("error", { message: `Couldn't cut out the person: ${(err as Error).message}` });
+      }
+      // Then steadied and slowed shots (after the cutouts' record, so each sees the other's).
+      if (!live()) return;
+      try {
+        const touched = new Set<string>();
+        const ops = await makeNeededFootage(store.dir, store.doc, {
+          onProgress: (source, fraction, label) => {
+            touched.add(source);
+            emitIndex({ source, stage: "analyze", fraction, label });
+          },
+        });
+        for (const id of touched) emitIndex({ source: id, stage: "ready", fraction: 1, label: "Ready" });
+        if (ops.length && live())
+          store.commitAndBroadcast({ author: "index", message: "Steadied and smoothed shots", ops });
+      } catch (err) {
+        console.error("[footage] failed:", err);
+        this.emit("error", { message: `Couldn't steady or smooth a shot: ${(err as Error).message}` });
+      }
+      if (!live()) return;
+      const separating = new Set<string>();
+      try {
+        const ops = await makeNeededStems(store.dir, store.doc, {
+          onProgress: (source, fraction) => {
+            separating.add(source);
+            emitIndex({ source, stage: "analyze", fraction, label: "Taking out the music" });
+          },
+        });
+        this.stemsError = "";
+        if (ops.length && live())
+          store.commitAndBroadcast({ author: "index", message: "Took the music out of a clip", ops });
+      } catch (err) {
+        const message = `Couldn't take the music out of a clip: ${(err as Error).message}`;
+        console.error("[stems] failed:", err);
+        // Said once: the next edit would try again, and fail the same way.
+        if (message !== this.stemsError) this.emit("error", { message });
+        this.stemsError = message;
+      } finally {
+        for (const id of separating) emitIndex({ source: id, stage: "ready", fraction: 1, label: "Ready" });
+      }
+    } finally {
+      this.making.delete(store.dir);
+      // A background project whose work is recorded can close now.
+      if (this.store !== store) void this.release(store);
+    }
   }
 
   /** The last failure taking music out of a clip, so it isn't repeated after every edit. */

@@ -28,7 +28,7 @@ export const STYLE_PRESETS: readonly StylePreset[] = [
 - Fast cuts, nothing over 4 seconds unless someone is talking.
 - Punch in on the lines that matter; never two zooms in a row.
 - Cuts land on the beat when there is music.
-- Warm colors. No emojis in captions.
+- No emojis in captions.
 `,
   },
   {

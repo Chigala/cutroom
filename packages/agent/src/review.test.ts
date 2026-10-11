@@ -117,3 +117,43 @@ describe("finishReview", () => {
     expect(await review()).toBeNull();
   });
 });
+
+describe("finishReview on the cut", () => {
+  it("listens to a changed cut on a full review and passes rough joins back", async () => {
+    const before = talking();
+    const after: ProjectDoc = {
+      ...before,
+      scenes: [
+        { id: "sc1", source: "cam", in: 0, out: 3, note: "", volume: 1 },
+        { id: "sc2", source: "cam", in: 3.4, out: 8, note: "", volume: 1 },
+      ],
+    };
+    const { scratch } = setup(before, after);
+    scratch.ops.push({ op: "update", coll: "scenes", id: "sc1", patch: {} } as unknown as Op);
+    const heard: string[] = [];
+    const host = {
+      frame: async () => Buffer.from([]),
+      measureJoins: async () => {
+        heard.push("joins");
+        return [
+          {
+            scene: "sc2",
+            time: 3,
+            loudness: 0,
+            melody: 0,
+            natural: null,
+            room: null,
+            pause: 0.08,
+            sentenceEnd: false,
+            inSpeech: false,
+            problems: ["the pause is rushed"],
+          },
+        ];
+      },
+    };
+    const steps: string[] = [];
+    const fix = await finishReview(before, { scratch, host, step: (t) => steps.push(t) })();
+    expect(heard).toEqual(["joins"]);
+    expect(fix).toContain("3.00s cut into sc2 (pause 0.08s): the pause is rushed");
+  });
+});

@@ -50,6 +50,9 @@ interface Rule {
 
 const pass = { status: "pass" } as const;
 
+/** Seconds a video holds after its last word, so the line lands instead of being cut off. */
+const ENDING_TAIL = 0.4;
+
 // The platforms' clear areas live with the project (overlays are drawn inside them too).
 export { clearArea, SAFE_ZONE, safeZoneFor };
 
@@ -518,6 +521,51 @@ const rules: Rule[] = [
               })),
           },
         }),
+      };
+    },
+  },
+  {
+    id: "cut-edges",
+    title: "Cuts that replay or end abruptly",
+    run(doc, tl) {
+      const problems: string[] = [];
+      const ops: Op[] = [];
+      const scenes: string[] = [];
+      // A shot that starts before the one before it ended, in the same take, plays that stretch twice:
+      // a stutter in picture and sound.
+      for (let i = 1; i < tl.scenes.length; i++) {
+        const prev = tl.scenes[i - 1]!.scene;
+        const next = tl.scenes[i]!.scene;
+        const replay = prev.out - next.in;
+        if (prev.source !== next.source || replay < 0.02 || next.in < prev.in) continue;
+        problems.push(`${next.id} replays ${replay.toFixed(2)}s of ${prev.id}`);
+        scenes.push(next.id);
+        ops.push({ op: "update", coll: "scenes", id: next.id, patch: { in: round(prev.out) } });
+      }
+      // The video stops as the last word does: let it land.
+      const last = tl.scenes.at(-1)?.scene;
+      const words = last && doc.transcripts.find((t) => t.id === last.source)?.words;
+      const said = words?.filter((w) => w.start < last!.out && w.end > last!.in).at(-1);
+      const length = doc.sources.find((x) => x.id === last?.source)?.duration ?? 0;
+      if (last && said) {
+        const tail = (last.out - said.end) / (last.speed ?? 1);
+        if (tail < ENDING_TAIL - 0.15 && length > last.out + 0.02) {
+          problems.push(`the video stops ${Math.max(0, tail).toFixed(2)}s after the last word`);
+          scenes.push(last.id);
+          ops.push({
+            op: "update",
+            coll: "scenes",
+            id: last.id,
+            patch: { out: round(Math.min(length, said.end + ENDING_TAIL * (last.speed ?? 1))) },
+          });
+        }
+      }
+      if (!problems.length) return pass;
+      return {
+        status: "warn",
+        detail: `${problems.join("; ")}.`,
+        scenes,
+        fix: { label: "Fix the cut edges", ops },
       };
     },
   },

@@ -1,7 +1,7 @@
 /**
  * The review before a request finishes, run by the editor rather than left to the prompt: when the agent
  * says it's done and it changed the project, the checks run (and the motion is measured when anything that
- * moves changed, and new graphics are read for their craft). Whatever it caused that falls short goes back
+ * moves changed, the cuts are listened to when the cut changed, and new graphics are read for their craft). Whatever it caused that falls short goes back
  * to it as one message, and it gets another turn to fix it, at most twice a request. A clean edit
  * finishes at once. Weaker models skip the final checks under a long request; this way no edit reaches
  * the user unchecked. A quick request ("light") measures the motion only when it wrote a graphic.
@@ -84,6 +84,22 @@ export function finishReview(
           );
       } catch (err) {
         console.warn(`[review] motion not measured: ${(err as Error).message}`);
+      }
+    }
+
+    // The cuts, heard the way a dialogue editor hears them (a rushed or dragging pause, a level or pitch
+    // jump, a cut in sound), when the cut changed in a first cut or a big request: about a second a cut.
+    const recut = JSON.stringify(before.scenes) !== JSON.stringify(doc.scenes);
+    if (depth === "full" && recut && ctx.host.measureJoins) {
+      try {
+        ctx.activity?.("Listening to the cuts");
+        for (const j of await ctx.host.measureJoins(doc))
+          if (j.problems.length)
+            found.push(
+              `${j.time.toFixed(2)}s cut into ${j.scene} (pause ${j.pause}s): ${j.problems.join("; ")}`,
+            );
+      } catch (err) {
+        console.warn(`[review] cuts not heard: ${(err as Error).message}`);
       }
     }
 

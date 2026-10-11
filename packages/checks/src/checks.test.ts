@@ -249,3 +249,64 @@ describe("checks on a video where people talk only some of the time", () => {
     expect(byId(low)["safe-zones"]!.status).toBe("pass");
   });
 });
+
+describe("cut edges", () => {
+  function take(scenes: { id: string; in: number; out: number }[]): ProjectDoc {
+    return {
+      ...emptyProject("t"),
+      sources: [
+        {
+          id: "cam",
+          kind: "video",
+          label: "cam",
+          path: "/cam.mov",
+          duration: 10,
+          hdr: false,
+          hasAudio: true,
+          status: "ready",
+          proxy: false,
+          speech: true,
+          summary: "",
+          tags: [],
+        },
+      ],
+      transcripts: [
+        {
+          id: "cam",
+          language: "en",
+          words: [
+            { text: "plug", start: 0.2, end: 0.6 },
+            { text: "Instagram.", start: 0.7, end: 1.4 },
+            { text: "So", start: 1.8, end: 2.0 },
+            { text: "do.", start: 4.0, end: 4.5 },
+          ],
+        },
+      ],
+      scenes: scenes.map((s) => ({ ...s, source: "cam", note: "", volume: 1 })),
+    } as ProjectDoc;
+  }
+
+  it("flag a shot that replays the end of the one before, and a video that stops on its last word", () => {
+    const doc = take([
+      { id: "a", in: 0.1, out: 1.66 },
+      { id: "b", in: 1.62, out: 4.55 },
+    ]);
+    const r = byId(doc)["cut-edges"]!;
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("b replays 0.04s of a");
+    expect(r.detail).toContain("stops 0.05s after the last word");
+    const fixed = applyOps(doc, r.fix!.ops).doc;
+    expect(byId(fixed)["cut-edges"]!.status).toBe("pass");
+    expect(fixed.scenes[1]!.in).toBe(1.66);
+    expect(fixed.scenes[1]!.out).toBeCloseTo(4.9);
+  });
+
+  it("let a deliberate repeat from earlier in the take, and an ending with room, through", () => {
+    const doc = take([
+      { id: "a", in: 1.7, out: 4.9 },
+      { id: "b", in: 0.1, out: 1.5 },
+      { id: "c", in: 3.9, out: 4.9 },
+    ]);
+    expect(byId(doc)["cut-edges"]!.status).toBe("pass");
+  });
+});

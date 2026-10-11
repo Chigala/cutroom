@@ -2347,7 +2347,9 @@ measure: true returns what the filters report instead: signalstats with metadata
       const result = commit(ctx, label, added.ops);
       return result.isError
         ? result
-        : { text: `Added ${c.kind} ${added.id} (${c.width}x${c.height}, "${c.title}", KLIPY).` };
+        : {
+            text: `Added ${c.kind} ${added.id} (${c.width}x${c.height}, "${c.title}", KLIPY). Place it big enough to read on a phone at a glance: box width 0.38-0.5 of the frame, beside the face (not smaller to dodge it: move it to the side with room, or above the head).`,
+          };
     },
   }),
   tool({

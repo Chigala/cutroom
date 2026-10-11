@@ -326,3 +326,52 @@ describe("cut edges", () => {
     expect(byId(doc)["cut-edges"]!.status).toBe("pass");
   });
 });
+
+describe("meme size", () => {
+  const withMeme = (width: number, style: "card" | "sticker" | "plain", provider = "klipy") => {
+    const doc = demoProject();
+    const scene = doc.scenes[0]!.id;
+    return applyOps(doc, [
+      {
+        op: "insert",
+        coll: "sources",
+        item: {
+          id: "meme",
+          kind: "image",
+          label: "shocked",
+          path: "/meme.gif",
+          duration: 0,
+          origin: { url: "https://klipy.com/x", provider, license: "KLIPY", author: "" },
+        } as never,
+      },
+      {
+        op: "insert",
+        coll: "visuals",
+        item: {
+          id: "m1",
+          anchor: { scene, at: 0.5 },
+          duration: 2,
+          layout: "overlay",
+          content: { kind: "media", source: "meme", box: { x: 0.25, y: 0.3, width }, style },
+        } as never,
+      },
+    ]).doc;
+  };
+
+  it("flags a meme too small to read on a phone, and its fix makes it readable", () => {
+    const doc = withMeme(0.17, "sticker");
+    const r = byId(doc)["meme-size"]!;
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("m1 is too small to read on a phone");
+    const fixed = applyOps(doc, r.fix!.ops).doc;
+    expect(byId(fixed)["meme-size"]!.status).toBe("pass");
+    expect((fixed.visuals.find((v) => v.id === "m1")!.content as { box: { width: number } }).box.width).toBe(
+      0.42,
+    );
+  });
+
+  it("leaves a readable meme, and a small plain logo from elsewhere, alone", () => {
+    expect(byId(withMeme(0.42, "card"))["meme-size"]!.status).toBe("pass");
+    expect(byId(withMeme(0.15, "plain", "user"))["meme-size"]!.status).toBe("pass");
+  });
+});

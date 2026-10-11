@@ -50,6 +50,10 @@ interface Rule {
 
 const pass = { status: "pass" } as const;
 
+/** The narrowest a meme or sticker reads at (a share of the frame's width), and the width its fix gives it. */
+const MIN_MEME = 0.3;
+const MEME_WIDTH = 0.42;
+
 /** The longest overlap between two shots of one take that's a slip, not a deliberate repeat. */
 const MAX_SLIVER = 0.25;
 
@@ -576,6 +580,37 @@ const rules: Rule[] = [
         detail: `${problems.join("; ")}.`,
         scenes,
         fix: { label: "Fix the cut edges", ops },
+      };
+    },
+  },
+  {
+    id: "meme-size",
+    title: "Memes big enough to read",
+    run(doc) {
+      // A meme or sticker reads on a phone at a glance only this big; smaller, it's a speck by the face.
+      const small = doc.visuals.filter((v) => {
+        if (v.content.kind !== "media") return false;
+        const content = v.content;
+        const src = doc.sources.find((x) => x.id === content.source);
+        const meme =
+          src?.origin?.provider === "klipy" || content.style === "sticker" || content.style === "card";
+        return meme && content.box.width < MIN_MEME;
+      });
+      if (!small.length) return pass;
+      return {
+        status: "warn",
+        detail: `${small.map((v) => v.id).join(", ")} ${small.length === 1 ? "is" : "are"} too small to read on a phone (under ${Math.round(MIN_MEME * 100)}% of the frame's width).`,
+        fix: {
+          label: `Make ${small.length === 1 ? "it" : "them"} ${Math.round(MEME_WIDTH * 100)}% wide`,
+          ops: small.map((v) => ({
+            op: "update" as const,
+            coll: "visuals" as const,
+            id: v.id,
+            patch: {
+              content: { ...v.content, box: { ...(v.content as { box: object }).box, width: MEME_WIDTH } },
+            },
+          })),
+        },
       };
     },
   },

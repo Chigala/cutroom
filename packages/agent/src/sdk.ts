@@ -20,6 +20,7 @@ import { runTool, TOOLS, type ToolContext } from "./tools.ts";
 import {
   AgentError,
   type BackendRun,
+  REVIEW_TURNS,
   STALL_MS,
   Stalled,
   StepLimit,
@@ -105,7 +106,9 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
         settings: { disableClaudeAiConnectors: true },
         persistSession: false,
         includePartialMessages: true,
-        maxTurns: run.maxTurns,
+        // The review's rounds come on top of the request's turns, so a request that finishes on its last
+        // turn isn't cut off by being sent back.
+        maxTurns: run.maxTurns + (run.review ? REVIEW_TURNS : 0),
         // A neutral working directory: no project CLAUDE.md or settings leak into the editor's agent.
         cwd: tmpdir(),
         abortController: abort,
@@ -115,10 +118,20 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
           hooks: {
             Stop: [
               {
+                // Measuring the motion takes about a second per second of video.
+                timeout: 900,
                 hooks: [
-                  async () => {
-                    const fix = await run.review?.();
-                    return fix ? { decision: "block" as const, reason: fix } : {};
+                  async (_input, _id, { signal }) => {
+                    // Working, not stalled, while it measures.
+                    ctx.running?.(true);
+                    try {
+                      const fix = await run.review?.();
+                      return fix && !signal.aborted && !abort.signal.aborted
+                        ? { decision: "block" as const, reason: fix }
+                        : {};
+                    } finally {
+                      ctx.running?.(false);
+                    }
                   },
                 ],
               },

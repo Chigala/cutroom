@@ -66,6 +66,9 @@ export class Watchdog {
   }
 }
 
+/** Turns kept back for the editor's review rounds (review.ts), on top of the request's own. */
+export const REVIEW_TURNS = 16;
+
 /** What a backend needs for one request. */
 export interface BackendRun {
   readonly prompt: string;

@@ -42,14 +42,17 @@ function overlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   return n / Math.min(a.size, b.size);
 }
 
-/** What `design` shares with `other`, in words. */
-export function sharedTraits(design: Design, other: Design): string[] {
+/**
+ * What `design` shares with `other`, in words. Under a brand kit (`brand`) the faces and the accent are
+ * the brand's, the same in every video by design: only the motion and the graphics are compared.
+ */
+export function sharedTraits(design: Design, other: Design, brand = false): string[] {
   const out: string[] = [];
-  if (same(design.display, other.display)) out.push(`the display face (${design.display})`);
-  if (same(design.text, other.text) && !same(design.display, other.display))
+  if (!brand && same(design.display, other.display)) out.push(`the display face (${design.display})`);
+  if (!brand && same(design.text, other.text) && !same(design.display, other.display))
     out.push(`the text face (${design.text})`);
   const [a, b] = [design.palette[0], other.palette[0]];
-  if (a && b) {
+  if (a && b && !brand) {
     const [ha, hb] = [hue(a), hue(b)];
     const apart = Math.min(Math.abs(ha.h - hb.h), 360 - Math.abs(ha.h - hb.h));
     if (ha.vivid && hb.vivid && apart < 25) out.push(`an accent of nearly the same hue (${a} and ${b})`);
@@ -60,12 +63,16 @@ export function sharedTraits(design: Design, other: Design): string[] {
   return out;
 }
 
-/** The recent videos this design is too alike, with what it repeats of each. */
+/**
+ * The recent videos this design is too alike, with what it repeats of each. Under a brand kit, the same
+ * motion and the same graphic kinds again is too alike (its faces and accent are meant to repeat).
+ */
 export function designEchoes(
   design: Design,
   recent: readonly PastDesign[],
+  brand = false,
 ): { name: string; traits: string[] }[] {
   return recent
-    .map((p) => ({ name: p.name, traits: sharedTraits(design, p.design) }))
-    .filter((e) => e.traits.length >= TOO_ALIKE);
+    .map((p) => ({ name: p.name, traits: sharedTraits(design, p.design, brand) }))
+    .filter((e) => e.traits.length >= (brand ? 2 : TOO_ALIKE));
 }

@@ -612,10 +612,10 @@ const Label = z
   .describe('Short human label for this change, e.g. "+3 zooms" or "Cut the retakes"');
 
 /** A tool whose job needs a guide asks for it first, once a request: the refusal says which. */
-function needsGuide(ctx: ToolContext, topic: GuideTopic): ToolResult | null {
+function needsGuide(ctx: ToolContext, topic: GuideTopic, also = ""): ToolResult | null {
   if (ctx.scratch.guides?.has(topic)) return null;
   return {
-    text: `Read the ${topic} guide first (guide {"topic": "${topic}"}): it has the craft this needs. Then do this again.`,
+    text: `Read the ${topic} guide first (guide {"topic": "${topic}"}): it has the craft this needs${also}. Then do this again.`,
     isError: true,
   };
 }
@@ -942,29 +942,46 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       graphics: z.array(z.string().min(1).max(60)).min(1).max(12),
     }),
     async run({ label, ...design }, ctx) {
-      const echoes = designEchoes(design, (await ctx.host.recentDesigns?.()) ?? []);
+      const doc = ctx.scratch.doc;
+      const brand = Boolean(doc.meta.kit);
+      const echoes = designEchoes(design, (await ctx.host.recentDesigns?.()) ?? [], brand);
       if (echoes.length)
         return {
           text: [
             "Not saved: this repeats a recent video's design, and every video gets its own.",
             ...echoes.map((e) => `- "${e.name}": ${e.traits.join(", ")}`),
-            "Change what it repeats (a different pairing of faces, another accent, a different motion language or graphic kinds that come from this video's subject), then call design again.",
+            brand
+              ? "This project keeps its brand kit's faces and accent: change the motion language and the graphic kinds (from this video's subject), then call design again."
+              : "Change what it repeats (a different pairing of faces, another accent, a different motion language or graphic kinds that come from this video's subject), then call design again.",
           ].join("\n"),
           isError: true,
         };
-      const doc = ctx.scratch.doc;
       const families = new Set([...BUNDLED_FONTS.map((f) => f.family), ...doc.fonts.map((f) => f.family)]);
       const missing = [design.display, design.text].filter(
         (f, i, all) => !families.has(f) && all.indexOf(f) === i,
       );
+      // The look follows the design only when nothing depends on it yet: a brand kit's look, or one the
+      // video's graphics and cover already use, stays as it is unless the user asks to change it.
+      const inUse = doc.visuals.length > 0 && Boolean(doc.look.accent || doc.look.font);
+      const follows = !brand && !inUse;
       const result = commit(ctx, label, [
         { op: "set", key: "design", value: design },
-        { op: "merge", key: "look", patch: { accent: design.palette[0], font: design.display } },
+        ...(follows
+          ? [
+              {
+                op: "merge" as const,
+                key: "look" as const,
+                patch: { accent: design.palette[0], font: design.display },
+              },
+            ]
+          : []),
       ]);
       if (result.isError) return result;
       return {
         text: [
-          "Saved design.json; look.accent and look.font follow it.",
+          follows
+            ? "Saved design.json; look.accent and look.font follow it."
+            : `Saved design.json. The look's accent and font stay as they are (${brand ? "the brand kit's" : "the video's graphics already use them"}): design within them unless the user asks to change them.`,
           missing.length
             ? `Not in the project yet: ${missing.join(", ")}. find_font it and add_font the weights you'll use, or the closest bundled face shows instead.`
             : "",
@@ -985,7 +1002,9 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       html: z.string().min(20).max(60_000),
     }),
     async run({ label, id, html }, ctx) {
-      const unread = needsGuide(ctx, "graphics");
+      const fresh = !ctx.scratch.doc.graphics.some((g) => g.id === id) && !ctx.scratch.doc.design.idea;
+      // Both steps a new graphic needs, said at once.
+      const unread = needsGuide(ctx, "graphics", fresh ? ", and decide this video's design with design" : "");
       if (unread) return unread;
       const problem = validateGraphic(html);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
@@ -2084,7 +2103,7 @@ measure: true returns what the filters report instead: signalstats with metadata
       'Download a find_meme candidate into the project as a clip (an image for a static meme), credited to KLIPY. Returns its source id: place it as a visual with content {"kind": "media", "source": id, "box": {x, y, width}, "style": "card" or "sticker", "rotate"}, short (1-2.5s), right on the beat it reacts to.',
     input: z.object({ label: Label, id: z.string().min(3).max(60) }),
     async run({ label, id }, ctx) {
-      const unread = needsGuide(ctx, "sound");
+      const unread = needsGuide(ctx, "sound", " (memes are in it)");
       if (unread) return unread;
       const c = ctx.scratch.memes?.get(id);
       if (!c)

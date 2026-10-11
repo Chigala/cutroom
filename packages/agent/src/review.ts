@@ -8,7 +8,7 @@
  */
 import { runChecks } from "@vedit/checks";
 import { lintGraphic, type ProjectDoc } from "@vedit/project";
-import type { ToolContext } from "./tools.ts";
+import { refitMusic, snapCutsToBeat, type ToolContext } from "./tools.ts";
 
 /** How many times one request can be sent back. */
 const MAX_ROUNDS = 2;
@@ -41,9 +41,13 @@ export function finishReview(
   );
   let rounds = 0;
   return async () => {
-    const doc = ctx.scratch.doc;
-    if (rounds >= MAX_ROUNDS || !ctx.scratch.ops.length || !doc.scenes.length) return null;
+    if (rounds >= MAX_ROUNDS || !ctx.scratch.ops.length || !ctx.scratch.doc.scenes.length) return null;
     ctx.activity?.("Checking the edit");
+    // What the end of a request does by itself (music refitted, cuts onto the beat) first, so what's
+    // checked is what the user gets. Both do nothing the second time.
+    await refitMusic(ctx);
+    snapCutsToBeat(ctx);
+    const doc = ctx.scratch.doc;
     const found: string[] = [];
 
     for (const r of runChecks(doc)) {

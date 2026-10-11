@@ -58,3 +58,16 @@ describe("designs", () => {
     expect(sharedTraits(grey, otherGrey)).toEqual([]);
   });
 });
+
+describe("designs under a brand kit", () => {
+  it("compare only motion and graphics, since the brand's faces and accent repeat by design", () => {
+    const sameBrand = Design.parse({ ...cooking, motion: "hard cuts and whips", graphics: ["map", "stamp"] });
+    expect(sharedTraits(sameBrand, cooking, true)).toEqual([]);
+    expect(designEchoes(sameBrand, [{ name: "Pasta night", design: cooking }], true)).toEqual([]);
+    const again = Design.parse({ ...cooking, motion: "soft drops from above, settling" });
+    expect(designEchoes(again, [{ name: "Pasta night", design: cooking }], true)[0]!.traits).toEqual([
+      "the motion language",
+      "most of the graphic kinds",
+    ]);
+  });
+});

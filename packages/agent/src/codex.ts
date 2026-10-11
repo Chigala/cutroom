@@ -16,6 +16,7 @@ import { runTool, TOOLS, type ToolContext } from "./tools.ts";
 import {
   AgentError,
   type BackendRun,
+  REVIEW_TURNS,
   STALL_MS,
   Stalled,
   StepLimit,
@@ -288,7 +289,7 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
         case "item/tool/call": {
           const { tool, arguments: args } = params as { tool: string; arguments: unknown };
           // Codex has no turn limit of its own: a request gets as many tool calls as Claude's turns allow.
-          if (++tools > run.maxTurns * 2) {
+          if (++tools > (run.maxTurns + (run.review ? REVIEW_TURNS : 0)) * 2) {
             stop("limit");
             return {
               success: false,
@@ -369,8 +370,11 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
     let end = await done;
     // The editor's review when it wants to stop: what falls short goes back to it as one more turn.
     while (!stopped && end.status === "completed" && run.review) {
-      const fix = await run.review();
-      if (!fix) break;
+      // Working, not stalled, while it measures.
+      watchdog.tool(true);
+      const fix = await run.review().finally(() => watchdog.tool(false));
+      // Stopped while it was being checked: no new turn.
+      if (!fix || stopped) break;
       done = turnEnd();
       await startTurn([{ type: "text", text: fix, text_elements: [] }]);
       end = await done;

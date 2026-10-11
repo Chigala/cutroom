@@ -7,6 +7,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Design, type PastDesign } from "@vedit/project";
 import { z } from "zod";
+import { samePath } from "./folders.ts";
 
 const KEEP = 12;
 
@@ -23,16 +24,25 @@ async function load(file: string): Promise<Entry[]> {
 
 /** The recent designs of every project but `dir`, newest first. */
 export async function recentDesigns(file: string, dir: string): Promise<PastDesign[]> {
-  return (await load(file)).filter((e) => e.dir !== dir).map(({ name, design }) => ({ name, design }));
+  return (await load(file))
+    .filter((e) => !samePath(e.dir, dir))
+    .map(({ name, design }) => ({ name, design }));
 }
 
+/** Writes one at a time: two projects finishing together (one in the background) both land. */
+let writing: Promise<void> = Promise.resolve();
+
 /** Notes a project's design (an unset one is nothing to remember). */
-export async function recordDesign(file: string, dir: string, name: string, design: Design): Promise<void> {
-  if (!design.idea && !design.display && !design.palette.length) return;
-  const kept = (await load(file)).filter((e) => e.dir !== dir);
-  const next = [{ dir, name, design, at: new Date().toISOString() }, ...kept].slice(0, KEEP);
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  await writeFile(tmp, JSON.stringify(next, null, 2));
-  await rename(tmp, file);
+export function recordDesign(file: string, dir: string, name: string, design: Design): Promise<void> {
+  if (!design.idea && !design.display && !design.palette.length) return Promise.resolve();
+  const write = async () => {
+    const kept = (await load(file)).filter((e) => !samePath(e.dir, dir));
+    const next = [{ dir, name, design, at: new Date().toISOString() }, ...kept].slice(0, KEEP);
+    await mkdir(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    await writeFile(tmp, JSON.stringify(next, null, 2));
+    await rename(tmp, file);
+  };
+  writing = writing.then(write, write);
+  return writing;
 }

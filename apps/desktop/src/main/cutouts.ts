@@ -61,7 +61,9 @@ export async function makeNeededCutouts(
     if (!src) continue;
     const input = await derivationInput(projectDir, src);
     if (!input) continue;
-    const range = covered ?? wanted;
+    // A new cutout reaches a little past the shot, so trimming the shot a bit later (the agent often does
+    // after it cuts out) still finds it covered, instead of cutting the whole shot out again.
+    const range = covered ?? (src.kind === "video" ? padded(wanted, src.duration) : wanted);
     const made: Made = { ...range, ...(keep && { keep }) };
     const file = paths.cutout(scene.source, range.from, range.to, keep);
     // Already on disk (made before, then undone and redone): just record it again.
@@ -133,4 +135,16 @@ export async function makeNeededCutouts(
       ? [{ op: "update", coll: "analyses", id: source, patch: { cutouts } }]
       : [{ op: "insert", coll: "analyses", item: { id: source, silences: [], cutouts } }];
   });
+}
+
+/** Seconds a new cutout reaches past its shot on each side. */
+export const CUTOUT_PAD = 0.5;
+
+/** A cutout range reaching CUTOUT_PAD past the shot, within the clip, on the tenths cutoutRange uses. */
+export function padded(range: { from: number; to: number }, length: number): { from: number; to: number } {
+  const end = length > 0 ? length : Number.POSITIVE_INFINITY;
+  return {
+    from: Math.max(0, Math.floor((range.from - CUTOUT_PAD) * 10) / 10),
+    to: Math.min(end, Math.ceil((range.to + CUTOUT_PAD) * 10) / 10),
+  };
 }

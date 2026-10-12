@@ -47,6 +47,15 @@ interface UiState {
   railOpen: boolean;
   /** The sidebar's width when open, in pixels (dragged). */
   railWidth: number;
+  /** The chat's and the side panel's widths, and the timeline's height, in pixels (dragged). */
+  chatWidth: number;
+  sideWidth: number;
+  timelineHeight: number;
+  /**
+   * A panel folded away for room (the window is too narrow to dock it), shown over the edit until a click
+   * elsewhere. Its own open or closed choice is kept for when the window is wide again.
+   */
+  peek: "rail" | "side" | "comments" | null;
   /** Projects folded shut in the sidebar, by folder. */
   folded: string[];
   /** The comments beside the stage are showing (hidden, a chip brings them back). */
@@ -74,10 +83,17 @@ const RAIL_KEY = "cutroom.railOpen";
 const COMMENTS_KEY = "cutroom.commentsOpen";
 const SIDE_KEY = "cutroom.sideOpen";
 const RAIL_WIDTH_KEY = "cutroom.railWidth";
+const CHAT_WIDTH_KEY = "cutroom.chatWidth";
+const SIDE_WIDTH_KEY = "cutroom.sideWidth";
+const TIMELINE_HEIGHT_KEY = "cutroom.timelineHeight";
 const FOLDED_KEY = "cutroom.foldedProjects";
 
 /** The sidebar's width when open: dragged between these, never so wide it squeezes the edit. */
 export const RAIL_WIDTH = { min: 200, max: 400, initial: 248, closed: 60 } as const;
+/** The chat, the side panel and the timeline: dragged between these. */
+export const CHAT_WIDTH = { min: 320, max: 560, initial: 380 } as const;
+export const SIDE_WIDTH = { min: 280, max: 480, initial: 320 } as const;
+export const TIMELINE_HEIGHT = { min: 160, max: 520, initial: 264 } as const;
 
 export const useUi = create<UiState>()(() => ({
   sideTab: "story",
@@ -91,6 +107,10 @@ export const useUi = create<UiState>()(() => ({
   marking: false,
   railOpen: remembered(RAIL_KEY, false),
   railWidth: rememberedNumber(RAIL_WIDTH_KEY, RAIL_WIDTH.initial),
+  chatWidth: rememberedNumber(CHAT_WIDTH_KEY, CHAT_WIDTH.initial),
+  sideWidth: rememberedNumber(SIDE_WIDTH_KEY, SIDE_WIDTH.initial),
+  timelineHeight: rememberedNumber(TIMELINE_HEIGHT_KEY, TIMELINE_HEIGHT.initial),
+  peek: null,
   folded: rememberedList(FOLDED_KEY),
   commentsOpen: remembered(COMMENTS_KEY, true),
   sideOpen: remembered(SIDE_KEY, true),
@@ -149,6 +169,30 @@ export function setRailWidth(width: number, save = true): void {
   if (save) keep(RAIL_WIDTH_KEY, String(railWidth));
 }
 
+const within = (v: number, { min, max }: { min: number; max: number }) =>
+  Math.round(Math.min(max, Math.max(min, v)));
+
+/** The chat's width, kept inside its limits. */
+export function setChatWidth(width: number, save = true): void {
+  const chatWidth = within(width, CHAT_WIDTH);
+  setUi({ chatWidth });
+  if (save) keep(CHAT_WIDTH_KEY, String(chatWidth));
+}
+
+/** The side panel's width, kept inside its limits. */
+export function setSideWidth(width: number, save = true): void {
+  const sideWidth = within(width, SIDE_WIDTH);
+  setUi({ sideWidth });
+  if (save) keep(SIDE_WIDTH_KEY, String(sideWidth));
+}
+
+/** The timeline's height, kept inside its limits. */
+export function setTimelineHeight(height: number, save = true): void {
+  const timelineHeight = within(height, TIMELINE_HEIGHT);
+  setUi({ timelineHeight });
+  if (save) keep(TIMELINE_HEIGHT_KEY, String(timelineHeight));
+}
+
 /** Folds a project in the sidebar, or unfolds it. */
 export function toggleFolded(dir: string): void {
   const now = useUi.getState().folded;
@@ -170,19 +214,9 @@ function remember(key: string, open: boolean): void {
   }
 }
 
-export function toggleRail(): void {
-  const railOpen = !useUi.getState().railOpen;
-  setUi({ railOpen });
-  remember(RAIL_KEY, railOpen);
-}
-
 export function setSideOpen(sideOpen: boolean): void {
   setUi({ sideOpen });
   remember(SIDE_KEY, sideOpen);
-}
-
-export function toggleSide(): void {
-  setSideOpen(!useUi.getState().sideOpen);
 }
 
 export function setCommentsOpen(commentsOpen: boolean): void {

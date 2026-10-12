@@ -716,6 +716,39 @@ export function cleanCutOps(
     ops.push({ op: "update", coll: "scenes", id: scene.id, patch: { in: newIn, out: newOut } });
     shift.set(scene.id, (scene.in - newIn) / (scene.speed ?? 1));
   }
+  // Two shots of one take that meet (a jump cut that removes little or nothing) each moved their own
+  // edge: the first on into its pause, the next back for its breath. Overlapping, they'd play that
+  // stretch twice; they meet at one point instead, the first shot's end (its pause after the line).
+  for (const scene of order) {
+    const prev = prevOf.get(scene.id);
+    if (!prev || prev.source !== scene.source || prev.ramp?.length || scene.ramp?.length) continue;
+    const a = edges.get(prev.id) ?? prev;
+    const b = edges.get(scene.id) ?? scene;
+    // Only shots that run on from each other: a later shot that goes back in the take is a deliberate repeat.
+    // ...and only a sliver of overlap: a longer one is a deliberate repeat.
+    if (scene.in < prev.in || b.in >= a.out - 0.001 || a.out - b.in > 0.25) continue;
+    const meet = round(a.out);
+    if (b.out - meet < 0.2) continue;
+    edges.set(scene.id, { in: meet, out: b.out });
+    const at = ops.findIndex((o) => o.op === "update" && o.id === scene.id);
+    const same = Math.abs(meet - scene.in) < 0.015 && Math.abs(b.out - scene.out) < 0.015;
+    if (at >= 0) {
+      // Where they meet is where it already was: nothing to change (running this again changes nothing).
+      if (same) {
+        const o = ops[at] as Extract<Op, { op: "update" }>;
+        moved -=
+          (Math.abs((o.patch.in as number) - scene.in) >= 0.015 ? 1 : 0) +
+          (Math.abs((o.patch.out as number) - scene.out) >= 0.015 ? 1 : 0);
+        ops.splice(at, 1);
+        shift.delete(scene.id);
+        continue;
+      }
+      const o = ops[at] as Extract<Op, { op: "update" }>;
+      ops[at] = { ...o, patch: { ...o.patch, in: meet } } as Op;
+    } else if (!same)
+      ops.push({ op: "update", coll: "scenes", id: scene.id, patch: { in: meet, out: b.out } });
+    if (!same) shift.set(scene.id, (scene.in - meet) / (scene.speed ?? 1));
+  }
   // A join that still lands in sound on either side (no breath to cut on) blends over mix.speechFade
   // instead of chopping. A crossfade already set on the shot is the editor's call and stays.
   if (doc.mix.speechFade > doc.mix.cutFade)

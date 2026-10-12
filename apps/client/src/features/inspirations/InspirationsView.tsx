@@ -59,7 +59,7 @@ export function InspirationsView() {
     // Over the editor, beside the project rail (which shows it's open), like a page in Claude's apps.
     <div className="absolute inset-0 z-30 flex bg-bg animate-fade-in">
       <main className="relative min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-[1180px] flex-col gap-10 px-10 pt-10 pb-16">
+        <div className="mx-auto flex max-w-[1180px] flex-col gap-10 px-10 pt-10 pb-16 max-xl:px-8">
           <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
             <div className="flex max-w-[620px] flex-col gap-2">
               <h1 className="m-0 text-[26px] font-semibold tracking-[-0.02em]">Inspirations</h1>
@@ -347,7 +347,7 @@ function Detail({
   };
 
   return (
-    <aside className="flex w-[420px] shrink-0 flex-col border-l border-line bg-panel animate-fade-in">
+    <aside className="flex w-[420px] shrink-0 flex-col border-l border-line bg-panel animate-fade-in max-xl:w-[360px]">
       <div className="flex shrink-0 flex-col gap-5 px-6 pt-6 pb-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1.5">

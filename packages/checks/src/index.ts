@@ -50,6 +50,16 @@ interface Rule {
 
 const pass = { status: "pass" } as const;
 
+/** The narrowest a meme or sticker reads at (a share of the frame's width), and the width its fix gives it. */
+const MIN_MEME = 0.3;
+const MEME_WIDTH = 0.42;
+
+/** The longest overlap between two shots of one take that's a slip, not a deliberate repeat. */
+const MAX_SLIVER = 0.25;
+
+/** Seconds a video holds after its last word, so the line lands instead of being cut off. */
+const ENDING_TAIL = 0.4;
+
 // The platforms' clear areas live with the project (overlays are drawn inside them too).
 export { clearArea, SAFE_ZONE, safeZoneFor };
 
@@ -518,6 +528,89 @@ const rules: Rule[] = [
               })),
           },
         }),
+      };
+    },
+  },
+  {
+    id: "cut-edges",
+    title: "Cuts that replay or end abruptly",
+    run(doc, tl) {
+      const problems: string[] = [];
+      const ops: Op[] = [];
+      const scenes: string[] = [];
+      // A shot that starts a sliver before the one before it ended, in the same take, plays that sliver
+      // twice: a stutter in picture and sound. A longer overlap is a deliberate repeat, and stays.
+      for (let i = 1; i < tl.scenes.length; i++) {
+        const prev = tl.scenes[i - 1]!.scene;
+        const next = tl.scenes[i]!.scene;
+        const replay = prev.out - next.in;
+        if (prev.source !== next.source || replay < 0.02 || replay > MAX_SLIVER || next.in < prev.in)
+          continue;
+        problems.push(`${next.id} replays ${replay.toFixed(2)}s of ${prev.id}`);
+        scenes.push(next.id);
+        // The first shot ends where the next begins: nothing anchored in either moves.
+        ops.push({ op: "update", coll: "scenes", id: prev.id, patch: { out: round(next.in) } });
+      }
+      // The video stops as the last word does: let it land.
+      const last = tl.scenes.at(-1)?.scene;
+      const words = last && doc.transcripts.find((t) => t.id === last.source)?.words;
+      const said = words?.filter((w) => w.start < last!.out && w.end > last!.in).at(-1);
+      const length = doc.sources.find((x) => x.id === last?.source)?.duration ?? 0;
+      // Where the speaker goes on in the take: the ending can't reach into the next word.
+      const after = words?.find((w) => said && w.start >= said.end);
+      const room = Math.min(length, after ? after.start - 0.05 : length);
+      if (last && said) {
+        const tail = (last.out - said.end) / (last.speed ?? 1);
+        // Only when there's a pause after the line to hold: a speaker who runs straight on is cut on
+        // the breath, which is right.
+        if (tail < ENDING_TAIL - 0.15 && room > last.out + 0.1) {
+          problems.push(`the video stops ${Math.max(0, tail).toFixed(2)}s after the last word`);
+          scenes.push(last.id);
+          ops.push({
+            op: "update",
+            coll: "scenes",
+            id: last.id,
+            patch: { out: round(Math.min(room, said.end + ENDING_TAIL * (last.speed ?? 1))) },
+          });
+        }
+      }
+      if (!problems.length) return pass;
+      return {
+        status: "warn",
+        detail: `${problems.join("; ")}.`,
+        scenes,
+        fix: { label: "Fix the cut edges", ops },
+      };
+    },
+  },
+  {
+    id: "meme-size",
+    title: "Memes big enough to read",
+    run(doc) {
+      // A meme or sticker reads on a phone at a glance only this big; smaller, it's a speck by the face.
+      const small = doc.visuals.filter((v) => {
+        if (v.content.kind !== "media") return false;
+        const content = v.content;
+        const src = doc.sources.find((x) => x.id === content.source);
+        const meme =
+          src?.origin?.provider === "klipy" || content.style === "sticker" || content.style === "card";
+        return meme && content.box.width < MIN_MEME;
+      });
+      if (!small.length) return pass;
+      return {
+        status: "warn",
+        detail: `${small.map((v) => v.id).join(", ")} ${small.length === 1 ? "is" : "are"} too small to read on a phone (under ${Math.round(MIN_MEME * 100)}% of the frame's width).`,
+        fix: {
+          label: `Make ${small.length === 1 ? "it" : "them"} ${Math.round(MEME_WIDTH * 100)}% wide`,
+          ops: small.map((v) => ({
+            op: "update" as const,
+            coll: "visuals" as const,
+            id: v.id,
+            patch: {
+              content: { ...v.content, box: { ...(v.content as { box: object }).box, width: MEME_WIDTH } },
+            },
+          })),
+        },
       };
     },
   },

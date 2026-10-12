@@ -177,6 +177,16 @@ export function wordsFromDtw(
 }
 
 /** Words with timings, in seconds. Non-speech markers like "[MUSIC]" are dropped. */
+/** The whisper.cpp program the library runs from a whisper folder (its getWhisperExecutablePath, for 1.7.4+). */
+export function whisperProgram(dir: string): string {
+  return path.join(
+    path.resolve(dir),
+    "build",
+    "bin",
+    process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli",
+  );
+}
+
 export async function transcribeWords(
   wav: string,
   setup: WhisperSetup,
@@ -203,10 +213,18 @@ export async function transcribeWords(
     return { words: spellLike(cleanHallucinations(got.words), glossary), language: got.language };
   }
   await ensureWhisper(setup);
+  const whisperPath = shippedWhisper() ?? setup.dir;
+  // The library spawns the program without listening for its error: a missing one would throw out of
+  // the app (uncaught ENOENT) and leave the clip half indexed. Say so here instead, and the clip fails.
+  const program = whisperProgram(whisperPath);
+  if (!existsSync(program))
+    throw new Error(
+      `whisper isn't installed properly (${path.basename(program)} is missing): reinstall it in Settings`,
+    );
   const output = await whisper({
     inputPath: wav,
     // The app's whisper.cpp when it ships one; the model always lives in setup.dir.
-    whisperPath: shippedWhisper() ?? setup.dir,
+    whisperPath,
     modelFolder: modelFile(setup).folder,
     whisperCppVersion: WHISPER_VERSION,
     model: modelFile(setup).model,

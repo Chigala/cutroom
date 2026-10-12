@@ -8,7 +8,7 @@ import { ProjectStore } from "@vedit/project/node";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 const data = mkdtempSync(path.join(tmpdir(), "vedit-bg-"));
-afterAll(() => rmSync(data, { recursive: true, force: true }));
+afterAll(() => rmSync(data, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 // Claude, driven by the test: each request waits until the test finishes it.
 const agent = vi.hoisted(() => ({
@@ -75,7 +75,11 @@ describe("Claude working in the background", () => {
     expect(agentEvents.find((e) => e.runId === runId && e.type === "done")).toBeTruthy();
     expect(commits).toEqual([]);
     expect(service.currentDoc()?.look.vignette).not.toBe(true);
-    expect(JSON.parse(readFileSync(path.join(a, "look.json"), "utf8")).vignette).toBe(true);
+    // On disk once the project is let go: after its media work (cutouts and the like) is made and recorded.
+    await vi.waitFor(
+      () => expect(JSON.parse(readFileSync(path.join(a, "look.json"), "utf8")).vignette).toBe(true),
+      { timeout: 3000 },
+    );
     expect(service.activeRuns()).toEqual([]);
 
     // Back in A: the change is there, in its history too.
@@ -97,7 +101,11 @@ describe("Claude working in the background", () => {
     expect(service.activeRuns().map((r) => r.dir)).toEqual([c]);
     agent.finish.shift()!(vignette);
     await flush();
-    expect(JSON.parse(readFileSync(path.join(c, "look.json"), "utf8")).vignette).toBe(true);
+    // On disk once the project is let go: after its media work (cutouts and the like) is made and recorded.
+    await vi.waitFor(
+      () => expect(JSON.parse(readFileSync(path.join(c, "look.json"), "utf8")).vignette).toBe(true),
+      { timeout: 3000 },
+    );
     expect(service.currentDoc()?.meta.name).toBe("D");
     await service.close();
   });

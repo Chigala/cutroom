@@ -86,7 +86,8 @@ let win: BrowserWindow | null = null;
 const service = new ProjectService(() => win);
 
 function createWindow({ hidden = false } = {}): void {
-  const min = { width: 1080, height: 680 };
+  // The editor folds its panels to fit down to this (apps/client's layout.ts); smaller, nothing would.
+  const min = { width: 900, height: 600 };
   const place = hidden ? { width: 1440, height: 900 } : savedPlace(min);
   win = new BrowserWindow({
     width: place.width,

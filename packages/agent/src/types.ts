@@ -20,6 +20,25 @@ export class StepLimit extends AgentError {
   }
 }
 
+/** The agent kept repeating a call that failed the same way: stopped early, keeping what it did. */
+export class Stuck extends StepLimit {
+  override name = "Stuck";
+  constructor(
+    partial: string,
+    readonly why: string,
+  ) {
+    super(partial, `Stopped: ${why}.`);
+  }
+}
+
+/** The plan's usage limit was reached mid-request: what was done is kept, like StepLimit. */
+export class UsageLimit extends StepLimit {
+  override name = "UsageLimit";
+  constructor(partial: string, message: string) {
+    super(partial, message);
+  }
+}
+
 /** Claude went silent mid-request (a stalled connection). What it did so far is kept, like StepLimit. */
 export class Stalled extends StepLimit {
   override name = "Stalled";
@@ -66,6 +85,9 @@ export class Watchdog {
   }
 }
 
+/** Turns kept back for the editor's review rounds (review.ts), on top of the request's own. */
+export const REVIEW_TURNS = 16;
+
 /** What a backend needs for one request. */
 export interface BackendRun {
   readonly prompt: string;
@@ -86,6 +108,11 @@ export interface BackendRun {
   onActivity(text: string): void;
   /** Context and plan-limit figures, as Claude reports them. */
   onUsage?(usage: AgentUsage): void;
+  /**
+   * Asked each time the agent wants to stop (review.ts): what it should fix first, sent back to it in the
+   * same conversation, or null to let it finish.
+   */
+  review?(): Promise<string | null>;
 }
 
 /** What each tool is doing, as a status line while it runs. */
@@ -105,7 +132,13 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   apply_ops: "Making changes",
   fields: "Checking the fields",
   read_graphic: "Reading a graphic",
+  guide: "Reading the guide",
+  update_plan: "Planning",
+  design: "Deciding the design",
   write_graphic: "Designing a graphic",
+  edit_graphic: "Refining a graphic",
+  make_graphics: "Designing the graphics",
+  graphics_ready: "Waiting for the graphics",
   read_caption_look: "Reading the caption look",
   write_caption_look: "Designing the captions",
   read_style: "Reading a style",

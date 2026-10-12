@@ -6,6 +6,7 @@ vi.mock("./sdk.ts", () => ({
   // Claude measures the attached clip at once, while it's still being indexed.
   runWithSubscription: vi.fn(async (_run: unknown, ctx: never) => {
     const { runTool } = await import("./tools.ts");
+    await runTool("guide", { topic: "inspirations" }, ctx);
     const out = await runTool("inspiration", { action: "measure", source: "ref" }, ctx);
     outputs.push(out.isError ? `error: ${out.text}` : out.text);
     return "Measured.";

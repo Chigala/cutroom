@@ -39,6 +39,7 @@ const SINGLETON_LABEL: Record<Singleton, string> = {
   checkRules: "Check rules",
   look: "Color grade changed",
   cover: "Cover",
+  design: "Design direction",
   style: "STYLE.md updated",
 };
 

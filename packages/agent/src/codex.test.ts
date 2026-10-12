@@ -123,6 +123,18 @@ describe("a request on Codex", () => {
     expect(texts).toEqual(["|All done."]);
   });
 
+  it("sends the agent back for another turn when the review finds something, then finishes", async () => {
+    fakeCodex("whole");
+    let reviews = 0;
+    const reply = await runWithCodex(
+      quiet({ review: async () => (++reviews === 1 ? "Fix the flicker at 2s." : null) }),
+      context(),
+    );
+    // Asked after the first turn (sent back) and after the second (done).
+    expect(reviews).toBe(2);
+    expect(reply).toBe("All done.");
+  });
+
   it("runs locked down with Cutroom's tools, answers a tool call, and streams the reply", async () => {
     process.env.VEDIT_CODEX_BIN = process.execPath;
     process.env.VEDIT_CODEX_PREFIX = path.join(

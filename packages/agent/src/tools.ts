@@ -3,6 +3,7 @@
  * Agent SDK). Mutating tools work on a scratch copy of the project; each call becomes one labelled,
  * separately undoable change. Inputs are zod schemas, validated before anything runs.
  */
+
 import type { ToolCall } from "@vedit/bridge";
 import { beatCutOps, runChecks } from "@vedit/checks";
 import type {
@@ -17,6 +18,7 @@ import type {
   StockOrientation,
 } from "@vedit/media";
 import { frameStrip } from "@vedit/media";
+import type { PastDesign } from "@vedit/project";
 import {
   type AssetEntry,
   applyOps,
@@ -29,6 +31,7 @@ import {
   cutReport,
   DERIVED,
   describeSound,
+  designEchoes,
   fontFromFile,
   gradeColorOf,
   graphicPreviewDoc,
@@ -39,6 +42,8 @@ import {
   inspirationMeta,
   inspirationOps,
   type KitInfo,
+  lintGraphic,
+  lintView,
   lookDefaults,
   looseOpSchemaFor,
   type MotionTrack,
@@ -49,6 +54,7 @@ import {
   ProcessRecipe,
   type ProjectDoc,
   packFromProject,
+  parseGraphic,
   parseWordRef,
   type ReferenceStudy,
   rangesFromKeeps,
@@ -77,6 +83,7 @@ import {
 } from "@vedit/project";
 import { z } from "zod";
 import { compactFields, EDITABLE, fieldsOf, unknownFields } from "./fields.ts";
+import { GUIDE_TOPICS, GUIDES, type GuideTopic } from "./guides.ts";
 import { runScript } from "./script.ts";
 import { toolActivity } from "./types.ts";
 import { checkStep, checksView, projectView, searchFootage, shotsView, transcriptView } from "./view.ts";
@@ -138,6 +145,8 @@ export interface AgentHost {
     kind: StockKind,
     orientation: StockOrientation,
   ): Promise<{ candidates: StockCandidate[]; sheet: Buffer | null }>;
+  /** The designs of the user's recent videos (other projects), newest first. */
+  recentDesigns?(): Promise<PastDesign[]>;
   /** Measures the motion of the rendered video: flicker, pops, dead stops, graphics over faces, and more. */
   senseMotion?(doc: ProjectDoc): Promise<MotionReport>;
   /** Measures how every dialogue cut sounds: level, pitch and room either side, the pause, mid-sound. */
@@ -248,6 +257,22 @@ export interface Scratch {
   /** References studied this request (inspiration measure), by clip. */
   studied?: Map<string, ReferenceStudy>;
   revisions?: Map<string, { count: number; looks: number }>;
+  /** The request's plan (update_plan): its steps, each pending, in progress or completed. */
+  plan?: { content: string; status: "pending" | "in_progress" | "completed" }[];
+  /** A first cut or big request: the agent is asked for a plan before anything else. */
+  planWanted?: boolean;
+  /** The last look: what was asked and the project it saw, so the same look at the same project is skipped. */
+  lastLook?: { key: string; doc: ProjectDoc };
+  /** The look being taken now, remembered as lastLook once its frames come back. */
+  lookTry?: { key: string; doc: ProjectDoc };
+  /** The run of identical tool calls just made (stuck detection in runTool). */
+  streak?: { key: string; count: number; failing: number; reminded: boolean };
+  /** The request has returned: background work no longer lands in this copy. */
+  closed?: boolean;
+  /** Graphics being designed in the background (make_graphics), by id: what each came to, once done. */
+  pending?: Map<string, Promise<string>>;
+  /** The guides read this request (guide), so a tool that needs one asks only once. */
+  guides?: Set<GuideTopic>;
   /** This request's changes that undo can take back, newest last: each one's label and the ops that undo it. */
   undoable?: { label: string; inverse: Op[] }[];
 }
@@ -266,6 +291,13 @@ export interface ToolContext {
   tool?(call: ToolCall): void;
   /** Indexing reaches the scratch copy as it lands (runAgent), so a clip being indexed is worth waiting for. */
   readonly followsIndexing?: boolean;
+  /**
+   * Designs one graphic with an agent of its own (runAgent), from a brief in the video's design: its
+   * HTML once written, looked at and refined. make_graphics runs several at once.
+   */
+  graphicMaker?(id: string, brief: string): Promise<string>;
+  /** Ends the request now, keeping what's done (the harness's own stop): a run stuck repeating a failure. */
+  halt?(why: string): void;
 }
 
 /** How long a tool waits for a clip that's still being indexed (an attachment, usually under a minute). */
@@ -601,7 +633,109 @@ const Label = z
   .max(80)
   .describe('Short human label for this change, e.g. "+3 zooms" or "Cut the retakes"');
 
+/** The plan as the agent sees it after every step: what's done, what's on now, what's left. */
+export function planView(steps: NonNullable<Scratch["plan"]>): string {
+  const mark = { completed: "x", in_progress: ">", pending: " " } as const;
+  const done = steps.filter((s) => s.status === "completed").length;
+  return [
+    `Plan (${done} of ${steps.length} done):`,
+    ...steps.map((s) => `[${mark[s.status]}] ${s.content}`),
+  ].join("\n");
+}
+
+/** Identical calls in a row before the agent is nudged to change course, and failing ones before it stops. */
+const STREAK_NUDGE = 5;
+const STREAK_STOP = 8;
+
+/**
+ * What runTool adds to a result: a nudge when the same call keeps repeating (and the stop when it keeps
+ * failing the same way), the first-step reminder to plan, and the plan itself after every step.
+ */
+function afterCall(name: string, key: string, result: ToolResult, ctx: ToolContext): ToolResult {
+  const notes: string[] = [];
+  if (name === "look") {
+    if (!result.isError && result.images?.length && ctx.scratch.lookTry)
+      ctx.scratch.lastLook = ctx.scratch.lookTry;
+    ctx.scratch.lookTry = undefined;
+  }
+  const failed = Boolean(result.isError);
+  const prev = ctx.scratch.streak;
+  const streak =
+    prev?.key === key
+      ? { ...prev, count: prev.count + 1, failing: failed ? prev.failing + 1 : 0 }
+      : { key, count: 1, failing: failed ? 1 : 0, reminded: false };
+  ctx.scratch.streak = streak;
+  if (streak.failing >= STREAK_STOP && ctx.halt) {
+    ctx.halt(`it called ${name} the same way ${streak.failing} times and it kept failing`);
+    notes.push(`Stopped: ${name} failed the same way ${streak.failing} times.`);
+  } else if (!streak.reminded && (streak.count >= STREAK_NUDGE || streak.failing >= STREAK_NUDGE)) {
+    streak.reminded = true;
+    notes.push(
+      streak.failing >= STREAK_NUDGE
+        ? `You've called ${name} with the same input ${streak.failing} times and it keeps failing the same way. Repeating it won't work: read the error, then try something different, or step back and change the plan. Don't make this call again.`
+        : `You've called ${name} with the same input ${streak.count} times: you already have this result. Move on to the next step instead of repeating it.`,
+    );
+  }
+  if (name !== "update_plan") {
+    const plan = ctx.scratch.plan;
+    if (plan) notes.push(planView(plan));
+    else if (ctx.scratch.planWanted) {
+      // Asked once: a first cut or big request gets a plan before the work.
+      ctx.scratch.planWanted = false;
+      notes.push(
+        "You haven't made a plan yet: call update_plan now to lay out this request's steps, then keep it current.",
+      );
+    }
+  }
+  return notes.length ? { ...result, text: `${result.text}\n\n${notes.join("\n\n")}` } : result;
+}
+
+/** A tool whose job needs a guide asks for it first, once a request: the refusal says which. */
+function needsGuide(ctx: ToolContext, topic: GuideTopic, also = ""): ToolResult | null {
+  if (ctx.scratch.guides?.has(topic)) return null;
+  return {
+    text: `Read the ${topic} guide first (guide {"topic": "${topic}"}): it has the craft this needs${also}. Then do this again.`,
+    isError: true,
+  };
+}
+
 export const TOOLS: readonly AgentTool[] = [
+  tool({
+    name: "guide",
+    description: "The craft for a kind of job (the topics are in the system prompt). Read it before the job.",
+    input: z.object({ topic: z.enum(GUIDE_TOPICS) }),
+    async run({ topic }, ctx) {
+      ctx.scratch.guides ??= new Set();
+      ctx.scratch.guides.add(topic);
+      return { text: GUIDES[topic] };
+    },
+  }),
+  tool({
+    name: "update_plan",
+    description:
+      "This request's plan, shown back after every step. Send the whole list each time; one step in_progress; completed once done and checked.",
+    input: z.object({
+      steps: z
+        .array(
+          z.object({
+            content: z.string().min(2).max(200),
+            status: z.enum(["pending", "in_progress", "completed"]),
+          }),
+        )
+        .min(1)
+        .max(30),
+    }),
+    async run({ steps }, ctx) {
+      const active = steps.filter((s) => s.status === "in_progress").length;
+      if (active > 1)
+        return {
+          text: "Keep exactly one step in_progress: finish one before starting the next.",
+          isError: true,
+        };
+      ctx.scratch.plan = steps;
+      return { text: planView(steps) };
+    },
+  }),
   tool({
     name: "get_transcript",
     description:
@@ -897,27 +1031,228 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
     },
   }),
   tool({
+    name: "design",
+    description:
+      "This video's own design, before its first graphic: the look and why it fits, palette (accent first), faces, motion, graphic kinds. Sets look.accent and look.font; refused if it repeats a recent video's.",
+    input: z.object({
+      label: Label,
+      idea: z.string().min(10).max(300),
+      palette: z
+        .array(z.string().regex(/^#[0-9a-fA-F]{6}$/, "colors are #rrggbb"))
+        .min(2)
+        .max(6),
+      display: z.string().min(1).max(80),
+      text: z.string().min(1).max(80),
+      motion: z.string().min(10).max(200),
+      graphics: z.array(z.string().min(1).max(60)).min(1).max(12),
+    }),
+    async run({ label, ...design }, ctx) {
+      const doc = ctx.scratch.doc;
+      const brand = Boolean(doc.meta.kit);
+      const echoes = designEchoes(design, (await ctx.host.recentDesigns?.()) ?? [], brand);
+      if (echoes.length)
+        return {
+          text: [
+            "Not saved: this repeats a recent video's design, and every video gets its own.",
+            ...echoes.map((e) => `- "${e.name}": ${e.traits.join(", ")}`),
+            brand
+              ? "This project keeps its brand kit's faces and accent: change the motion language and the graphic kinds (from this video's subject), then call design again."
+              : "Change what it repeats (a different pairing of faces, another accent, a different motion language or graphic kinds that come from this video's subject), then call design again.",
+          ].join("\n"),
+          isError: true,
+        };
+      const families = new Set([...BUNDLED_FONTS.map((f) => f.family), ...doc.fonts.map((f) => f.family)]);
+      const missing = [design.display, design.text].filter(
+        (f, i, all) => !families.has(f) && all.indexOf(f) === i,
+      );
+      // The look follows the design only when nothing depends on it yet: a brand kit's look, or one the
+      // video's graphics and cover already use, stays as it is unless the user asks to change it.
+      const inUse = doc.visuals.length > 0 && Boolean(doc.look.accent || doc.look.font);
+      const follows = !brand && !inUse;
+      const result = commit(ctx, label, [
+        { op: "set", key: "design", value: design },
+        ...(follows
+          ? [
+              {
+                op: "merge" as const,
+                key: "look" as const,
+                patch: { accent: design.palette[0], font: design.display },
+              },
+            ]
+          : []),
+      ]);
+      if (result.isError) return result;
+      return {
+        text: [
+          follows
+            ? "Saved design.json; look.accent and look.font follow it."
+            : `Saved design.json. The look's accent and font stay as they are (${brand ? "the brand kit's" : "the video's graphics already use them"}): design within them unless the user asks to change them.`,
+          missing.length
+            ? `Not in the project yet: ${missing.join(", ")}. find_font it and add_font the weights you'll use, or the closest bundled face shows instead.`
+            : "",
+          "Build its graphics from the kit (KIT in the graphics format): its curves, entrances and exits, data-split, data-fit and the safe-area helpers, styled in this design.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      };
+    },
+  }),
+  tool({
     name: "write_graphic",
     description:
-      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (canvas; "libs" in the header for GSAP and its plugins, D3 or Chart.js charts, Rough.js sketches, three.js, Matter.js physics (graphic.physics) or Lottie; graphic.particles for confetti, sparks, snow, embers, bokeh); no network. See the system prompt for the format. Then check it with look {graphic, params, times}: 5-6 times across it (just in, entrance, middle, just before the exit), which shows it alone over a shot without touching the timeline. Once placed, look at output times to check it in context.',
+      'Create or replace a motion graphic: a small web page saved as graphics/<id>.html, then placed with a visual (apply_ops, content {"kind": "graphic", "graphic": id, "params": {...}}). Start with the JSON header comment, then <style> and markup. Motion is CSS @keyframes, or a <script> that draws from the video clock (libs in the header); no network. Build it from the kit; the graphics guide has the format. Then look {graphic, params, times} at 5-6 times across it (alone over a shot, off the timeline: just in, entrance, middle, before the exit), and in context once placed.',
     input: z.object({
       label: Label,
       id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, "lower-case letters, digits and dashes"),
       html: z.string().min(20).max(60_000),
     }),
     async run({ label, id, html }, ctx) {
+      const fresh = !ctx.scratch.doc.graphics.some((g) => g.id === id) && !ctx.scratch.doc.design.idea;
+      // Both steps a new graphic needs, said at once.
+      const unread = needsGuide(ctx, "graphics", fresh ? ", and decide this video's design with design" : "");
+      if (unread) return unread;
       const problem = validateGraphic(html);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const exists = ctx.scratch.doc.graphics.some((g) => g.id === id);
+      if (!exists && !ctx.scratch.doc.design.idea)
+        return {
+          text: "Not saved: decide this video's design first (design: its palette, faces, motion and graphic kinds), so every graphic you write shares it and the video doesn't look like the last one.",
+          isError: true,
+        };
       ctx.scratch.graphicErrors?.delete(id);
       const result = commit(ctx, label, [
         exists
           ? { op: "update", coll: "graphics", id, patch: { html } }
           : { op: "insert", coll: "graphics", item: { id, html } },
       ]);
-      return result.isError
-        ? result
-        : { text: `Saved graphics/${id}.html. Place it with a visual to use it.` };
+      if (result.isError) return result;
+      const notes = lintView(id, lintGraphic(html));
+      return {
+        text: [`Saved graphics/${id}.html. Place it with a visual to use it.`, notes]
+          .filter(Boolean)
+          .join("\n\n"),
+      };
+    },
+  }),
+  tool({
+    name: "edit_graphic",
+    description:
+      "Change part of a graphic: each edit replaces one exact piece of its HTML (find must match once). Quicker than rewriting it with write_graphic.",
+    input: z.object({
+      label: Label,
+      id: z.string(),
+      edits: z
+        .array(z.object({ find: z.string().min(1), replace: z.string() }))
+        .min(1)
+        .max(20),
+    }),
+    async run({ label, id, edits }, ctx) {
+      const unread = needsGuide(ctx, "graphics");
+      if (unread) return unread;
+      const g = ctx.scratch.doc.graphics.find((x) => x.id === id);
+      if (!g) return { text: `No graphic "${id}".`, isError: true };
+      let html = g.html;
+      for (const [i, e] of edits.entries()) {
+        const n = html.split(e.find).length - 1;
+        if (n !== 1)
+          return {
+            text: `Not saved: edit ${i + 1}'s find ${n ? `matches ${n} places: include more around it` : "isn't in the graphic: read_graphic for its current text"}.`,
+            isError: true,
+          };
+        html = html.replace(e.find, () => e.replace);
+      }
+      const problem = validateGraphic(html);
+      if (problem) return { text: `Not saved: ${problem}`, isError: true };
+      ctx.scratch.graphicErrors?.delete(id);
+      const result = commit(ctx, label, [{ op: "update", coll: "graphics", id, patch: { html } }]);
+      if (result.isError) return result;
+      const notes = lintView(id, lintGraphic(html));
+      return { text: [`Saved graphics/${id}.html.`, notes].filter(Boolean).join("\n\n") };
+    },
+  }),
+  tool({
+    name: "make_graphics",
+    description:
+      "Design the video's graphics at once in the background, each by its own agent in this design. Each: an id and a brief (what it shows, params, layout, motion). Carry on cutting; graphics_ready brings them in.",
+    input: z.object({
+      graphics: z
+        .array(
+          z.object({
+            id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/, "lower-case letters, digits and dashes"),
+            brief: z.string().min(20).max(1500),
+          }),
+        )
+        .min(1)
+        .max(8),
+    }),
+    async run({ graphics }, ctx) {
+      if (!ctx.graphicMaker)
+        return { text: "Not available here: write them with write_graphic.", isError: true };
+      if (!ctx.scratch.doc.design.idea)
+        return {
+          text: "Decide this video's design first (design): every graphic is made in it.",
+          isError: true,
+        };
+      // Each graphic's agent works on the project as it is now: the design's faces must be in it already.
+      const doc = ctx.scratch.doc;
+      const families = new Set([...BUNDLED_FONTS.map((f) => f.family), ...doc.fonts.map((f) => f.family)]);
+      const missing = [doc.design.display, doc.design.text].filter((f) => f && !families.has(f));
+      if (missing.length)
+        return {
+          text: `Add the design's faces first (add_font: ${missing.join(", ")}), so the graphics are made and sized in them. Then make_graphics.`,
+          isError: true,
+        };
+      ctx.scratch.pending ??= new Map();
+      const pending = ctx.scratch.pending;
+      const make = ctx.graphicMaker;
+      const started = graphics.filter((g) => !pending.has(g.id));
+      for (const g of started)
+        pending.set(
+          g.id,
+          make(g.id, g.brief).then(
+            (html) => {
+              if (ctx.scratch.closed) return `${g.id}: finished after the request ended.`;
+              const problem = validateGraphic(html);
+              if (problem) return `${g.id}: came back unusable (${problem}); write it with write_graphic.`;
+              const exists = ctx.scratch.doc.graphics.some((x) => x.id === g.id);
+              // Not in undo's list: undo takes back the agent's own last change, not one that landed meanwhile.
+              const saved = commit(
+                ctx,
+                `Graphic ${g.id}`,
+                [
+                  exists
+                    ? { op: "update", coll: "graphics", id: g.id, patch: { html } }
+                    : { op: "insert", coll: "graphics", item: { id: g.id, html } },
+                ],
+                false,
+              );
+              if (saved.isError) return `${g.id}: not saved (${saved.text}).`;
+              const { meta } = parseGraphic(html);
+              const params = Object.entries(meta.params)
+                .map(([k, p]) => `${k} (${p.type})`)
+                .join(", ");
+              const notes = lintGraphic(html).map((l) => l.message);
+              return `${g.id}: ${meta.name}, ${meta.duration}s${params ? `; params ${params}` : ""}${notes.length ? `; craft notes: ${notes.join(" ")}` : ""}`;
+            },
+            (err: unknown) => `${g.id}: not made (${(err as Error).message}); write it with write_graphic.`,
+          ),
+        );
+      return {
+        text: `Designing ${started.map((g) => g.id).join(", ")} in the background. Go on with the cut, the opening and the captions; call graphics_ready before you place any of them.`,
+      };
+    },
+  }),
+  tool({
+    name: "graphics_ready",
+    description: "Wait for make_graphics' graphics; returns each one's params.",
+    input: z.object({}),
+    async run(_input, ctx) {
+      const pending = ctx.scratch.pending;
+      if (!pending?.size) return { text: "No graphics are being designed." };
+      ctx.activity?.(`Waiting for ${pending.size} graphic${pending.size === 1 ? "" : "s"}…`);
+      const lines = await Promise.all(pending.values());
+      pending.clear();
+      return { text: `${lines.join("\n")}\nPlace them with visuals, then look at them in context.` };
     },
   }),
   tool({
@@ -946,6 +1281,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       use: z.boolean().default(false).describe("Switch the captions to this look"),
     }),
     async run({ label, id, css, use }, ctx) {
+      const unread = needsGuide(ctx, "looks");
+      if (unread) return unread;
       const problem = validateCaptionLook(css);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const exists = ctx.scratch.doc.captionLooks.some((l) => l.id === id);
@@ -1042,6 +1379,10 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       use: z.boolean().optional().describe("write"),
     }),
     async run({ action, id, keepLook, source, md, use }, ctx) {
+      if (action === "measure" || action === "write") {
+        const unread = needsGuide(ctx, "inspirations");
+        if (unread) return unread;
+      }
       const doc = ctx.scratch.doc;
       const store = ctx.host.inspirations;
       const keep = keepLook ?? Boolean(doc.meta.kit);
@@ -1199,6 +1540,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       use: z.boolean().default(false).describe("For a grade: switch the video to it"),
     }),
     async run({ label, kind, id, css, use }, ctx) {
+      const unread = needsGuide(ctx, "looks");
+      if (unread) return unread;
       const problem = validateStyle(kind, css);
       if (problem) return { text: `Not saved: ${problem}`, isError: true };
       const lut = kind === "grade" ? gradeColorOf(css)?.lut : undefined;
@@ -1220,7 +1563,7 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
   tool({
     name: "look",
     description:
-      "See frames. Give output times to see the finished video as it renders now (graphics, captions, motion and all, with any graphic errors). Give around (a cut's time) instead to see a strip of consecutive frames either side of it in one picture, with a red bar where the cut falls: that's how to check a cut, a flash, a black frame or a jump, which single stills miss. Give a graphic id (with params and layout) and times into it to see that graphic on its own over a shot, without placing it. Give a clip id with times in that clip to look at raw footage. Use it to find the best moments, check framing and verify your graphics. Up to 6 frames per call.",
+      "See frames. Output times: the finished video as it renders now (with any graphic errors). around (a cut's time): consecutive frames either side of it in one picture, a red bar at the cut, to check a cut, flash, black frame or jump. A graphic id (with params, layout) and times into it: that graphic alone over a shot, unplaced. A clip id with clip times: raw footage. Up to 6 frames per call.",
     input: z.object({
       source: z.string().optional().describe("Clip id: look at raw footage at times in that clip"),
       graphic: z
@@ -1258,6 +1601,14 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       times: z.array(z.number().min(0)).min(1).max(6).optional(),
     }),
     async run({ source, graphic, params, layout, shape, cover, around, step, times = [] }, ctx) {
+      // The same look at an unchanged project shows the same frames: say so instead of sending them again.
+      const key = JSON.stringify({ source, graphic, params, layout, shape, cover, around, step, times });
+      if (ctx.scratch.lastLook?.key === key && ctx.scratch.lastLook.doc === ctx.scratch.doc)
+        return {
+          text: "Nothing has changed since your last look at exactly this, so the frames are the same as above. Change something first, or look at other times.",
+        };
+      // Remembered only once frames come back (afterCall): a failed render can be tried again.
+      ctx.scratch.lookTry = { key, doc: ctx.scratch.doc };
       ctx.scratch.looks = (ctx.scratch.looks ?? 0) + 1;
       if (!times.length && !cover && (around === undefined || source || graphic))
         return {
@@ -1581,6 +1932,8 @@ A sandbox: plain JavaScript, no files, network, timers or modules, stopped after
       "Find a royalty-free instrumental for a mood (upbeat, tech, lofi, chill, hiphop, afrobeats, tense, cinematic, emotional, corporate), add it to the project with its beat map, and set it as the music. Use only when the user wants music and has none of their own.",
     input: z.object({ label: Label, mood: z.string().min(2).max(40) }),
     async run({ label, mood }, ctx) {
+      const unread = needsGuide(ctx, "sound");
+      if (unread) return unread;
       if (!ctx.host.findMusic) return { text: "Music search is not available here.", isError: true };
       const found = await ctx.host.findMusic(mood, ctx.scratch.doc);
       if (!found) return { text: `No usable track found for "${mood}". Try another mood.`, isError: true };
@@ -1984,6 +2337,8 @@ measure: true returns what the filters report instead: signalstats with metadata
       'Download a find_meme candidate into the project as a clip (an image for a static meme), credited to KLIPY. Returns its source id: place it as a visual with content {"kind": "media", "source": id, "box": {x, y, width}, "style": "card" or "sticker", "rotate"}, short (1-2.5s), right on the beat it reacts to.',
     input: z.object({ label: Label, id: z.string().min(3).max(60) }),
     async run({ label, id }, ctx) {
+      const unread = needsGuide(ctx, "sound", " (memes are in it)");
+      if (unread) return unread;
       const c = ctx.scratch.memes?.get(id);
       if (!c)
         return { text: `No candidate "${id}" from find_meme in this request. Search first.`, isError: true };
@@ -1992,7 +2347,9 @@ measure: true returns what the filters report instead: signalstats with metadata
       const result = commit(ctx, label, added.ops);
       return result.isError
         ? result
-        : { text: `Added ${c.kind} ${added.id} (${c.width}x${c.height}, "${c.title}", KLIPY).` };
+        : {
+            text: `Added ${c.kind} ${added.id} (${c.width}x${c.height}, "${c.title}", KLIPY). Size it to the moment, big enough to read on a phone at a glance: beside the face, box width 0.38-0.5 (not smaller to dodge it: move it to the side with room, or above the head); or, when it's the punchline, the whole frame (a cutaway on it, or a centred box 0.8-1 wide).`,
+          };
     },
   }),
   tool({
@@ -2105,9 +2462,11 @@ measure: true returns what the filters report instead: signalstats with metadata
       // The store picks the files up from fonts/ by name; this request's copy knows them now, so they
       // render in what it looks at before the request ends.
       const added = files.map((f) => fontFromFile(f)).filter((f) => f !== null);
+      // The copy as it is now: something may have landed in it while the font downloaded.
+      const now = ctx.scratch.doc;
       ctx.scratch.doc = {
-        ...doc,
-        fonts: [...doc.fonts.filter((f) => !added.some((a) => a.id === f.id)), ...added],
+        ...now,
+        fonts: [...now.fonts.filter((f) => !added.some((a) => a.id === f.id)), ...added],
       };
       const name = added[0]?.family ?? family;
       ctx.step(`Added the font ${name}`);
@@ -2147,6 +2506,8 @@ measure: true returns what the filters report instead: signalstats with metadata
       "Bring a find_sound candidate into the project as an audio clip (licence and credit recorded; credits.txt lists it at export). Returns its source id and where it hits hardest: place it as a sound effect (sfx with source) with offset so that hit lands on the moment, and duration to its tail. listen to it if the title leaves doubt.",
     input: z.object({ label: Label, id: z.string().min(3).max(40) }),
     async run({ label, id }, ctx) {
+      const unread = needsGuide(ctx, "sound");
+      if (unread) return unread;
       const c = ctx.scratch.sounds?.get(id);
       if (!c)
         return { text: `No sound "${id}" from find_sound in this request. Search first.`, isError: true };
@@ -2268,13 +2629,22 @@ const TOOL_CEILING: Record<string, number> = {
   capture_page: 3 * 60_000,
   inspect_motion: 10 * 60_000,
   inspect_joins: 3 * 60_000,
+  // Several agents designing graphics at once, each writing, looking and refining.
+  graphics_ready: 20 * 60_000,
 };
 
 export async function runTool(name: string, input: unknown, ctx: ToolContext): Promise<ToolResult> {
   const t = TOOLS.find((x) => x.name === name);
   if (!t) return { text: `Unknown tool ${name}`, isError: true };
   const parsed = t.input.safeParse(input);
-  if (!parsed.success) return { text: `Invalid input: ${z.prettifyError(parsed.error)}`, isError: true };
+  // The same bad input again and again is the commonest loop: it counts toward stuck detection too.
+  if (!parsed.success)
+    return afterCall(
+      name,
+      JSON.stringify(input),
+      { text: `Invalid input: ${z.prettifyError(parsed.error)}`, isError: true },
+      ctx,
+    );
   const label = activityFor(name, parsed.data as Record<string, unknown>);
   ctx.activity?.(label);
   const started = Date.now();
@@ -2309,9 +2679,15 @@ export async function runTool(name: string, input: unknown, ctx: ToolContext): P
         );
       }),
     ]);
+    result = afterCall(name, JSON.stringify(parsed.data), result, ctx);
     return result;
   } catch (err) {
-    result = { text: `Tool failed: ${(err as Error).message}`, isError: true };
+    result = afterCall(
+      name,
+      JSON.stringify(parsed.data),
+      { text: `Tool failed: ${(err as Error).message}`, isError: true },
+      ctx,
+    );
     return result;
   } finally {
     clearTimeout(timer);

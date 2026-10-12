@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BUNDLED_FONTS, fontFile } from "@vedit/project";
+import { BUNDLED_FONTS, fontFile, KIT_CSS, KIT_EASES, prepareKit } from "@vedit/project";
 
 const require = createRequire(import.meta.url);
 const packageDir = (name: string) => {
@@ -123,6 +123,9 @@ const SCRIPT = `(() => {
     document.head.append(s);
   });
   const GSAP_PLUGINS = ${JSON.stringify(GSAP_PLUGINS)};
+  const KIT_CSS = ${JSON.stringify(KIT_CSS)};
+  const KIT_EASES = ${JSON.stringify(KIT_EASES)};
+  ${prepareKit.toString()}
   const SCRIPTS = { lottie: "lib/lottie.min.js", d3: "lib/d3.min.js", chart: "lib/chart.umd.min.js", rough: "lib/rough.js", matter: "lib/matter.min.js" };
   async function load(lib) {
     if (lib === "three") {
@@ -333,12 +336,19 @@ const SCRIPT = `(() => {
       window.gsap.globalTimeline.autoRemoveChildren = false;
       window.gsap.globalTimeline.pause(0);
     }
+    // The kit's curves as GSAP eases ("k-out", "k-in"...), when CustomEase is there.
+    if (window.CustomEase) for (const [name, curve] of Object.entries(KIT_EASES)) window.CustomEase.create(name, curve);
     window.graphic.params = m.params;
+    // The kit's building blocks, before the graphic's own CSS so its CSS always wins.
+    const kit = document.createElement("style");
+    kit.textContent = KIT_CSS;
+    document.head.append(kit);
     const tpl = document.createElement("template");
     tpl.innerHTML = m.html;
     const scripts = [...tpl.content.querySelectorAll("script")];
     for (const s of scripts) s.remove();
     document.body.append(tpl.content);
+    prepareKit(document.body);
     for (const s of scripts) {
       const run = document.createElement("script");
       run.textContent = s.textContent;

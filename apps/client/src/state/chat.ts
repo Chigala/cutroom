@@ -50,6 +50,8 @@ export interface AgentRun {
   readonly commitId: string | null;
   readonly elapsedMs: number | null;
   readonly error: string | null;
+  /** Which agent did it, and how hard it thought ("Opus 5.5 · high"). */
+  readonly ran?: string;
   /** Stopped or failed partway: this many change groups are held, to keep or throw away. */
   readonly kept?: number;
 }
@@ -466,6 +468,7 @@ function reduce(run: AgentRun, e: AgentEvent): Partial<AgentRun> {
         text: e.summary || (last?.kind === "text" ? last.text : run.text),
         work,
         ...(e.next && { next: e.next }),
+        ...(e.ran && { ran: e.ran }),
       };
     }
     case "error":
@@ -512,6 +515,7 @@ function persist(dir: string = current()): void {
         commitId: m.commitId,
         elapsedMs: m.elapsedMs,
         error: m.error,
+        ...(m.ran && { ran: m.ran }),
       },
     ];
   });

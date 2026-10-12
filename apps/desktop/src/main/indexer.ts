@@ -258,6 +258,8 @@ export class Indexer {
       const analysis = doc?.analyses.find((a) => a.id === source.id);
       if (!analysis || this.active.has(source.id)) continue;
       const files = cachePaths(store.dir, source.id);
+      // Failed in a way trying again won't change (a broken contact sheet): not on every open.
+      if (existsSync(noShots(files))) continue;
       const watch = { ...files, proxy: existsSync(files.proxy) ? files.proxy : source.path };
       this.describing = source.id;
       this.deps.emitIndex({
@@ -288,7 +290,14 @@ export class Indexer {
           console.log("[index] describing", source.id, "stopped");
           return;
         }
-        console.warn("[index] describing", source.id, "still failing:", (err as Error).message);
+        const message = (err as Error).message;
+        if (!passing(message)) {
+          // The same failure every time: noted, so it isn't tried again on every open; the next clip goes on.
+          console.warn("[index] describing", source.id, "failed for good:", message);
+          await writeFile(noShots(files), message.slice(0, 500)).catch(() => {});
+          continue;
+        }
+        console.warn("[index] describing", source.id, "still failing:", message);
         // Claude's still unreachable: the rest would fail the same way. Next trigger tries again.
         return;
       } finally {
@@ -628,13 +637,17 @@ export class Indexer {
 
       // A see-through clip (a keyed one) plays as it is: an H.264 preview copy would lose its transparency.
       if (source.kind === "video" && !(await seeThrough(source.path))) {
-        emit("preview", 0, "Making a preview copy");
-        await makeProxy(source.path, files.proxy, {
-          hdr: source.hdr,
-          duration: source.duration,
-          signal,
-          onProgress: (f) => emit("preview", f * 0.3, "Making a preview copy"),
-        });
+        // A copy finished before an interruption (a quit, a project switch) is still good: keep it.
+        if (!(await proxyPassed(files.proxy))) {
+          emit("preview", 0, "Making a preview copy");
+          await makeProxy(source.path, files.proxy, {
+            hdr: source.hdr,
+            duration: source.duration,
+            signal,
+            onProgress: (f) => emit("preview", f * 0.3, "Making a preview copy"),
+          });
+          await stampProxy(files.proxy);
+        }
         patch.proxy = true;
       }
 
@@ -730,7 +743,9 @@ export class Indexer {
         // How hard each word is said, heard from the voice.
         const stress = await wordStress(files.wav, timed).catch(() => null);
         const aligned = stress ? timed.map((w, i) => ({ ...w, stress: stress[i]! })) : timed;
-        transcript = { id, language, words: aligned, ...(envelope && { aligned: WORD_ALIGNMENT }) };
+        // Today's transcription is already timed by whisper's alignment (WORD_ALIGNMENT): marked so even
+        // when the voice couldn't be measured, or the re-timing pass would transcribe it again on every open.
+        transcript = { id, language, words: aligned, aligned: WORD_ALIGNMENT };
         patch.speech = aligned.length >= 5;
         if (patch.speech) {
           const text = aligned.map((w) => w.text).join(" ");
@@ -739,34 +754,37 @@ export class Indexer {
         }
       }
 
+      const peaks = existsSync(files.peaks) ? new Uint8Array(await readFile(files.peaks)) : new Uint8Array();
+      await rm(files.wav, { force: true });
+      await rm(files.speechWav, { force: true });
+      // Saved now, ready to edit: what's been measured and transcribed is kept even if describing (or
+      // the app) stops from here. describeMissing describes a clip that has no shots yet, on its own.
+      const upserts = <C extends "transcripts" | "analyses" | "shotLogs">(
+        coll: C,
+        item: C extends "transcripts" ? Transcript : C extends "shotLogs" ? ShotLog : Analysis,
+      ): Op | null => {
+        const current = this.deps.store()?.doc;
+        if (!current?.sources.some((s) => s.id === id)) return null; // removed meanwhile
+        const exists = current[coll].some((x) => x.id === id);
+        return exists ? { op: "update", coll, id, patch: { ...item } } : { op: "insert", coll, item };
+      };
+      const measured = [upserts("analyses", analysis), transcript && upserts("transcripts", transcript)];
+      if (!measured[0]) return;
+      this.commit([
+        { op: "update", coll: "sources", id, patch },
+        ...measured.filter((o): o is Op => Boolean(o)),
+      ]);
+
       // The visual transcript: what every stretch of picture shows. Optional and never fatal: a clip
       // without it is still fully usable.
       emit("describe", 0.92, "Watching the footage");
       const described = await describing;
       const shotLog: ShotLog | null = described && {
         ...described,
-        loud: loudStretches(
-          existsSync(files.peaks) ? new Uint8Array(await readFile(files.peaks)) : new Uint8Array(),
-          transcript?.words ?? [],
-        ),
+        loud: loudStretches(peaks, transcript?.words ?? []),
       };
-
-      await rm(files.wav, { force: true });
-      await rm(files.speechWav, { force: true });
-      const current = this.deps.store()?.doc;
-      if (!current?.sources.some((s) => s.id === id)) return; // removed meanwhile
-      const ops: Op[] = [{ op: "update", coll: "sources", id, patch }];
-      const upsert = <C extends "transcripts" | "analyses" | "shotLogs">(
-        coll: C,
-        item: C extends "transcripts" ? Transcript : C extends "shotLogs" ? ShotLog : Analysis,
-      ) => {
-        const exists = current[coll].some((x) => x.id === id);
-        ops.push(exists ? { op: "update", coll, id, patch: { ...item } } : { op: "insert", coll, item });
-      };
-      upsert("analyses", analysis);
-      if (transcript) upsert("transcripts", transcript);
-      if (shotLog) upsert("shotLogs", shotLog);
-      this.commit(ops);
+      const shots = shotLog && upserts("shotLogs", shotLog);
+      if (shots) this.commit([shots]);
       emit("ready", 1, "Ready");
     } catch (err) {
       if (signal.aborted || err instanceof CancelledError) return;
@@ -886,4 +904,36 @@ export function settle(work: Iterable<Promise<unknown>>, ms = 3000): Promise<voi
     Promise.allSettled([...work]).then(() => undefined),
     new Promise<void>((r) => setTimeout(r, ms)),
   ]);
+}
+
+/** What a preview copy that passed its decode check is stamped with: its size and time. */
+async function proxyStampOf(file: string): Promise<string | null> {
+  return stat(file)
+    .then((s) => `${s.size}:${Math.round(s.mtimeMs)}`)
+    .catch(() => null);
+}
+
+/** Whether a preview copy was made whole and checked, and hasn't changed since. */
+export async function proxyPassed(file: string): Promise<boolean> {
+  const stamp = await proxyStampOf(file);
+  return stamp !== null && (await readFile(`${file}.ok`, "utf8").catch(() => "")) === stamp;
+}
+
+/** Marks a preview copy made whole and checked (makeProxy checks it decodes). */
+export async function stampProxy(file: string): Promise<void> {
+  const stamp = await proxyStampOf(file);
+  if (stamp) await writeFile(`${file}.ok`, stamp).catch(() => {});
+}
+
+/** The note that a clip's shots couldn't be described, in a way trying again won't change. */
+const noShots = (files: ReturnType<typeof cachePaths>) => `${files.proxy}.no-shots`;
+
+/**
+ * Whether describing failed for a reason that passes (Claude unreachable, signed out, busy, out of plan
+ * for now), so it's tried again later; anything else fails the same way every time.
+ */
+export function passing(message: string): boolean {
+  return /sign(ed)? (in|out)|log ?in|auth|credential|network|offline|unreachable|ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|socket|timed? ?out|rate.?limit|usage limit|overloaded|busy|\b(401|403|408|429|5\d\d)\b|isn't installed|not installed|Stopped/i.test(
+    message,
+  );
 }

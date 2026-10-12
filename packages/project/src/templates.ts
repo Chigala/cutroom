@@ -5,6 +5,7 @@ import {
   CaptionStyle,
   CheckRules,
   Cover,
+  Design,
   ExportSettings,
   Look,
   Mix,
@@ -63,6 +64,7 @@ export function emptyProject(name: string, style = DEFAULT_STYLE): ProjectDoc {
     exportSettings: ExportSettings.parse({}),
     checkRules: CheckRules.parse({}),
     cover: Cover.parse({}),
+    design: Design.parse({}),
     sfx: [],
     comments: [],
   };

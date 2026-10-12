@@ -34,12 +34,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { Splitter } from "../../components/Splitter.tsx";
 import { isMac } from "../../lib/keys.ts";
 import { peaksOf } from "../../state/jobs.ts";
+import { HEADER_HEIGHT, PREVIEW_MIN, useLayout } from "../../state/layout.ts";
 import { pause, playback, seekTime, useFrameEffect } from "../../state/playback.ts";
 import { DraftViewContext, edit, useDoc, useDraftShown, useProject } from "../../state/project.ts";
 import { fitTimeline, setRange, useTimeline, zoomBy, zoomTo } from "../../state/timeline.ts";
-import { composerRef, select, setUi, useUi } from "../../state/ui.ts";
+import { composerRef, select, setTimelineHeight, setUi, TIMELINE_HEIGHT, useUi } from "../../state/ui.ts";
 import { AddMenu } from "./AddMenu.tsx";
 
 const LABEL_W = 88;
@@ -66,6 +68,7 @@ export function Timeline() {
 function TimelineBody() {
   const draftShown = useDraftShown();
   const section = useRef<HTMLElement>(null);
+  const height = useLayout().timeline;
   const track = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const tl = useDoc(timelineOf);
@@ -167,19 +170,36 @@ function TimelineBody() {
           marked.current = false;
           e.stopPropagation();
         }}
+        style={{ height }}
         className={clsx(
-          "relative h-[264px] shrink-0 overflow-hidden border-t border-line bg-track px-6 py-3",
+          "relative shrink-0 overflow-hidden border-t border-line bg-track px-6 py-3",
           marking && "cursor-crosshair [&_*]:cursor-crosshair",
         )}
         aria-label="Timeline"
       >
+        <Splitter
+          edge="top"
+          label="Resize the timeline"
+          value={height}
+          initial={TIMELINE_HEIGHT.initial}
+          // Never so tall the preview gets small.
+          limits={() => ({
+            min: TIMELINE_HEIGHT.min,
+            max: Math.min(TIMELINE_HEIGHT.max, window.innerHeight - HEADER_HEIGHT - PREVIEW_MIN.height),
+          })}
+          onChange={setTimelineHeight}
+        />
         <div className="flex h-full flex-col gap-1">
           <Row label={<AddMenu />}>
             <Ruler duration={tl.duration} pps={pps} start={start} width={width} track={track} />
           </Row>
           {/* The draft is only to watch: its items aren't in the project yet. Scrubbing still works. */}
+          {/* A short timeline scrolls its tracks (no bar: it would narrow them against the ruler). */}
           <div
-            className={clsx("flex min-h-0 flex-1 flex-col gap-1", draftShown && "[&_*]:pointer-events-none")}
+            className={clsx(
+              "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto [scrollbar-width:none]",
+              draftShown && "[&_*]:pointer-events-none",
+            )}
             onPointerDown={scrub}
           >
             <Row label="Video" trackRef={track} tall>

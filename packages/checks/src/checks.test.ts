@@ -249,3 +249,130 @@ describe("checks on a video where people talk only some of the time", () => {
     expect(byId(low)["safe-zones"]!.status).toBe("pass");
   });
 });
+
+describe("cut edges", () => {
+  function take(scenes: { id: string; in: number; out: number }[]): ProjectDoc {
+    return {
+      ...emptyProject("t"),
+      sources: [
+        {
+          id: "cam",
+          kind: "video",
+          label: "cam",
+          path: "/cam.mov",
+          duration: 10,
+          hdr: false,
+          hasAudio: true,
+          status: "ready",
+          proxy: false,
+          speech: true,
+          summary: "",
+          tags: [],
+        },
+      ],
+      transcripts: [
+        {
+          id: "cam",
+          language: "en",
+          words: [
+            { text: "plug", start: 0.2, end: 0.6 },
+            { text: "Instagram.", start: 0.7, end: 1.4 },
+            { text: "So", start: 1.8, end: 2.0 },
+            { text: "do.", start: 4.0, end: 4.5 },
+          ],
+        },
+      ],
+      scenes: scenes.map((s) => ({ ...s, source: "cam", note: "", volume: 1 })),
+    } as ProjectDoc;
+  }
+
+  it("flag a shot that replays the end of the one before, and a video that stops on its last word", () => {
+    const doc = take([
+      { id: "a", in: 0.1, out: 1.66 },
+      { id: "b", in: 1.62, out: 4.55 },
+    ]);
+    const r = byId(doc)["cut-edges"]!;
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("b replays 0.04s of a");
+    expect(r.detail).toContain("stops 0.05s after the last word");
+    const fixed = applyOps(doc, r.fix!.ops).doc;
+    expect(byId(fixed)["cut-edges"]!.status).toBe("pass");
+    // The first shot gives up the sliver, so nothing anchored in the second moves.
+    expect(fixed.scenes[0]!.out).toBe(1.62);
+    expect(fixed.scenes[1]!.in).toBe(1.62);
+    expect(fixed.scenes[1]!.out).toBeCloseTo(4.9);
+  });
+
+  it("leave an ending alone when the speaker runs straight on in the take", () => {
+    const doc = take([{ id: "a", in: 1.7, out: 4.55 }]);
+    const runOn = {
+      ...doc,
+      transcripts: [
+        {
+          ...doc.transcripts[0]!,
+          words: [...doc.transcripts[0]!.words, { text: "And", start: 4.6, end: 4.9 }],
+        },
+      ],
+    };
+    expect(byId(runOn)["cut-edges"]!.status).toBe("pass");
+  });
+
+  it("let a deliberate repeat from earlier in the take, and an ending with room, through", () => {
+    const doc = take([
+      { id: "a", in: 1.7, out: 4.9 },
+      { id: "b", in: 0.1, out: 1.5 },
+      { id: "c", in: 3.9, out: 4.9 },
+    ]);
+    expect(byId(doc)["cut-edges"]!.status).toBe("pass");
+  });
+});
+
+describe("meme size", () => {
+  const withMeme = (width: number, style: "card" | "sticker" | "plain", provider = "klipy") => {
+    const doc = demoProject();
+    const scene = doc.scenes[0]!.id;
+    return applyOps(doc, [
+      {
+        op: "insert",
+        coll: "sources",
+        item: {
+          id: "meme",
+          kind: "image",
+          label: "shocked",
+          path: "/meme.gif",
+          duration: 0,
+          origin: { url: "https://klipy.com/x", provider, license: "KLIPY", author: "" },
+        } as never,
+      },
+      {
+        op: "insert",
+        coll: "visuals",
+        item: {
+          id: "m1",
+          anchor: { scene, at: 0.5 },
+          duration: 2,
+          layout: "overlay",
+          content: { kind: "media", source: "meme", box: { x: 0.25, y: 0.3, width }, style },
+        } as never,
+      },
+    ]).doc;
+  };
+
+  it("flags a meme too small to read on a phone, and its fix makes it readable", () => {
+    const doc = withMeme(0.17, "sticker");
+    const r = byId(doc)["meme-size"]!;
+    expect(r.status).toBe("warn");
+    expect(r.detail).toContain("m1 is too small to read on a phone");
+    const fixed = applyOps(doc, r.fix!.ops).doc;
+    expect(byId(fixed)["meme-size"]!.status).toBe("pass");
+    expect((fixed.visuals.find((v) => v.id === "m1")!.content as { box: { width: number } }).box.width).toBe(
+      0.42,
+    );
+  });
+
+  it("leaves a readable meme, a full-frame one, and a small plain logo from elsewhere, alone", () => {
+    expect(byId(withMeme(0.42, "card"))["meme-size"]!.status).toBe("pass");
+    expect(byId(withMeme(1, "card"))["meme-size"]!.status).toBe("pass");
+    expect(byId(withMeme(0.15, "plain", "user"))["meme-size"]!.status).toBe("pass");
+  });
+});

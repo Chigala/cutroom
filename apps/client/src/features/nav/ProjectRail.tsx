@@ -35,6 +35,7 @@ import { host } from "../../lib/host.ts";
 import { isMac, mod } from "../../lib/keys.ts";
 import { glide } from "../../lib/motion.ts";
 import { useWorking } from "../../state/chat.ts";
+import { showPanel, useLayout, usePeekDismiss } from "../../state/layout.ts";
 import { useProject } from "../../state/project.ts";
 import {
   ago,
@@ -68,8 +69,12 @@ type Menu =
   | { kind: "new"; folder?: ProjectFolder; x: number; y: number };
 
 export function ProjectRail() {
-  const open = useUi((s) => s.railOpen);
-  const width = useUi((s) => s.railWidth);
+  const layout = useLayout();
+  // Folded for room, its button shows it over the edit for a moment instead.
+  const peeking = useUi((s) => s.peek === "rail") && !layout.rail.open;
+  const open = layout.rail.open || peeking;
+  const nav = useRef<HTMLElement>(null);
+  usePeekDismiss("rail", nav, peeking);
   const folded = useUi((s) => s.folded);
   const view = useUi((s) => s.view);
   const recent = useProjects((s) => s.recent);
@@ -93,7 +98,7 @@ export function ProjectRail() {
         e.preventDefault();
         // Done here: the same key doesn't also reach the open video's shortcut.
         e.stopPropagation();
-        setRailOpen(true);
+        showPanel("rail");
         setRenaming(target);
         return true;
       }
@@ -129,14 +134,10 @@ export function ProjectRail() {
           },
         }
       : {};
-  // Never more than a third of the window, however wide it was dragged in a bigger one.
-  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-  useEffect(() => {
-    const resize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, []);
-  const shown = Math.min(width, Math.max(RAIL_WIDTH.min, windowWidth / 3));
+  const shown = layout.rail.openWidth;
+  // Opening a video from it puts it away.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on a project switch
+  useEffect(() => setUi({ peek: null }), [dir]);
 
   const { pinned, folders: rest, loose } = sections(recent, folders);
   const order = railOrder(recent, folders, folded);
@@ -193,141 +194,155 @@ export function ProjectRail() {
   );
 
   return (
-    <nav
-      aria-label="Videos and projects"
-      style={{ width: open ? shown : RAIL_WIDTH.closed }}
-      className={clsx(
-        "relative flex shrink-0 flex-col gap-0.5 overflow-hidden border-r border-line bg-sunken/60 px-2 pt-2 pb-2.5",
-        !dragging && "transition-[width] duration-150 ease-out",
+    <>
+      {/* Shown over the edit, its strip keeps its place. */}
+      {peeking && (
+        <div className="shrink-0 border-r border-line bg-sunken/60" style={{ width: RAIL_WIDTH.closed }} />
       )}
-    >
-      <RailButton
-        open={open}
-        icon={<PlusIcon size={18} />}
-        label="New video"
-        keys={`${mod}N`}
-        onClick={(e) => setMenu({ kind: "new", ...at(e) })}
-        {...hint("New video", `${mod}N`)}
-      />
-      <RailButton
-        open={open}
-        icon={<MagnifyingGlassIcon size={18} />}
-        label="Search"
-        keys={`${mod}K`}
-        onClick={() => setUi({ dialog: "projects" })}
-        {...hint("Search videos", `${mod}K`)}
-      />
-      <RailButton
-        open={open}
-        icon={<SparkleIcon size={18} />}
-        label="Inspirations"
-        active={view === "inspirations"}
-        onClick={() => setUi((s) => ({ view: s.view === "inspirations" ? "editor" : "inspirations" }))}
-        {...hint("Inspirations")}
-      />
-
-      <div className="mx-1 my-2 border-t border-line" />
-
-      {/* What you're working on; scrolls when it overflows. Closed: every video's frame, pinned first. */}
-      <div
-        onScroll={() => setTip(null)}
-        className="-mx-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-1 [scrollbar-width:none]"
-      >
-        {open ? (
-          <>
-            {(pinned.videos.length > 0 || pinned.folders.length > 0) && (
-              <Section title="Pinned">
-                {pinned.folders.map(folder)}
-                {pinned.videos.map((v) => video(v))}
-              </Section>
-            )}
-            <Section
-              title="Projects"
-              action={{ label: "New project", icon: <FolderPlusIcon size={14} />, run: () => setMaking({}) }}
-            >
-              {rest.map(folder)}
-              {/* The videos in no project, as a project of their own. */}
-              {loose.length > 0 && (
-                <FolderRow
-                  folder={{ dir: OTHER, name: "Other", videos: loose }}
-                  other
-                  folded={folded.includes(OTHER)}
-                  current={loose.some((v) => v.dir === dir)}
-                  onNew={(e) => setMenu({ kind: "new", ...at(e) })}
-                >
-                  {loose.map((v) => video(v, true))}
-                </FolderRow>
-              )}
-              {!rest.length && !pinned.folders.length && (
-                <button
-                  type="button"
-                  onClick={() => setMaking({})}
-                  className="rounded-lg px-2 py-1.5 text-left text-[12px] text-faint hover:bg-button hover:text-muted"
-                >
-                  Group videos into a project…
-                </button>
-              )}
-            </Section>
-          </>
-        ) : (
-          order.concat(recent.filter((r) => !order.some((v) => v.dir === r.dir))).map((v) => video(v))
+      <nav
+        ref={nav}
+        aria-label="Videos and projects"
+        style={{ width: open ? shown : RAIL_WIDTH.closed }}
+        className={clsx(
+          "flex shrink-0 flex-col gap-0.5 overflow-hidden border-r border-line px-2 pt-2 pb-2.5",
+          peeking ? "absolute inset-y-0 left-0 z-40 bg-sunken shadow-2xl" : "relative bg-sunken/60",
+          !dragging && "transition-[width] duration-150 ease-out",
         )}
-      </div>
+      >
+        <RailButton
+          open={open}
+          icon={<PlusIcon size={18} />}
+          label="New video"
+          keys={`${mod}N`}
+          onClick={(e) => setMenu({ kind: "new", ...at(e) })}
+          {...hint("New video", `${mod}N`)}
+        />
+        <RailButton
+          open={open}
+          icon={<MagnifyingGlassIcon size={18} />}
+          label="Search"
+          keys={`${mod}K`}
+          onClick={() => setUi({ dialog: "projects" })}
+          {...hint("Search videos", `${mod}K`)}
+        />
+        <RailButton
+          open={open}
+          icon={<SparkleIcon size={18} />}
+          label="Inspirations"
+          active={view === "inspirations"}
+          onClick={() => setUi((s) => ({ view: s.view === "inspirations" ? "editor" : "inspirations" }))}
+          {...hint("Inspirations")}
+        />
 
-      <div className="mx-1 mt-1.5 mb-1 border-t border-line" />
-      <RailButton
-        open={open}
-        icon={<GearSixIcon size={18} />}
-        label="Settings"
-        keys={`${mod},`}
-        onClick={() => setUi({ dialog: "settings", settingsSection: null })}
-        {...hint("Settings", `${mod},`)}
-      />
+        <div className="mx-1 my-2 border-t border-line" />
 
-      <ResizeHandle open={open} width={shown} onDragging={setDragging} />
-
-      {tip && !open && (
+        {/* What you're working on; scrolls when it overflows. Closed: every video's frame, pinned first. */}
         <div
-          role="tooltip"
-          className="pointer-events-none fixed z-[60] flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-line-strong bg-raised px-2.5 py-1.5 text-[12px] whitespace-nowrap shadow-xl animate-fade-in"
-          style={{ top: tip.top, left: tip.left }}
+          onScroll={() => setTip(null)}
+          className="-mx-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-1 [scrollbar-width:none]"
         >
-          <span className="text-fg">{tip.text}</span>
-          {tip.meta && <span className="text-[11px] text-faint">{tip.meta}</span>}
+          {open ? (
+            <>
+              {(pinned.videos.length > 0 || pinned.folders.length > 0) && (
+                <Section title="Pinned">
+                  {pinned.folders.map(folder)}
+                  {pinned.videos.map((v) => video(v))}
+                </Section>
+              )}
+              <Section
+                title="Projects"
+                action={{
+                  label: "New project",
+                  icon: <FolderPlusIcon size={14} />,
+                  run: () => setMaking({}),
+                }}
+              >
+                {rest.map(folder)}
+                {/* The videos in no project, as a project of their own. */}
+                {loose.length > 0 && (
+                  <FolderRow
+                    folder={{ dir: OTHER, name: "Other", videos: loose }}
+                    other
+                    folded={folded.includes(OTHER)}
+                    current={loose.some((v) => v.dir === dir)}
+                    onNew={(e) => setMenu({ kind: "new", ...at(e) })}
+                  >
+                    {loose.map((v) => video(v, true))}
+                  </FolderRow>
+                )}
+                {!rest.length && !pinned.folders.length && (
+                  <button
+                    type="button"
+                    onClick={() => setMaking({})}
+                    className="rounded-lg px-2 py-1.5 text-left text-[12px] text-faint hover:bg-button hover:text-muted"
+                  >
+                    Group videos into a project…
+                  </button>
+                )}
+              </Section>
+            </>
+          ) : (
+            order.concat(recent.filter((r) => !order.some((v) => v.dir === r.dir))).map((v) => video(v))
+          )}
         </div>
-      )}
-      {menu?.kind === "new" && (
-        <NewProjectMenu
-          at={menu}
-          {...(menu.folder && { folder: menu.folder })}
-          onNewFolder={() => setMaking({})}
-          onClose={() => setMenu(null)}
+
+        <div className="mx-1 mt-1.5 mb-1 border-t border-line" />
+        <RailButton
+          open={open}
+          icon={<GearSixIcon size={18} />}
+          label="Settings"
+          keys={`${mod},`}
+          onClick={() => setUi({ dialog: "settings", settingsSection: null })}
+          {...hint("Settings", `${mod},`)}
         />
-      )}
-      {menu?.kind === "video" && (
-        <ProjectMenu
-          {...menu}
-          project={menu.video}
-          folders={folders}
-          onClose={() => setMenu(null)}
-          onTrash={() => setTrashing(menu.video)}
-          onNewFolder={() => setMaking({ thenMove: menu.video.dir })}
-          onRename={() => setRenaming(menu.video.dir)}
-        />
-      )}
-      {menu?.kind === "folder" && (
-        <FolderMenu {...menu} onClose={() => setMenu(null)} onRename={() => setRenaming(menu.folder.dir)} />
-      )}
-      {trashing && <TrashDialog project={trashing} onClose={() => setTrashing(null)} />}
-      {making && (
-        <NewFolderDialog
-          onClose={() => setMaking(null)}
-          onMade={(made) => {
-            if (making.thenMove) void moveToFolder(making.thenMove, made.dir);
-          }}
-        />
-      )}
-    </nav>
+
+        {!peeking && !layout.rail.folded && (
+          <ResizeHandle open={open} width={shown} onDragging={setDragging} />
+        )}
+
+        {tip && !open && (
+          <div
+            role="tooltip"
+            className="pointer-events-none fixed z-[60] flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-line-strong bg-raised px-2.5 py-1.5 text-[12px] whitespace-nowrap shadow-xl animate-fade-in"
+            style={{ top: tip.top, left: tip.left }}
+          >
+            <span className="text-fg">{tip.text}</span>
+            {tip.meta && <span className="text-[11px] text-faint">{tip.meta}</span>}
+          </div>
+        )}
+        {menu?.kind === "new" && (
+          <NewProjectMenu
+            at={menu}
+            {...(menu.folder && { folder: menu.folder })}
+            onNewFolder={() => setMaking({})}
+            onClose={() => setMenu(null)}
+          />
+        )}
+        {menu?.kind === "video" && (
+          <ProjectMenu
+            {...menu}
+            project={menu.video}
+            folders={folders}
+            onClose={() => setMenu(null)}
+            onTrash={() => setTrashing(menu.video)}
+            onNewFolder={() => setMaking({ thenMove: menu.video.dir })}
+            onRename={() => setRenaming(menu.video.dir)}
+          />
+        )}
+        {menu?.kind === "folder" && (
+          <FolderMenu {...menu} onClose={() => setMenu(null)} onRename={() => setRenaming(menu.folder.dir)} />
+        )}
+        {trashing && <TrashDialog project={trashing} onClose={() => setTrashing(null)} />}
+        {making && (
+          <NewFolderDialog
+            onClose={() => setMaking(null)}
+            onMade={(made) => {
+              if (making.thenMove) void moveToFolder(making.thenMove, made.dir);
+            }}
+          />
+        )}
+      </nav>
+    </>
   );
 }
 

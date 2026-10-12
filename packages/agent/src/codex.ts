@@ -16,10 +16,13 @@ import { runTool, TOOLS, type ToolContext } from "./tools.ts";
 import {
   AgentError,
   type BackendRun,
+  REVIEW_TURNS,
   STALL_MS,
   Stalled,
   StepLimit,
+  Stuck,
   toolActivity,
+  UsageLimit,
   Watchdog,
 } from "./types.ts";
 
@@ -150,7 +153,16 @@ export function codexLimits(snapshot: {
 export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise<string> {
   const cwd = await mkdtemp(path.join(tmpdir(), "cutroom-codex-"));
   const watchdog = new Watchdog(STALL_MS, () => stop("stalled"));
-  const ctx: ToolContext = { ...outer, running: (busy) => watchdog.tool(busy) };
+  // A run stuck repeating a failure (runTool's streak) ends here, keeping its work (runAgent).
+  let stuck = "";
+  const ctx: ToolContext = {
+    ...outer,
+    running: (busy) => watchdog.tool(busy),
+    halt: (why) => {
+      stuck = why;
+      stop("limit");
+    },
+  };
   let server: CodexServer | null = null;
   let threadId = "";
   let turnId = "";
@@ -162,9 +174,12 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
   let thinking = "";
   // How the turn ended: Codex saying so, Codex gone, or a stop it didn't answer in time.
   let finish!: (end: { status: string; error?: string }) => void;
-  const done = new Promise<{ status: string; error?: string }>((resolve) => {
-    finish = resolve;
-  });
+  // Each turn's end; a review that sends the agent back starts another turn, with its own.
+  const turnEnd = () =>
+    new Promise<{ status: string; error?: string }>((resolve) => {
+      finish = resolve;
+    });
+  let done = turnEnd();
   let forced: ReturnType<typeof setTimeout> | undefined;
   const stop = (why: "user" | "stalled" | "limit") => {
     stopped ??= why;
@@ -285,7 +300,7 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
         case "item/tool/call": {
           const { tool, arguments: args } = params as { tool: string; arguments: unknown };
           // Codex has no turn limit of its own: a request gets as many tool calls as Claude's turns allow.
-          if (++tools > run.maxTurns * 2) {
+          if (++tools > (run.maxTurns + (run.review ? REVIEW_TURNS : 0)) * 2) {
             stop("limit");
             return {
               success: false,
@@ -340,18 +355,21 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
       console.warn(`[codex] instructions loaded besides Cutroom's: ${thread.instructionSources.join(", ")}`);
 
     const effort = nearestEffort(run.effort, model);
-    const turn = await live.request<{ turn: { id: string } }>("turn/start", {
-      threadId,
-      input: [
-        { type: "text", text: run.prompt, text_elements: [] },
-        ...(run.images ?? []).map((i) => ({ type: "image", url: `data:${i.mediaType};base64,${i.data}` })),
-      ],
-      ...(model && { model: model.model }),
-      ...(effort && { effort }),
-      summary: run.thinking === "omitted" ? "none" : "detailed",
-    });
-    turnId = turn.turn.id;
-    if (stopped) stop(stopped);
+    const startTurn = async (input: unknown[]) => {
+      const turn = await live.request<{ turn: { id: string } }>("turn/start", {
+        threadId,
+        input,
+        ...(model && { model: model.model }),
+        ...(effort && { effort }),
+        summary: run.thinking === "omitted" ? "none" : "detailed",
+      });
+      turnId = turn.turn.id;
+      if (stopped) stop(stopped);
+    };
+    await startTurn([
+      { type: "text", text: run.prompt, text_elements: [] },
+      ...(run.images ?? []).map((i) => ({ type: "image", url: `data:${i.mediaType};base64,${i.data}` })),
+    ]);
     void live
       .request<{ rateLimits: Parameters<typeof codexLimits>[0] }>("account/rateLimits/read")
       .then((r) => {
@@ -360,17 +378,32 @@ export async function runWithCodex(run: BackendRun, outer: ToolContext): Promise
       })
       .catch(() => {});
 
-    const end = await done;
+    let end = await done;
+    // The editor's review when it wants to stop: what falls short goes back to it as one more turn.
+    while (!stopped && end.status === "completed" && run.review) {
+      // Working, not stalled, while it measures.
+      watchdog.tool(true);
+      const fix = await run.review().finally(() => watchdog.tool(false));
+      // Stopped while it was being checked: no new turn.
+      if (!fix || stopped) break;
+      done = turnEnd();
+      await startTurn([{ type: "text", text: fix, text_elements: [] }]);
+      end = await done;
+    }
     reply = lastText;
     if (stopped === "user") throw new AgentError("Stopped");
     if (stopped === "stalled") throw new Stalled(reply);
-    if (stopped === "limit") throw new StepLimit(reply);
-    if (end.status === "failed") throw new AgentError(friendly(end.error ?? "Codex stopped with an error."));
+    if (stopped === "limit") throw stuck ? new Stuck(reply, stuck) : new StepLimit(reply);
+    if (end.status === "failed") {
+      const why = friendly(end.error ?? "Codex stopped with an error.");
+      // Out of plan mid-request: keep what was done (runAgent), like running out of steps.
+      throw /Codex limit/.test(why) ? new UsageLimit(reply, why) : new AgentError(why);
+    }
     return reply.trim();
   } catch (err) {
     if (run.signal?.aborted || stopped === "user") throw new AgentError("Stopped");
     if (stopped === "stalled") throw new Stalled(reply);
-    if (stopped === "limit") throw new StepLimit(reply);
+    if (stopped === "limit") throw stuck ? new Stuck(reply, stuck) : new StepLimit(reply);
     if (err instanceof AgentError) throw err;
     throw new AgentError(friendly((err as Error).message));
   } finally {

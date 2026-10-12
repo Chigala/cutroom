@@ -34,6 +34,7 @@ import {
   CheckRules,
   Comment,
   Cover,
+  Design,
   Effect,
   ExportSettings,
   Graphic,
@@ -112,6 +113,9 @@ export const PROJECT_FILES: readonly ProjectFile[] = [
     fallback: () => ({ style: "" }),
   },
   jsonFile("look.json", "look", Look, "Color grade", () => Look.parse({})),
+  jsonFile("design.json", "design", Design, "This video's own design: palette, type, motion", () =>
+    Design.parse({}),
+  ),
   jsonFile("sources/index.json", "sources", z.array(Source), "Imported clips and what is in them", empty),
   jsonFile(
     "sources/transcripts.json",

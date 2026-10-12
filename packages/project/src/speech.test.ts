@@ -390,6 +390,36 @@ describe("cleaning existing cuts", () => {
   });
 });
 
+describe("cleaning cuts inside one take", () => {
+  it("makes two shots that run on from each other meet at one point, never replaying a stretch", async () => {
+    const { cleanCutOps } = await import("./speech.ts");
+    const { applyOps } = await import("./ops.ts");
+    const { emptyProject } = await import("./templates.ts");
+    // A sentence, a breath, the next line: cut in the breath, as a jump cut inside one take.
+    const peaks = new Uint8Array(200);
+    for (let k = 0; k < 200; k++) peaks[k] = k < 70 ? 175 : k < 100 ? 8 : k < 150 ? 170 : 9;
+    const words = [
+      { text: "the", start: 0.05, end: 0.6 },
+      { text: "Instagram.", start: 0.6, end: 1.4 },
+      { text: "So", start: 2.0, end: 3.0 },
+    ];
+    let doc = {
+      ...emptyProject("t"),
+      sources: [{ id: "c", kind: "video", label: "c", path: "/c.mp4", duration: 4 }],
+      transcripts: [{ id: "c", language: "en", words }],
+      scenes: [
+        { id: "a", source: "c", in: 0.05, out: 1.7, note: "", volume: 1 },
+        { id: "b", source: "c", in: 1.7, out: 3.2, note: "", volume: 1 },
+      ],
+    } as never as Parameters<typeof cleanCutOps>[0];
+    doc = applyOps(doc, cleanCutOps(doc, () => peaks).ops).doc;
+    const [a, b] = [doc.scenes[0]!, doc.scenes[1]!];
+    // Each edge alone would have overlapped (the first shot on into its pause, the next back for a breath).
+    expect(b.in).toBe(a.out);
+    expect(cleanCutOps(doc, () => peaks).moved).toBe(0);
+  });
+});
+
 describe("re-timing transcribed words", () => {
   it("takes the aligned pass's times by matching words, and moves a cut with its words", async () => {
     const { retimeWords, moveEdgesWithWords } = await import("./speech.ts");

@@ -7,7 +7,9 @@ import {
   inspirationBrief,
   inspirationMeta,
   type Op,
+  type PastDesign,
   type ProjectDoc,
+  recentDesignsView,
   type Source,
   spokenWords,
   timelineOf,
@@ -139,6 +141,7 @@ export function buildPrompt(
   history: readonly Turn[],
   attachments: readonly Source[] = [],
   hand: readonly string[] = [],
+  recent: readonly PastDesign[] = [],
 ): string {
   const words = doc.transcripts.reduce((n, t) => n + t.words.length, 0);
   const parts = [`<style_md>\n${doc.style.trim() || "(empty)"}\n</style_md>`];
@@ -196,6 +199,11 @@ export function buildPrompt(
       `<hand_edits>\nThe user changed these by hand since your last change, oldest first. They're deliberate: keep them unless this request asks you to change them, and don't put back what they undid.\n${hand.map((l) => `- ${l}`).join("\n")}\n</hand_edits>`,
     );
   if (attachments.length) parts.push(attachmentLines(doc, attachments));
+  // Before this video has a design: what the user's recent videos looked like, so this one starts apart.
+  if (!doc.design.idea && recent.length)
+    parts.push(
+      `<recent_designs>\nThe user's recent videos looked like this. This one gets its own: other faces, another accent, its own motion and graphics.\n${recentDesignsView(recent)}\n</recent_designs>`,
+    );
   parts.push(`${prompt}${focusLines(ctx, doc)}`);
   return parts.join("\n\n");
 }

@@ -113,7 +113,7 @@ export function Switcher() {
   const all = [...rows.projects, ...rows.actions];
   const pick = Math.min(at, Math.max(0, all.length - 1));
   useEffect(() => {
-    listRef.current?.querySelector(`[data-i="${pick}"]`)?.scrollIntoView({ block: "nearest" });
+    ref.current?.querySelector(`[data-i="${pick}"]`)?.scrollIntoView({ block: "nearest" });
   }, [pick]);
 
   const row = (r: Row, i: number) => (
@@ -196,23 +196,21 @@ export function Switcher() {
         />
         <span className="rounded border border-line-strong px-1.5 font-mono text-[10px] text-faint">esc</span>
       </label>
-      <div
-        ref={listRef}
-        id="switcher-list"
-        className="flex max-h-[min(60vh,520px)] flex-col overflow-y-auto p-2"
-      >
-        {rows.projects.length > 0 && <Heading>Projects</Heading>}
-        {rows.projects.map((r, i) => row(r, i))}
-        {query && !rows.projects.length && (
-          <p className="m-0 px-2.5 py-3 text-[13px] text-faint">No project is called that.</p>
-        )}
+      <div id="switcher-list" className="flex min-h-0 flex-col">
+        {/* Only the projects scroll: the actions stay in view however many projects there are. */}
+        <div ref={listRef} className="flex max-h-[min(48vh,420px)] flex-col overflow-y-auto p-2">
+          {rows.projects.length > 0 && <Heading>Projects</Heading>}
+          {rows.projects.map((r, i) => row(r, i))}
+          {query && !rows.projects.length && (
+            <p className="m-0 px-2.5 py-3 text-[13px] text-faint">No project is called that.</p>
+          )}
+        </div>
         {rows.actions.length > 0 && (
-          <>
-            <div className="mx-1.5 my-1.5 border-t border-line" />
+          <div className="flex shrink-0 flex-col border-t border-line p-2">
             <Heading>Start</Heading>
-          </>
+            {rows.actions.map((r, i) => row(r, rows.projects.length + i))}
+          </div>
         )}
-        {rows.actions.map((r, i) => row(r, rows.projects.length + i))}
       </div>
     </dialog>
   );

@@ -20,10 +20,13 @@ import { runTool, TOOLS, type ToolContext } from "./tools.ts";
 import {
   AgentError,
   type BackendRun,
+  REVIEW_TURNS,
   STALL_MS,
   Stalled,
   StepLimit,
+  Stuck,
   toolActivity,
+  UsageLimit,
   Watchdog,
 } from "./types.ts";
 
@@ -77,7 +80,16 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
   run.signal?.addEventListener("abort", onAbort, { once: true });
   // A connection that goes quiet for good: stop, and keep what was done (runAgent).
   const watchdog = new Watchdog(STALL_MS, () => abort.abort());
-  const ctx: ToolContext = { ...outer, running: (busy) => watchdog.tool(busy) };
+  // A run stuck repeating a failure (runTool's streak) ends here, keeping its work (runAgent).
+  let stuck = "";
+  const ctx: ToolContext = {
+    ...outer,
+    running: (busy) => watchdog.tool(busy),
+    halt: (why) => {
+      stuck = why;
+      abort.abort();
+    },
+  };
   let summary = "";
   let turnText = "";
   let thinkingStarts = false;
@@ -105,11 +117,38 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
         settings: { disableClaudeAiConnectors: true },
         persistSession: false,
         includePartialMessages: true,
-        maxTurns: run.maxTurns,
+        // The review's rounds come on top of the request's turns, so a request that finishes on its last
+        // turn isn't cut off by being sent back.
+        maxTurns: run.maxTurns + (run.review ? REVIEW_TURNS : 0),
         // A neutral working directory: no project CLAUDE.md or settings leak into the editor's agent.
         cwd: tmpdir(),
         abortController: abort,
         env: claudeEnv(),
+        // The editor's review when it wants to stop: what falls short goes back to it, and it carries on.
+        ...(run.review && {
+          hooks: {
+            Stop: [
+              {
+                // Measuring the motion takes about a second per second of video.
+                timeout: 900,
+                hooks: [
+                  async (_input, _id, { signal }) => {
+                    // Working, not stalled, while it measures.
+                    ctx.running?.(true);
+                    try {
+                      const fix = await run.review?.();
+                      return fix && !signal.aborted && !abort.signal.aborted
+                        ? { decision: "block" as const, reason: fix }
+                        : {};
+                    } finally {
+                      ctx.running?.(false);
+                    }
+                  },
+                ],
+              },
+            ],
+          },
+        }),
       },
     });
     for await (const message of stream) {
@@ -164,7 +203,8 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
           if (window) run.onUsage?.({ limits: window });
           if (message.rate_limit_info.status === "rejected") {
             const at = message.rate_limit_info.resetsAt;
-            throw new AgentError(
+            throw new UsageLimit(
+              summary,
               `You've hit your Claude usage limit${at ? `; it resets at ${new Date(at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}.`,
             );
           }
@@ -190,10 +230,12 @@ export async function runWithSubscription(run: BackendRun, outer: ToolContext): 
         }
       }
     }
+    if (stuck) throw new Stuck(summary, stuck);
     if (watchdog.stalled) throw new Stalled(summary);
     return summary.trim();
   } catch (err) {
     if (run.signal?.aborted) throw new AgentError("Stopped");
+    if (stuck) throw new Stuck(summary, stuck);
     if (watchdog.stalled) throw new Stalled(summary);
     if (err instanceof AgentError) throw err;
     const msg = (err as Error).message ?? String(err);

@@ -23,6 +23,7 @@ import { isMac } from "./lib/keys.ts";
 import { pop } from "./lib/motion.ts";
 import { connectChat } from "./state/chat.ts";
 import { connectJobs } from "./state/jobs.ts";
+import { togglePanel, useLayout } from "./state/layout.ts";
 import { offerToKeep } from "./state/library.ts";
 import { currentTime, holdStep, releaseStep, seekTime, togglePlay } from "./state/playback.ts";
 import { connectHost, edit, receive, redo, undo, useProject } from "./state/project.ts";
@@ -30,7 +31,7 @@ import { connectProjects, openProject, railOrder, useProjects } from "./state/pr
 import { loadSettings, useSettings } from "./state/settings.ts";
 import { fitTimeline, setRange, zoomBy } from "./state/timeline.ts";
 import { dismissToast, toast, useToasts } from "./state/toast.ts";
-import { composerRef, setUi, toggleRail, toggleSide, useUi } from "./state/ui.ts";
+import { composerRef, setUi, useUi } from "./state/ui.ts";
 import { connectUpdates } from "./state/update.ts";
 
 /** A panel that fails alone (see Boundary), trying again whenever the project changes. */
@@ -85,10 +86,10 @@ export function App() {
       {status === "ready" ? (
         <>
           <Header />
-          <div className="flex min-h-0 flex-1">
+          <div className="relative flex min-h-0 flex-1">
             <ProjectRail />
             <div className="relative flex min-w-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1">
+              <div className="relative flex min-h-0 flex-1">
                 {/* Each panel fails alone: the rest keeps working, and it retries on the next change. */}
                 <Guard name="chat" className="w-[380px] shrink-0 border-r border-line">
                   <ChatPanel />
@@ -178,7 +179,7 @@ function useHotkeys(): void {
         !typing(e.target)
       ) {
         e.preventDefault();
-        toggleSide();
+        togglePanel("side");
         return;
       }
       // Projects: ⌘K to jump to one, ⌘B for the rail's names, ⌘N for a new one, ⌘1-9 for the rail's.
@@ -193,7 +194,7 @@ function useHotkeys(): void {
         }
         if (key === "b" && !typing(e.target)) {
           e.preventDefault();
-          toggleRail();
+          togglePanel("rail");
           return;
         }
         if (key === "n") {
@@ -281,6 +282,7 @@ function useHotkeys(): void {
             selectedScene: null,
             selection: null,
             view: "editor",
+            peek: null,
           });
           break;
         case "Backspace":
@@ -398,8 +400,13 @@ function DropTarget() {
 
 function Toasts() {
   const toasts = useToasts((s) => s.toasts);
+  // Just above the timeline, however tall it is.
+  const timeline = useLayout().timeline;
   return (
-    <div className="pointer-events-none fixed bottom-[276px] left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
+    <div
+      className="pointer-events-none fixed left-1/2 z-50 flex max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col items-center gap-2"
+      style={{ bottom: timeline + 12 }}
+    >
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
           <motion.div

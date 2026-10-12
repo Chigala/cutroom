@@ -139,7 +139,18 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
             unset CSC_LINK CSC_KEY_PASSWORD
           fi
-          pnpm exec electron-builder --config electron-builder.yml --publish never ${{ matrix.args }} "${sign[@]}"
+          # Apple's ticket service sometimes drops the connection while the notarized app is stapled
+          # ("Failed to staple ... code: 68"): package again, up to three times, for that and only that.
+          for attempt in 1 2 3; do
+            if pnpm exec electron-builder --config electron-builder.yml --publish never ${{ matrix.args }} "${sign[@]}" 2>&1 | tee "$RUNNER_TEMP/package.log"; then
+              break
+            fi
+            if [ "$attempt" = 3 ] || ! grep -q "Failed to staple" "$RUNNER_TEMP/package.log"; then
+              exit 1
+            fi
+            echo "Stapling failed on Apple's side; packaging again ($((attempt + 1)) of 3)"
+            sleep 30
+          done
 
       - uses: actions/upload-artifact@v4
         with:

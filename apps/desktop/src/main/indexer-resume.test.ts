@@ -69,7 +69,8 @@ vi.mock("./settings.ts", () => ({
 const { Indexer, passing } = await import("./indexer.ts");
 
 const root = mkdtempSync(path.join(tmpdir(), "vedit-resume-"));
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+// Retried: on Windows a file stays locked for a moment after the process reading it ends.
+afterAll(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 const clip = (id: string, dir: string) => {
   const file = path.join(dir, `${id}.mp4`);

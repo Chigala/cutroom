@@ -33,7 +33,7 @@ const SCRIPTED = `<!-- graphic {"name":"Kit GSAP","duration":3,"libs":["gsap"]} 
 
 describe.skipIf(!process.env.VEDIT_RENDER_TESTS)("the graphics kit, rendered", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "vedit-kit-"));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
   function project(html: string): ProjectDoc {
     const doc0 = emptyProject("kit");

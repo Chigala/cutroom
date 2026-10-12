@@ -12,7 +12,8 @@ import { ProjectStore } from "@vedit/project/node";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 const data = mkdtempSync(path.join(tmpdir(), "vedit-bgmedia-"));
-afterAll(() => rmSync(data, { recursive: true, force: true }));
+// Retried: on Windows a file stays locked for a moment after the process reading it ends.
+afterAll(() => rmSync(data, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 const agent = vi.hoisted(() => ({ finish: [] as ((r: Omit<AgentResult, "doc">) => void)[] }));
 /** Which project each pass of media work ran for. */

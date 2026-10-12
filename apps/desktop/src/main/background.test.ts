@@ -8,7 +8,7 @@ import { ProjectStore } from "@vedit/project/node";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 const data = mkdtempSync(path.join(tmpdir(), "vedit-bg-"));
-afterAll(() => rmSync(data, { recursive: true, force: true }));
+afterAll(() => rmSync(data, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 // Claude, driven by the test: each request waits until the test finishes it.
 const agent = vi.hoisted(() => ({

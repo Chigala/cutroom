@@ -1,13 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Cutroom" width="100%">
-</p>
-
-<h1 align="center">Cutroom</h1>
-
-<p align="center">
-  <strong>You direct. The agent edits.</strong><br>
-  A video editor built from the ground up for AI. It sees every frame and hears every word,<br>
-  so you can just ask for the edit you want.
+  <img src="docs/banner.png" alt="Cutroom. You direct. The agent edits. The open-source, AI-native video editor." width="100%">
 </p>
 
 <p align="center">

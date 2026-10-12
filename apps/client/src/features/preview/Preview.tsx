@@ -295,7 +295,15 @@ const Stage = memo(function Stage() {
           width: "100%",
           height: "100%",
           isolation: "isolate",
-          ...(stage === "cover" && { position: "absolute", inset: 0, visibility: "hidden" }),
+          // Under the cover, out of sight: opacity too, since a shot on screen sets its own visibility
+          // back to visible (ShotWindow) and would draw over the cover.
+          ...(stage === "cover" && {
+            position: "absolute",
+            inset: 0,
+            visibility: "hidden",
+            opacity: 0,
+            pointerEvents: "none",
+          }),
         }}
         loop
         clickToPlay={false}

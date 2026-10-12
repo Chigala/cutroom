@@ -5,17 +5,33 @@
  */
 import type { CheckRules } from "./schema.ts";
 
-/** Where each platform's app UI leaves the picture clear (fractions of the frame). */
-const SAFE_ZONES: Record<CheckRules["platform"], { top: number; bottom: number; right: number }> = {
+/**
+ * Where each platform's app UI leaves the picture clear (fractions of the frame), and where its column of
+ * buttons down the right starts (rail; drawn in the preview, the checks keep the whole right edge clear).
+ */
+const SAFE_ZONES: Record<
+  CheckRules["platform"],
+  { top: number; bottom: number; right: number; rail: number }
+> = {
   // Phone UI covers roughly the bottom 17% (caption bar, buttons) and the right 18% (like, share).
-  tiktok: { top: 0.08, bottom: 0.78, right: 0.82 },
-  reels: { top: 0.1, bottom: 0.8, right: 0.85 },
-  shorts: { top: 0.08, bottom: 0.8, right: 0.85 },
-  youtube: { top: 0, bottom: 1, right: 1 },
-  none: { top: 0, bottom: 1, right: 1 },
+  tiktok: { top: 0.08, bottom: 0.78, right: 0.82, rail: 0.35 },
+  // Reels and Shorts keep their buttons lower down, by the caption.
+  reels: { top: 0.1, bottom: 0.8, right: 0.85, rail: 0.55 },
+  shorts: { top: 0.08, bottom: 0.8, right: 0.85, rail: 0.5 },
+  youtube: { top: 0, bottom: 1, right: 1, rail: 1 },
+  none: { top: 0, bottom: 1, right: 1, rail: 1 },
 };
 
 export const safeZoneFor = (platform: CheckRules["platform"]) => SAFE_ZONES[platform];
+
+/** The phone platforms, whose apps draw over a portrait video. */
+export const PHONE_PLATFORMS = ["tiktok", "reels", "shorts"] as const;
+
+/** Show the video as it sits in this platform's app: its zones, not a custom clear area. */
+export const platformRules = (rules: CheckRules, platform: CheckRules["platform"]): CheckRules => {
+  const { safeZone: _, ...rest } = rules;
+  return { ...rest, platform };
+};
 
 /** The project's clear area: its own (checks.json safeZone), or its platform's. */
 export const clearArea = (rules: Pick<CheckRules, "platform" | "safeZone">) =>

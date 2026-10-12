@@ -5,16 +5,18 @@
 
 import { EyeIcon, EyeSlashIcon, PauseIcon, PlayIcon } from "@phosphor-icons/react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { safeZoneFor } from "@vedit/checks";
 import { CoverComposition, compositionMeta, VideoComposition } from "@vedit/composition";
 import {
   anchorAt,
   type Comment,
   formatTime,
   newId,
+  PHONE_PLATFORMS,
   type ProjectDoc,
+  platformRules,
   resolveAnchor,
   SHAPES,
+  safeZoneFor,
   sceneAt,
   shapeOf,
   shapeSize,
@@ -336,8 +338,7 @@ function Overlay() {
   const cover = useUi((s) => s.stage === "cover");
   // ⌥ held points too, without the Point button first (not on the cover: it's a still, not a moment).
   const armed = pointing || (marking && !cover);
-  // The platform's buttons and captions are a phone-screen thing: none over a square or wide shape.
-  const portrait = useUi((s) => s.stageShape === null || s.stageShape === "9:16" || s.stageShape === "4:5");
+  const portrait = usePortrait();
 
   const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (pointing) pointAt(e);
@@ -363,6 +364,10 @@ function Overlay() {
   );
 }
 
+/** The platform's buttons and captions are a phone-screen thing: none over a square or wide shape. */
+const usePortrait = () =>
+  useUi((s) => s.stageShape === null || s.stageShape === "9:16" || s.stageShape === "4:5");
+
 const PLATFORM_NAMES = { tiktok: "TikTok", reels: "Reels", shorts: "Shorts", youtube: "YouTube", none: "" };
 
 /** Where the project's platform (checks.json) draws its own UI over the video. None for YouTube or none. */
@@ -371,13 +376,20 @@ function SafeZones() {
   const own = useDoc((d) => d.checkRules.safeZone);
   const zone = own ?? safeZoneFor(platform);
   if (zone.bottom >= 1 && zone.right >= 1) return null;
+  const rail = Math.min(safeZoneFor(platform).rail, zone.bottom);
   const dashed = "border-white/35 bg-black/[0.12]";
   return (
     <>
+      {zone.top > 0 && (
+        <div
+          className={`absolute inset-x-0 top-0 border-b border-dashed ${dashed}`}
+          style={{ height: `${zone.top * 100}%` }}
+        />
+      )}
       <div
         className={`absolute right-0 border-l border-dashed ${dashed}`}
         style={{
-          top: "32%",
+          top: `${rail * 100}%`,
           bottom: `${(1 - zone.bottom) * 100}%`,
           width: `${(1 - zone.right) * 100}%`,
         }}
@@ -566,6 +578,44 @@ function Transport() {
       >
         {safeZones ? <EyeIcon size={15} /> : <EyeSlashIcon size={15} />}
       </IconButton>
+      <PlatformPicker />
     </div>
+  );
+}
+
+/** Whose app to see the video in: its buttons and captions drawn over the preview, and kept clear by the checks. */
+function PlatformPicker() {
+  const rules = useDoc((d) => d.checkRules);
+  const shown = useUi((s) => s.safeZones);
+  const portrait = usePortrait();
+  if (!portrait) return null;
+  const pick = (platform: (typeof PHONE_PLATFORMS)[number]) => {
+    if (platform !== rules.platform || rules.safeZone)
+      edit([{ op: "set", key: "checkRules", value: platformRules(rules, platform) }], {
+        message: `Safe area: ${PLATFORM_NAMES[platform]}`,
+      });
+    setUi({ safeZones: true });
+  };
+  return (
+    <fieldset className="m-0 flex gap-0.5 border-0 p-0" aria-label="Safe area for">
+      {PHONE_PLATFORMS.map((p) => {
+        const on = shown && rules.platform === p;
+        return (
+          <button
+            key={p}
+            type="button"
+            aria-pressed={on}
+            title={`See where the ${PLATFORM_NAMES[p]} app covers the video`}
+            onClick={() => pick(p)}
+            className={clsx(
+              "rounded-md px-2 py-0.5 text-[11px]",
+              on ? "bg-button text-fg" : "text-muted hover:text-fg",
+            )}
+          >
+            {PLATFORM_NAMES[p]}
+          </button>
+        );
+      })}
+    </fieldset>
   );
 }

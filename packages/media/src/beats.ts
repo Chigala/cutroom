@@ -1,4 +1,3 @@
-// Ported from tiktok-studio's cli/beats.ts.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";

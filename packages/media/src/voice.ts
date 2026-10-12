@@ -1,5 +1,5 @@
 /**
- * The export's dialogue track, adapted from tiktok-studio's cli/media.ts. The voice never goes through
+ * The export's dialogue track. The voice never goes through
  * the browser renderer (which rebuilds audio per frame and smears it): ffmpeg cuts every kept stretch
  * straight from the footage with tiny fades so no cut clicks, cleans it up like a phone mic needs, and
  * levels it to streaming loudness.

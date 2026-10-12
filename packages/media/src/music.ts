@@ -1,5 +1,5 @@
 /**
- * Music beds by mood, ported from tiktok-studio's cli/music.ts: free instrumentals from Openverse
+ * Music beds by mood: free instrumentals from Openverse
  * (Creative Commons CC0 or CC BY, so a credit line is all they ask), filtered to tracks that work under
  * a voice, and checked for a usable beat before they are offered.
  */

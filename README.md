@@ -1,199 +1,121 @@
-# Cutroom
+<p align="center">
+  <img src="docs/banner.png" alt="Cutroom. You direct. The agent edits. The open-source, AI-native video editor." width="100%">
+</p>
 
-An AI-native video editor.
+<p align="center">
+  <a href="https://github.com/Chigala/cutroom-releases/releases/latest/download/Cutroom-arm64.dmg"><strong>Download for Mac (Apple silicon)</strong></a>
+  ·
+  <a href="https://github.com/Chigala/cutroom-releases/releases/latest/download/Cutroom-x64.dmg">Intel</a>
+  ·
+  <a href="https://getcutroom.studio">Website</a>
+  ·
+  <a href="docs/development.md">Build from source</a>
+</p>
 
-You direct, the agent edits. Drop raw footage in, and the app understands it (every word said, pauses,
-shots, beats). The agent makes the first cut on its own, and you change anything by saying what you
-want, pointing at the video, or editing the words. Every change shows up as a chip you can keep or undo,
-and the project is a real folder of plain files you can open in any editor.
+<p align="center">
+  <a href="https://github.com/Chigala/cutroom-releases/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Chigala/cutroom-releases?label=release&color=F5A524"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <img alt="macOS, Windows and Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey">
+</p>
 
-## Getting started
+<p align="center">
+  <img src="docs/screenshot.webp" alt="Cutroom: the agent's reply on the left, the video in the middle, its scenes and checks on the right, the timeline below" width="100%">
+</p>
 
-You need **Node 22.12+**, **Git**, and **pnpm** (the repo pins its version: `corepack enable` sets it up).
+## What it is
 
-```bash
-git clone <this repo> && cd ai-native-videoeditor
-corepack enable
-pnpm install
-cp .env.example .env   # optional: development settings (API keys go in the app, not here)
-pnpm dev               # the desktop app (Electron), with hot reload for the UI
-```
+Drop in raw footage and Cutroom understands it: every word said, the pauses, the shots, the faces, the
+beat of the music. The agent makes the first cut on its own (retakes and dead air gone, a hook,
+captions, zooms, music, graphics designed for this video), then you change anything by saying what you
+want, pointing at the video, or editing the words.
 
-Other commands:
+Every change shows up as a chip you can keep or undo. Nothing is a black box: the edit is a folder of
+plain files you can open in any editor.
 
-```bash
-pnpm dev:web        # the UI alone in a browser, on an in-memory demo project
-pnpm check          # lint + typecheck + tests
-pnpm build          # production build (includes the export renderer bundle)
-pnpm dist           # package the app for this platform with electron-builder
-```
+- **It sees your footage.** Transcription, faces, people, cutouts, shots, beats and sound events, all
+  worked out on your computer. So it can put a title behind someone, swap a background or land a cut on
+  a laugh.
+- **Edit by asking.** "Make the hook punchier", "tighten the middle", "add a zoom on every laugh". The
+  agent reads the transcript, looks at the frames it needs, makes the change and checks its own work
+  before it hands it back.
+- **Edit by hand, too.** Trim on the timeline, cut words in the transcript, point at a spot on the
+  video and comment on it. The agent picks up your changes.
+- **Learn a style from a video you love.** Drop one in and Cutroom measures its cuts, punch-ins, beat,
+  sound effects and captions, and writes it up as an inspiration to edit any video to.
+- **Every video its own design.** Graphics, fonts and colours are designed for each video's subject and
+  kept apart from your recent ones, so no two edits look alike.
+- **Checks before you post.** Hook timing, safe zones for TikTok, Reels and Shorts, captions, dead air,
+  beat sync, loudness. Most have a one-click fix.
+- **Export anywhere.** MP4 in 9:16, 4:5, 1:1 or 16:9, mastered to -14 LUFS, with a cover image.
 
-Speech recognition (whisper.cpp and its model, about 1.6 GB) installs itself on the first import.
+## Your agent, your footage
 
-### macOS
+Cutroom runs on your own plan, through the agent you already use: **Claude Code** (on a Claude plan) or
+**Codex** (on a ChatGPT plan). Sign in once: there's no API key to set, and nothing to pay beyond the
+plan you have.
 
-```bash
-brew install ffmpeg
-```
+Your video files never leave your computer. Transcription, indexing, preview and export all run
+locally; the agent reads the project's files, the transcript and the few frames it asks to look at, the
+way a coding agent reads a code project.
 
-To package the app with its own ffmpeg, whisper and audio tools (so users install nothing), run
-`pnpm --filter @vedit/desktop tools` once (needs Xcode's command line tools and cmake).
+## Install
 
-## Installers
+| | |
+|---|---|
+| **macOS** 13.3 or later | [Apple silicon](https://github.com/Chigala/cutroom-releases/releases/latest/download/Cutroom-arm64.dmg) · [Intel](https://github.com/Chigala/cutroom-releases/releases/latest/download/Cutroom-x64.dmg), signed and notarized |
+| **Windows** 10 or later | [Installer](https://github.com/Chigala/cutroom-releases/releases/latest/download/Cutroom-Setup.exe) (preview) |
+| **Linux** x64 | [AppImage](https://github.com/Chigala/cutroom-releases/releases/latest/download/Cutroom-x86_64.AppImage) · [.deb](https://github.com/Chigala/cutroom-releases/releases/latest/download/cutroom_amd64.deb) (preview) |
 
-`pnpm dist` builds the installer for the system you're on: a .dmg on macOS, an .exe installer on
-Windows, an AppImage and a .deb on Linux. First run `pnpm --filter @vedit/desktop tools` on that same
-system: it downloads ffmpeg and the voice cleaner (version-pinned and checksum-verified) and compiles
-whisper.cpp. That needs cmake and a C++ compiler: Xcode's command line tools on macOS, Visual Studio's
-"Desktop development with C++" on Windows, `build-essential` on Linux.
+The app updates itself. Speech recognition downloads the first time you import a clip.
 
-On GitHub, the **Build installers** workflow (`.github/workflows/build.yml`) builds all three on
-their own systems, from the Actions tab or when a `v*` tag is pushed, and attaches them to the run.
-They aren't signed yet, so macOS asks for "Open Anyway" (System Settings → Privacy & Security) and
-Windows shows a SmartScreen warning ("More info" → "Run anyway").
+Windows and Linux are new: they work, but expect rough edges, and please
+[report them](https://github.com/Chigala/cutroom/issues).
 
-### Windows
+## The project is a folder
 
-```powershell
-winget install Git.Git OpenJS.NodeJS.LTS Gyan.FFmpeg
-```
-
-Open a new terminal afterwards so `ffmpeg` is on your PATH, then follow Getting started.
-
-### Linux (Ubuntu/Debian)
-
-```bash
-sudo apt install ffmpeg git build-essential cmake \
-  libgtk-3-0 libnss3 libgbm1 libasound2 libxss1 libxshmfence1 libdrm2
-```
-
-On Ubuntu 24.04+ the sound library is `libasound2t64`. whisper.cpp is compiled on the first import
-(that's what `build-essential` and `cmake` are for). `pnpm dev` runs Electron without Chromium's
-sandbox helper when it isn't set up as root (it never is in a fresh `node_modules`), and says so.
-
-### WSL (Windows Subsystem for Linux)
-
-Works on Windows 11 with WSL 2, whose WSLg shows Linux windows on your desktop. Install as for Linux,
-inside the distro, and:
-
-- **Keep the repo and your projects in the Linux file system** (`~/...`), not under `/mnt/c`. Files on
-  the Windows drive are slow from Linux and never report changes, so edits made outside the app and
-  library drops aren't seen.
-- Exports render in software (no GPU video encoding in WSL): they work, just slower than native.
-- For everyday editing, the native Windows app is the better choice. WSL suits development.
-
-### What works where
-
-| | macOS | Windows | Linux / WSL |
-|---|---|---|---|
-| Editing, agent, captions, graphics, music, export | yes | yes* | yes* |
-| Whisper transcription | GPU (Metal) | downloads on first import* | built on first import (CPU) |
-| Voice cleanup (DeepFilterNet) | yes | yes* | yes* |
-| Face framing, tracking, sound recognition | yes | yes* | yes* |
-| Cutouts (text behind the person, background changes) | yes | yes* | yes* |
-| Packaged installer with bundled tools | yes | yes* | yes* |
-
-On macOS, faces, people, sounds and cutouts use Apple's frameworks. On Windows and Linux, open models
-do the same jobs on ONNX Runtime (on the graphics card through DirectML on Windows, on the CPU
-elsewhere). Each downloads once, the first time it's needed, checked against a pinned hash:
-
-| Job | Model | Download | Licence |
-|---|---|---|---|
-| Faces | YuNet (OpenCV) | 0.2 MB | MIT |
-| People | YOLOX-Nano (Megvii) | 3.5 MB | Apache-2.0 |
-| Sounds | PANNs CNN14 (labels: Google's AudioSet) | 330 MB | MIT (labels CC BY 4.0) |
-| Cutouts | Robust Video Matting | 15 MB | GPL-3.0 |
-
-`VEDIT_VISION=onnx` makes a Mac use them too, to compare the two.
-
-\* Windows and Linux support is new and still being tested: expect rough edges, and please report them.
-
-## Claude
-
-The agent runs on your own Claude plan (Pro or Max) through Claude Code: install it and sign in, and
-there's no key to set. The app can install and update it from Settings → Claude, or:
-
-- macOS, Linux, WSL: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude` to sign in
-- Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`, then `claude` to sign in
-
-Settings → Claude also picks the model and how hard it thinks. (An API-key backend exists in
-`packages/agent/src/api.ts` but is switched off for now.)
-
-API keys for stock footage, memes, sound effects and Groq transcription are each person's own, entered
-in onboarding or Settings → Media sources and stored encrypted on the computer; they're never read from
-the environment.
-
-## What it does
-
-- **Indexing** (on import, in the background): a 540p preview proxy (hardware encoded), audio
-  measured (silences, loudness, waveform), every word transcribed locally with whisper.cpp and snapped
-  to the measured silences, shot changes detected, and for music a beat map.
-- **First cut**: drop clips into an empty project and the agent makes a draft as soon as indexing is
-  done: retakes and dead air cut, best takes kept, hook title, caption emphasis, zooms.
-- **Inspirations**: editing styles to follow ("Edit it like…"): punchy explainer, podcast clip,
-  storytime, tutorial, news commentary, creator product ad, hype montage, calm vlog. Each is a brief the
-  agent edits to (structure, pacing, captions, motion, sound, look) plus the settings that make it
-  concrete; every card previews your own footage in that style. Learn a new one from a video you love:
-  the agent measures its rhythm, studies its frames and writes the brief into your library
-  (`Cutroom Library/Inspirations/`). A brand kit is who you are; an inspiration is how this video is cut.
-- **Chat**: ask for changes. The agent reads transcripts, looks at frames of the footage, cuts by word
-  ranges, fixes misheard words, finds music, and runs the checks before it hands work back.
-- **Words tab**: edit the video by editing its text. Select words and press Delete to cut them, E to
-  emphasize them in captions, double-click to fix a misheard word.
-- **Point**: click the video to pin a comment ("zoom here when he laughs") or to aim an instruction.
-  Send all open comments to the agent at once.
-- **Timeline**: trim shots by their edges, S to split at the playhead, drag zooms, titles and captions.
-- **Checks**: hook timing, safe zones, beat sync, captions, dead air, shot lengths, ducking. Most have
-  a one-click fix.
-- **Projects and history**: every project you've opened sits down the left as a frame of its footage;
-  one click (or ⌘1-9) switches, ⌘K finds any of them, ⌘B shows their names. The chat is the history:
-  restore the edit to any request, or to your own edits in between, and undo the restore like anything
-  else. Fork a project from its original clips (already transcribed and analysed, so Claude only
-  makes the edit again, in the background while you carry on) or from its edit, to try another
-  direction.
-- **Export**: Remotion renders the same composition the preview plays, from full-quality masters; the
-  voice is cut separately with ffmpeg, cleaned and levelled to -14 LUFS, then mixed under the picture.
-
-## The project folder
-
-The video is a pure function of the folder. Everything the agent and the UI do is an op on these files,
-recorded in `.history/log.jsonl`, so undo, history, restore points and "what did the AI change" all come from
-one mechanism. Edit any file by hand and the change appears in the app as an undoable commit.
+The video is a pure function of its folder. Everything the agent and the UI do is a recorded change to
+these files, so undo, history, restore points and "what did the AI change" all come from one place.
+Edit a file by hand and the change shows up in the app, undoable like any other.
 
 ```
 My Video/
   project.json              name, format
   STYLE.md                  your taste in plain words; the agent follows it
-  inspirations/<id>.md      the editing style this video follows: its brief and settings
-  look.json                 color grade
-  sources/index.json        imported clips (paths, not copies)
-  sources/transcripts.json  every word said, with timings
-  sources/analysis.json     silences, shot changes, beats
+  design.json               this video's design: palette, fonts, motion
   timeline/scenes.json      the cut, in playback order
-  captions/captions.json    caption style, word fixes and emphasis, manual captions
-  motion/zooms.json         punch-ins
-  overlays/titles.json      hook and titles
-  audio/music.json          music track, volume, ducking
-  audio/sfx.json            sound effects (synthesized, nothing to license)
-  comments/comments.json    notes pinned to moments
-  exports/                  rendered videos
-  .history/                 commit log and chat
-  .cache/                   proxies, waveforms, masters (safe to delete)
+  captions/captions.json    caption style, word fixes and emphasis
+  graphics/*.html           motion graphics, written for this video
+  overlays/visuals.json     graphics, cutaways and memes placed in time
+  audio/music.json          music, volume, ducking
+  cover.json                the thumbnail
+  .history/                 every change, and the chat
 ```
 
-## Code
+## Build from source
 
-```
-apps/desktop        Electron main (project service, indexer, exporter, versions) and preload
-apps/client         React UI (Remotion Player preview, chat, timeline, words, project rail)
-packages/project    schemas, ops, commits, speech/caption maths, folder store
-packages/checks     quality checks with fixes
-packages/composition the Remotion composition: video = render(doc)
-packages/media      ffmpeg, whisper.cpp, beat tracking, proxies, voice mastering, music search
-packages/agent      tools + two backends (Claude API, Claude Agent SDK)
-packages/render     export: masters, Remotion render, voice track, mix
-packages/bridge     the typed contract between UI and host
+You need Node 22.12+, Git and pnpm (`corepack enable` sets up the pinned version).
+
+```bash
+git clone https://github.com/Chigala/cutroom.git && cd cutroom
+corepack enable
+pnpm install
+pnpm dev
 ```
 
-The UI only talks to `EditorApi` (`packages/bridge`). Today Electron's main process implements it on
-real folders; a cloud service could implement the same contract for web and mobile.
+`pnpm check` runs the linter, type checks and tests. [docs/development.md](docs/development.md) has the
+rest: platform setup, packaging installers, what runs where, and a map of the code.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first; for anything big,
+open an issue to talk it through before you build it.
+
+## License
+
+Cutroom is open source under the [GNU AGPL-3.0](LICENSE). You can use, study, change and share it; if
+you run a modified version as a service for others, you share your changes under the same license.
+
+Cutroom renders video with [Remotion](https://www.remotion.dev), which has its own
+[license](https://www.remotion.dev/license): free for individuals and small companies, while larger
+companies need a Remotion company license. Everything else Cutroom builds on, bundles or downloads, and
+its license, is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -1,4 +1,4 @@
-// Procedural sound design, ported from tiktok-studio's cli/sfx.ts: every effect is synthesized with
+// Procedural sound design: every effect is synthesized with
 // ffmpeg, so there is nothing to license and nothing to download.
 import { existsSync } from "node:fs";
 import { mkdir, rename } from "node:fs/promises";

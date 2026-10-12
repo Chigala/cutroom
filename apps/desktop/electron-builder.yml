@@ -22,8 +22,8 @@ asarUnpack:
 # Nothing to rebuild: the app has no native Node modules of its own.
 npmRebuild: false
 # Where updates come from (src/main/updater.ts) and where the release workflow puts each version: the app
-# reads latest*.yml from the newest release here. A public repository holding only the installers, so the
-# code can stay private (the workflow writes to it with the RELEASES_TOKEN secret).
+# reads latest*.yml from the newest release here: a repository holding only the installers, which the
+# website links to (the workflow writes to it with the RELEASES_TOKEN secret).
 publish:
   provider: github
   owner: Chigala

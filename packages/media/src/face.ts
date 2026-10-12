@@ -1,5 +1,5 @@
 /**
- * Where the speaker's face sits, via Apple's Vision framework (ported from tiktok-studio's cli/face.js).
+ * Where the speaker's face sits, via Apple's Vision framework.
  * Runs on a handful of frames and keeps the median, so one turned head doesn't move the framing.
  * Off macOS, the open face detector does it (vision.ts). Null when no face is clear enough, and framing
  * falls back to the frame's upper middle.

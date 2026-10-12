@@ -370,8 +370,9 @@ describe("meme size", () => {
     );
   });
 
-  it("leaves a readable meme, and a small plain logo from elsewhere, alone", () => {
+  it("leaves a readable meme, a full-frame one, and a small plain logo from elsewhere, alone", () => {
     expect(byId(withMeme(0.42, "card"))["meme-size"]!.status).toBe("pass");
+    expect(byId(withMeme(1, "card"))["meme-size"]!.status).toBe("pass");
     expect(byId(withMeme(0.15, "plain", "user"))["meme-size"]!.status).toBe("pass");
   });
 });

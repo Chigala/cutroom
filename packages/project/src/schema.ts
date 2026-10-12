@@ -1385,7 +1385,7 @@ export const VisualContent = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("media"),
     source: Id.meta({ ref: "sources" }).describe(
-      "A reaction GIF, sticker, meme image or short clip, shown in a box over the video (not full frame)",
+      "A reaction GIF, sticker, meme image or short clip, shown in a box over the video (a cutaway on it fills the frame)",
     ),
     in: Seconds.default(0).describe("Where in that clip to start"),
     loop: z.boolean().default(true).describe("Play the clip again from its start while the visual lasts"),

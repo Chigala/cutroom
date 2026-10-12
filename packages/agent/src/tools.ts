@@ -2348,7 +2348,7 @@ measure: true returns what the filters report instead: signalstats with metadata
       return result.isError
         ? result
         : {
-            text: `Added ${c.kind} ${added.id} (${c.width}x${c.height}, "${c.title}", KLIPY). Place it big enough to read on a phone at a glance: box width 0.38-0.5 of the frame, beside the face (not smaller to dodge it: move it to the side with room, or above the head).`,
+            text: `Added ${c.kind} ${added.id} (${c.width}x${c.height}, "${c.title}", KLIPY). Size it to the moment, big enough to read on a phone at a glance: beside the face, box width 0.38-0.5 (not smaller to dodge it: move it to the side with room, or above the head); or, when it's the punchline, the whole frame (a cutaway on it, or a centred box 0.8-1 wide).`,
           };
     },
   }),
